@@ -46,7 +46,7 @@ from lerobot.utils.constants import (
 
 
 def _make_vec_env_cls(use_async: bool, n_envs: int):
-    """Return the right VectorEnv constructor."""
+    """返回合适的 VectorEnv 构造函数。"""
     if use_async and n_envs > 1:
         return gym.vector.AsyncVectorEnv
     return gym.vector.SyncVectorEnv
@@ -67,12 +67,12 @@ class EnvConfig(draccus.ChoiceRegistry, abc.ABC):
 
     @property
     def package_name(self) -> str:
-        """Package name to import if environment not found in gym registry"""
+        """当在 gym registry 中找不到环境时要导入的包名"""
         return f"gym_{self.type}"
 
     @property
     def gym_id(self) -> str:
-        """ID string used in gym.make() to instantiate the environment"""
+        """用于在 gym.make() 中实例化环境的 ID 字符串"""
         return f"{self.package_name}/{self.task}"
 
     @property
@@ -85,10 +85,10 @@ class EnvConfig(draccus.ChoiceRegistry, abc.ABC):
         n_envs: int,
         use_async_envs: bool = False,
     ) -> dict[str, dict[int, gym.vector.VectorEnv]]:
-        """Create {suite: {task_id: VectorEnv}}.
+        """创建 {suite: {task_id: VectorEnv}}。
 
-        Default: single-task env via gym.make(). Multi-task benchmarks override.
-        AsyncVectorEnv is the default for n_envs > 1; auto-downgraded to Sync for n_envs=1.
+        默认：通过 gym.make() 创建单任务环境。多任务基准测试会重写此方法。
+        当 n_envs > 1 时默认使用 AsyncVectorEnv；n_envs=1 时自动降级为 Sync。
         """
         env_cls = gym.vector.AsyncVectorEnv if (use_async_envs and n_envs > 1) else gym.vector.SyncVectorEnv
 
@@ -124,23 +124,23 @@ class EnvConfig(draccus.ChoiceRegistry, abc.ABC):
         return {self.type: {0: vec}}
 
     def get_env_processors(self):
-        """Return (preprocessor, postprocessor) for this env. Default: identity."""
+        """返回该环境的 (preprocessor, postprocessor)。默认：恒等变换。"""
         return PolicyProcessorPipeline(steps=[]), PolicyProcessorPipeline(steps=[])
 
 
 @dataclass
 class HubEnvConfig(EnvConfig):
-    """Base class for environments that delegate creation to a hub-hosted make_env.
+    """将环境创建委托给 Hub 托管的 make_env 的环境基类。
 
-    Hub environments download and execute remote code from the HF Hub.
-    The hub_path points to a repository containing an env.py with a make_env function.
+    Hub 环境会从 HF Hub 下载并执行远程代码。
+    hub_path 指向一个包含带有 make_env 函数的 env.py 的仓库。
     """
 
-    hub_path: str | None = None  # required: e.g., "username/repo" or "username/repo@branch:file.py"
+    hub_path: str | None = None  # 必填：例如 "username/repo" 或 "username/repo@branch:file.py"
 
     @property
     def gym_kwargs(self) -> dict:
-        # Not used for hub environments - the hub's make_env handles everything
+        # Hub 环境不使用此项——Hub 的 make_env 会处理一切
         return {}
 
 
@@ -242,7 +242,7 @@ class ImagePreprocessingConfig:
 
 @dataclass
 class RewardClassifierConfig:
-    """Configuration for reward classification."""
+    """奖励分类的配置。"""
 
     pretrained_path: str | None = None
     success_threshold: float = 0.5
@@ -251,7 +251,7 @@ class RewardClassifierConfig:
 
 @dataclass
 class InverseKinematicsConfig:
-    """Configuration for inverse kinematics processing."""
+    """逆运动学处理的配置。"""
 
     urdf_path: str | None = None
     target_frame_name: str | None = None
@@ -261,7 +261,7 @@ class InverseKinematicsConfig:
 
 @dataclass
 class ObservationConfig:
-    """Configuration for observation processing."""
+    """观测处理的配置。"""
 
     add_joint_velocity_to_observation: bool = False
     add_current_to_observation: bool = False
@@ -271,7 +271,7 @@ class ObservationConfig:
 
 @dataclass
 class GripperConfig:
-    """Configuration for gripper control and penalties."""
+    """夹爪控制与惩罚项的配置。"""
 
     use_gripper: bool = True
     gripper_penalty: float = 0.0
@@ -279,7 +279,7 @@ class GripperConfig:
 
 @dataclass
 class ResetConfig:
-    """Configuration for environment reset behavior."""
+    """环境重置行为的配置。"""
 
     fixed_reset_joint_positions: list[float] | None = None
     reset_time_s: float = 5.0
@@ -289,7 +289,7 @@ class ResetConfig:
 
 @dataclass
 class HILSerlProcessorConfig:
-    """Configuration for environment processing pipeline."""
+    """环境处理流水线的配置。"""
 
     control_mode: str = "gamepad"
     observation: ObservationConfig | None = None
@@ -304,7 +304,7 @@ class HILSerlProcessorConfig:
 @EnvConfig.register_subclass(name="gym_manipulator")
 @dataclass
 class HILSerlRobotEnvConfig(EnvConfig):
-    """Configuration for the HILSerlRobotEnv environment."""
+    """HILSerlRobotEnv 环境的配置。"""
 
     robot: RobotConfig | None = None
     teleop: TeleoperatorConfig | None = None
@@ -320,9 +320,9 @@ class HILSerlRobotEnvConfig(EnvConfig):
 @EnvConfig.register_subclass("libero")
 @dataclass
 class LiberoEnv(EnvConfig):
-    task: str = "libero_10"  # can also choose libero_spatial, libero_object, etc.
+    task: str = "libero_10"  # 也可以选择 libero_spatial、libero_object 等
     task_ids: list[int] | None = None
-    fps: int = 20  # Must match robosuite's default control_freq (20 Hz)
+    fps: int = 20  # 必须与 robosuite 的默认 control_freq（20 Hz）一致
     episode_length: int | None = None
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
@@ -352,7 +352,7 @@ class LiberoEnv(EnvConfig):
             LIBERO_KEY_PIXELS_EYE_IN_HAND: f"{OBS_IMAGES}.image2",
         }
     )
-    control_mode: str = "relative"  # or "absolute"
+    control_mode: str = "relative"  # 或 "absolute"
 
     def __post_init__(self):
         if self.fps <= 0:
@@ -454,7 +454,7 @@ class LiberoEnv(EnvConfig):
 @EnvConfig.register_subclass("metaworld")
 @dataclass
 class MetaworldEnv(EnvConfig):
-    task: str = "metaworld-push-v2"  # add all tasks
+    task: str = "metaworld-push-v2"  # 添加所有任务
     fps: int = 80
     episode_length: int = 400
     obs_type: str = "pixels_agent_pos"
@@ -520,11 +520,11 @@ class RoboCasaEnv(EnvConfig):
     visualization_height: int = 512
     visualization_width: int = 512
     split: str | None = None
-    # Object-mesh registries to sample from. Upstream default is
-    # ("objaverse", "lightwheel"), but objaverse is ~30GB and the CI image
-    # only ships the lightwheel pack. Override to include objaverse once
-    # you've run `python -m robocasa.scripts.download_kitchen_assets
-    # --type objaverse` locally.
+    # 用于采样的物体网格注册表。上游默认值为
+    # ("objaverse", "lightwheel")，但 objaverse 约 30GB，且 CI 镜像
+    # 只自带 lightwheel 包。在本地运行过
+    # `python -m robocasa.scripts.download_kitchen_assets
+    # --type objaverse` 之后，可重写此项以包含 objaverse。
     obj_registries: list[str] = field(default_factory=lambda: ["lightwheel"])
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {ACTION: PolicyFeature(type=FeatureType.ACTION, shape=(12,))}
@@ -535,10 +535,10 @@ class RoboCasaEnv(EnvConfig):
         if self.obs_type not in ("pixels", "pixels_agent_pos"):
             raise ValueError(f"Unsupported obs_type: {self.obs_type}")
 
-        # Preserve raw RoboCasa camera names end-to-end (e.g.
-        # `observation.images.robot0_agentview_left`). This matches the
-        # naming convention used by the RoboCasa datasets on the Hub, so
-        # trained policies don't need a `--rename_map` at eval time.
+        # 端到端保留原始的 RoboCasa 相机名称（例如
+        # `observation.images.robot0_agentview_left`）。这与 Hub 上
+        # RoboCasa 数据集所使用的命名约定一致，因此训练好的策略
+        # 在评估时无需 `--rename_map`。
         cams = [c.strip() for c in self.camera_name.split(",") if c.strip()]
         for cam in cams:
             self.features[f"pixels/{cam}"] = PolicyFeature(
@@ -671,10 +671,10 @@ class IsaaclabArenaEnv(HubEnvConfig):
     video: bool = False
     video_length: int = 100
     video_interval: int = 200
-    # Comma-separated keys, e.g., "robot_joint_pos,left_eef_pos"
+    # 逗号分隔的键，例如 "robot_joint_pos,left_eef_pos"
     state_keys: str = "robot_joint_pos"
-    # Comma-separated keys, e.g., "robot_pov_cam_rgb,front_cam_rgb"
-    # Set to None or "" for environments without cameras
+    # 逗号分隔的键，例如 "robot_pov_cam_rgb,front_cam_rgb"
+    # 对于没有相机的环境，设为 None 或 ""
     camera_keys: str | None = None
     features: dict[str, PolicyFeature] = field(default_factory=dict)
     features_map: dict[str, str] = field(default_factory=dict)
@@ -682,23 +682,23 @@ class IsaaclabArenaEnv(HubEnvConfig):
 
     def __post_init__(self):
         if self.kwargs:
-            # dynamically convert kwargs to fields in the dataclass
-            # NOTE! the new fields will not bee seen by the dataclass repr
+            # 动态地将 kwargs 转换为 dataclass 中的字段
+            # 注意！新字段不会出现在 dataclass 的 repr 中
             field_names = {f.name for f in fields(self)}
             for key, value in self.kwargs.items():
                 if key not in field_names and key != "kwargs":
                     setattr(self, key, value)
             self.kwargs = None
 
-        # Set action feature
+        # 设置动作特征
         self.features[ACTION] = PolicyFeature(type=FeatureType.ACTION, shape=(self.action_dim,))
         self.features_map[ACTION] = ACTION
 
-        # Set state feature
+        # 设置状态特征
         self.features[OBS_STATE] = PolicyFeature(type=FeatureType.STATE, shape=(self.state_dim,))
         self.features_map[OBS_STATE] = OBS_STATE
 
-        # Add camera features for each camera key
+        # 为每个相机键添加相机特征
         if self.enable_cameras and self.camera_keys:
             for cam_key in self.camera_keys.split(","):
                 cam_key = cam_key.strip()
@@ -729,20 +729,20 @@ class IsaaclabArenaEnv(HubEnvConfig):
 @EnvConfig.register_subclass("libero_plus")
 @dataclass
 class LiberoPlusEnv(LiberoEnv):
-    """Config for LIBERO-plus robustness benchmark evaluation.
+    """用于 LIBERO-plus 鲁棒性基准评估的配置。
 
-    LIBERO-plus extends LIBERO with 7 perturbation dimensions (camera viewpoints,
-    object layouts, robot initial states, language instructions, lighting, background
-    textures, sensor noise) producing ~10k task variants.
+    LIBERO-plus 在 LIBERO 的基础上增加了 7 个扰动维度（相机视角、
+    物体布局、机器人初始状态、语言指令、光照、背景纹理、
+    传感器噪声），产生约 1 万个任务变体。
 
-    The gym interface is identical to LIBERO so this class reuses ``LiberoEnv``
-    entirely — only the registered name and default task suite differ.
+    其 gym 接口与 LIBERO 完全相同，因此本类完全复用 ``LiberoEnv``
+    ——只有注册名称和默认任务套件不同。
 
-    Install: see docker/Dockerfile.benchmark.libero_plus — LIBERO-plus ships
-    as a namespace package from a git fork and must be cloned + PYTHONPATH'd
-    rather than installed as a pyproject extra.
+    安装：参见 docker/Dockerfile.benchmark.libero_plus —— LIBERO-plus
+    以命名空间包的形式从 git fork 发布，必须克隆并加入 PYTHONPATH，
+    而不是作为 pyproject extra 安装。
 
-    See Also:
+    另见：
         https://github.com/sylvestf/LIBERO-plus
     """
 
@@ -753,31 +753,31 @@ class LiberoPlusEnv(LiberoEnv):
 @EnvConfig.register_subclass("robotwin")
 @dataclass
 class RoboTwinEnvConfig(EnvConfig):
-    """Configuration for RoboTwin 2.0 benchmark environments.
+    """RoboTwin 2.0 基准测试环境的配置。
 
-    RoboTwin 2.0 is a dual-arm manipulation benchmark with 50 tasks built on the
-    SAPIEN simulator. The robot is an Aloha-AgileX bimanual platform with 14 DOF
-    (7 per arm). All three cameras are enabled by default.
+    RoboTwin 2.0 是一个基于 SAPIEN 模拟器构建的双臂操作基准，包含 50 个任务。
+    机器人是拥有 14 个自由度（每条手臂 7 个）的 Aloha-AgileX 双臂平台。
+    默认启用全部三个相机。
 
-    See: https://robotwin-platform.github.io
-    Dataset: https://huggingface.co/datasets/lerobot/robotwin_unified
+    参见：https://robotwin-platform.github.io
+    数据集：https://huggingface.co/datasets/lerobot/robotwin_unified
     """
 
-    task: str = "beat_block_hammer"  # single task or comma-separated list
+    task: str = "beat_block_hammer"  # 单个任务或以逗号分隔的列表
     fps: int = 25
     episode_length: int = 1200
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
-    # Available cameras from RoboTwin's aloha-agilex embodiment: head_camera
-    # (torso-mounted) + left_camera / right_camera (wrists).
+    # RoboTwin 的 aloha-agilex 本体上可用的相机：head_camera
+    # （安装在躯干上）+ left_camera / right_camera（腕部）。
     camera_names: str = "head_camera,left_camera,right_camera"
-    # Match the D435 dims in task_config/demo_clean.yml (_camera_config.yml).
-    # Gym's vector-env concatenate pre-allocates buffers of this shape, so it
-    # must equal what SAPIEN actually renders.
+    # 与 task_config/demo_clean.yml（_camera_config.yml）中的 D435 尺寸一致。
+    # Gym 的 vector-env concatenate 会预分配该形状的缓冲区，因此它
+    # 必须等于 SAPIEN 实际渲染的尺寸。
     observation_height: int = 240
     observation_width: int = 320
-    # "joint": 14-d joint-space control. "ee": 16-d end-effector-pose deltas executed via CuRobo IK
-    # (for world-model policies like LingBot-VA that predict per-arm xyz+quaternion+gripper poses).
+    # "joint"：14 维关节空间控制。"ee"：通过 CuRobo IK 执行的 16 维末端执行器位姿增量
+    # （适用于像 LingBot-VA 这样预测每条手臂 xyz+四元数+夹爪位姿的世界模型策略）。
     action_mode: str = "joint"
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
@@ -803,7 +803,7 @@ class RoboTwinEnvConfig(EnvConfig):
                 type=FeatureType.VISUAL,
                 shape=(self.observation_height, self.observation_width, 3),
             )
-            # Keep features_map entry if already set (default_factory); add if missing.
+            # 如果 features_map 条目已设置（default_factory）则保留；缺失则添加。
             key = f"pixels/{cam}"
             if key not in self.features_map:
                 self.features_map[key] = f"{OBS_IMAGES}.{cam}"
@@ -811,7 +811,7 @@ class RoboTwinEnvConfig(EnvConfig):
         if self.obs_type == "pixels_agent_pos":
             self.features["agent_pos"] = PolicyFeature(
                 type=FeatureType.STATE,
-                shape=(14,),  # 14 DOF: 7 per arm
+                shape=(14,),  # 14 个自由度：每条手臂 7 个
             )
         elif self.obs_type != "pixels":
             raise ValueError(
@@ -846,20 +846,20 @@ class RoboTwinEnvConfig(EnvConfig):
 @EnvConfig.register_subclass("robomme")
 @dataclass
 class RoboMMEEnv(EnvConfig):
-    """RoboMME memory-augmented manipulation benchmark (ManiSkill/SAPIEN).
+    """RoboMME 记忆增强操作基准测试（ManiSkill/SAPIEN）。
 
-    16 tasks across 4 suites: Counting, Permanence, Reference, Imitation.
-    Dataset: lerobot/robomme (LeRobot v3.0, 1,600 episodes).
-    Benchmark: https://github.com/RoboMME/robomme_benchmark
+    4 个套件共 16 个任务：Counting、Permanence、Reference、Imitation。
+    数据集：lerobot/robomme（LeRobot v3.0，1,600 个 episode）。
+    基准测试：https://github.com/RoboMME/robomme_benchmark
 
-    Requires the `robomme` git package installed separately (Linux only);
-    see docker/Dockerfile.benchmark.robomme for the canonical install.
+    需要单独安装 `robomme` git 包（仅限 Linux）；
+    标准安装方式参见 docker/Dockerfile.benchmark.robomme。
     """
 
     task: str = "PickXtimes"
     fps: int = 10
     episode_length: int = 300
-    action_space: str = "joint_angle"  # or "ee_pose" (7-D)
+    action_space: str = "joint_angle"  # 或 "ee_pose"（7 维）
     dataset_split: str = "test"  # "train" | "val" | "test"
     task_ids: list[int] | None = None
     front_camera_name: str = "camera1"
@@ -885,7 +885,7 @@ class RoboMMEEnv(EnvConfig):
             wrist_camera_key: f"{OBS_IMAGES}.{self.wrist_camera_name}",
             "agent_pos": OBS_STATE,
         }
-        # Preserve explicit mappings while filling in the RoboMME defaults.
+        # 在填充 RoboMME 默认值的同时保留显式指定的映射。
         self.features_map = {**default_features_map, **self.features_map}
 
     @property

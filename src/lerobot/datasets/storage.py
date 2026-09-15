@@ -26,19 +26,19 @@ if TYPE_CHECKING:
 
 DEFAULT_STORAGE_FORMAT = "lerobot"
 
-# Supported non-default storage formats and the module implementing each.
-# Modules are imported lazily so their optional dependencies stay optional;
-# each must expose a ``DATASET_READER`` class implementing
-# :class:`~lerobot.datasets.dataset_reader.BaseDatasetReader` (constructed with
-# the keyword arguments ``meta``, ``root``, ``episodes``, ``delta_timestamps``,
-# ``image_transforms``, ``tolerance_s``, ``revision``, ``return_uint8``,
-# ``depth_output_unit`` and ``token``) and a ``localize_root`` hook for
-# object-store roots.
+# 受支持的非默认存储格式，以及实现每种格式的模块。
+# 这些模块采用惰性导入，以保持其可选依赖的可选性；
+# 每个模块必须暴露一个实现
+# :class:`~lerobot.datasets.dataset_reader.BaseDatasetReader` 的 ``DATASET_READER`` 类
+# （使用关键字参数 ``meta``、``root``、``episodes``、``delta_timestamps``、
+# ``image_transforms``、``tolerance_s``、``revision``、``return_uint8``、
+# ``depth_output_unit`` 和 ``token`` 构造），并暴露一个用于
+# 对象存储根路径的 ``localize_root`` 钩子。
 _DATASET_READER_MODULES: dict[str, str] = {}
 
 
 def register_dataset_reader(storage_format: str, module: str) -> None:
-    """Register ``module`` (implementing the contract above) to serve ``storage_format``."""
+    """注册 ``module``（实现上述契约）以提供 ``storage_format`` 服务。"""
     existing = _DATASET_READER_MODULES.get(storage_format, module)
     if storage_format == DEFAULT_STORAGE_FORMAT or existing != module:
         raise ValueError(f"storage_format {storage_format!r} is already registered.")
@@ -49,7 +49,7 @@ register_dataset_reader("lance", "lerobot.datasets.lance_backend")
 
 
 def is_remote_uri(root: str | Path) -> bool:
-    """True for object-store style roots (``hf://…``, ``file://…``, …)."""
+    """对对象存储风格的根路径（``hf://…``、``file://…``、…）返回 True。"""
     return "://" in str(root)
 
 
@@ -64,7 +64,7 @@ def _reader_module(storage_format: str):
 
 
 def make_dataset_reader(storage_format: str, **kwargs) -> BaseDatasetReader:
-    """Instantiate the reader class serving ``storage_format``."""
+    """实例化提供 ``storage_format`` 服务的读取器类。"""
     if storage_format == DEFAULT_STORAGE_FORMAT:
         from .dataset_reader import DatasetReader  # noqa: PLC0415  (import cycle)
 
@@ -79,11 +79,11 @@ def localize_remote_root(
     token: str | bool | None = None,
     force_cache_sync: bool = False,
 ) -> Path:
-    """Materialize ``meta/`` for an object-store dataset and return the local dir holding it.
+    """将对象存储数据集的 ``meta/`` 物化到本地，并返回保存它的本地目录。
 
-    The format cannot be read from ``meta/info.json`` before ``meta/`` exists
-    locally, so each backend is asked in turn to recognize and localize the
-    root. Data files are never downloaded — backends read them in place.
+    在 ``meta/`` 本地存在之前，无法从 ``meta/info.json`` 读取格式，
+    因此会依次请求每个后端来识别并本地化该根路径。
+    数据文件永远不会被下载——后端就地读取它们。
     """
     errors = []
     for storage_format in _DATASET_READER_MODULES:
@@ -92,8 +92,8 @@ def localize_remote_root(
                 repo_id, root, revision, token=token, force_cache_sync=force_cache_sync
             )
         except (FileNotFoundError, ImportError) as error:
-            # ImportError: this format's optional dependencies are missing, which
-            # must not stop the probe from reaching other registered formats.
+            # ImportError：缺少该格式的可选依赖，
+            # 这不能阻止探测继续进行到其他已注册的格式。
             errors.append(f"{storage_format}: {error}")
     raise FileNotFoundError(
         f"No dataset found at {str(root)!r}. Tried {errors}. "
@@ -110,16 +110,16 @@ def load_dataset_metadata(
     token: str | bool | None = None,
     force_cache_sync: bool = False,
 ) -> LeRobotDatasetMetadata:
-    """Load dataset metadata wherever the dataset lives.
+    """无论数据集位于何处，都加载其元数据。
 
-    Same as constructing :class:`LeRobotDatasetMetadata` directly, except that a
-    remote object-store ``root`` has its ``meta/`` localized first.
+    与直接构造 :class:`LeRobotDatasetMetadata` 相同，区别在于
+    远程对象存储的 ``root`` 会先将其 ``meta/`` 本地化。
     """
     from .dataset_metadata import LeRobotDatasetMetadata  # noqa: PLC0415  (import cycle)
 
     if root is not None and is_remote_uri(root):
         root = localize_remote_root(repo_id, root, revision, token=token, force_cache_sync=force_cache_sync)
-        force_cache_sync = False  # the localized meta/ is already fresh
+        force_cache_sync = False  # 本地化后的 meta/ 已经是最新的
     return LeRobotDatasetMetadata(
         repo_id,
         root=root,

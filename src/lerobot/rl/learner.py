@@ -15,32 +15,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Learner server runner for distributed HILSerl robot policy training.
+分布式 HILSerl 机器人策略训练的 learner 服务器运行入口。
 
-This script implements the learner component of the distributed HILSerl architecture.
-It initializes the policy network, maintains replay buffers, and updates
-the policy based on transitions received from the actor server.
+本脚本实现了分布式 HILSerl 架构中的 learner 组件。
+它负责初始化策略网络、维护回放缓冲区，并根据从 actor 服务器接收到的
+转移（transitions）更新策略。
 
-Examples of usage:
+使用示例：
 
-- Start a learner server for training:
+- 启动 learner 服务器进行训练：
 ```bash
 python -m lerobot.rl.learner --config_path src/lerobot/configs/train_config_hilserl_so100.json
 ```
 
-**NOTE**: Start the learner server before launching the actor server. The learner opens a gRPC server
-to communicate with actors.
+**注意**：请在启动 actor 服务器之前先启动 learner 服务器。learner 会开启一个 gRPC 服务器
+与各个 actor 通信。
 
-**NOTE**: Training progress can be monitored through Weights & Biases if wandb.enable is set to true
-in your configuration.
+**注意**：如果在配置中将 wandb.enable 设为 true，可通过 Weights & Biases
+监控训练进度。
 
-**WORKFLOW**:
-1. Create training configuration with proper policy, dataset, and environment settings
-2. Start this learner server with the configuration
-3. Start an actor server with the same configuration
-4. Monitor training progress through wandb dashboard
+**工作流程**：
+1. 创建包含正确策略、数据集和环境设置的训练配置
+2. 使用该配置启动此 learner 服务器
+3. 使用相同配置启动 actor 服务器
+4. 通过 wandb 仪表盘监控训练进度
 
-For more details on the complete HILSerl training workflow, see:
+有关完整 HILSerl 训练工作流程的更多细节，请参见：
 https://github.com/michel-aractingi/lerobot-hilserl-guide
 """
 
@@ -122,12 +122,12 @@ from .trainer import RLTrainer
 
 @parser.wrap()
 def train_cli(cfg: TrainRLServerPipelineConfig):
-    # Fail fast with a friendly error if the optional ``hilserl`` extra is missing.
+    # 如果缺少可选的 ``hilserl`` 额外依赖，尽快以友好的错误信息失败。
     require_package("grpcio", extra="hilserl", import_name="grpc")
     if not use_threads(cfg):
         ensure_multiprocessing_start_method(cfg.policy.concurrency.multiprocessing_context)
 
-    # Use the job_name from the config
+    # 使用配置中的 job_name
     train(
         cfg,
         job_name=cfg.job_name,
@@ -138,11 +138,11 @@ def train_cli(cfg: TrainRLServerPipelineConfig):
 
 def train(cfg: TrainRLServerPipelineConfig, job_name: str | None = None):
     """
-    Main training function that initializes and runs the training process.
+    初始化并运行训练流程的主训练函数。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): The training configuration
-        job_name (str | None, optional): Job name for logging. Defaults to None.
+        cfg (TrainRLServerPipelineConfig): 训练配置
+        job_name (str | None, optional): 用于日志记录的作业名称。默认为 None。
     """
 
     cfg.validate()
@@ -157,17 +157,17 @@ def train(cfg: TrainRLServerPipelineConfig, job_name: str | None = None):
     if not use_threads(cfg):
         display_pid = True
 
-    # Create logs directory to ensure it exists
+    # 创建 logs 目录以确保其存在
     log_dir = os.path.join(cfg.output_dir, "logs")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"learner_{job_name}.log")
 
-    # Initialize logging with explicit log file
+    # 使用显式指定的日志文件初始化日志记录
     init_logging(log_file=log_file, display_pid=display_pid)
     logging.info(f"Learner logging initialized, writing to {log_file}")
     logging.info(pformat(cfg.to_dict()))
 
-    # Setup WandB logging if enabled
+    # 如果启用了 WandB，则设置 WandB 日志记录
     if cfg.wandb.enable and cfg.wandb.project:
         from lerobot.common.wandb_utils import WandBLogger
 
@@ -176,7 +176,7 @@ def train(cfg: TrainRLServerPipelineConfig, job_name: str | None = None):
         wandb_logger = None
         logging.info(colored("Logs will be saved locally.", "yellow", attrs=["bold"]))
 
-    # Handle resume logic
+    # 处理恢复训练（resume）逻辑
     cfg = handle_resume_logic(cfg)
 
     set_seed(seed=cfg.seed)
@@ -200,14 +200,14 @@ def start_learner_threads(
     shutdown_event: Any,  # Event
 ) -> None:
     """
-    Start the learner threads for training.
+    启动训练所需的 learner 线程。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Training configuration
-        wandb_logger (WandBLogger | None): Logger for metrics
-        shutdown_event: Event to signal shutdown
+        cfg (TrainRLServerPipelineConfig): 训练配置
+        wandb_logger (WandBLogger | None): 指标日志记录器
+        shutdown_event: 用于通知关闭的事件（Event）
     """
-    # Create multiprocessing queues
+    # 创建多进程队列
     transition_queue = Queue()
     interaction_message_queue = Queue()
     parameters_queue = Queue()
@@ -265,7 +265,7 @@ def start_learner_threads(
         logging.info("[LEARNER] Cleanup complete")
 
 
-# Core algorithm functions
+# 核心算法函数
 
 
 def add_actor_information_and_train(
@@ -277,31 +277,30 @@ def add_actor_information_and_train(
     parameters_queue: Queue,
 ):
     """
-    Handles data transfer from the actor to the learner, manages training updates,
-    and logs training progress in an online reinforcement learning setup.
+    在在线强化学习设置中，负责将数据从 actor 传输到 learner、管理训练更新，
+    并记录训练进度。
 
-    This function continuously:
-    - Transfers transitions from the actor to the replay buffer.
-    - Logs received interaction messages.
-    - Ensures training begins only when the replay buffer has a sufficient number of transitions.
-    - Delegates training updates to an ``RLAlgorithm``.
-    - Periodically pushes updated weights to actors.
-    - Logs training statistics, including loss values and optimization frequency.
+    本函数持续执行以下操作：
+    - 将转移（transitions）从 actor 传输到回放缓冲区。
+    - 记录接收到的交互消息。
+    - 确保仅当回放缓冲区中积累了足够数量的转移后才开始训练。
+    - 将训练更新委托给 ``RLAlgorithm``。
+    - 定期将更新后的权重推送给各个 actor。
+    - 记录训练统计信息，包括损失值和优化频率。
 
-    NOTE: This function doesn't have a single responsibility, it should be split into multiple functions
-    in the future. The reason why we did that is the  GIL in Python. It's super slow the performance
-    are divided by 200. So we need to have a single thread that does all the work.
+    注意：本函数并不遵循单一职责原则，未来应当拆分为多个函数。
+    之所以这样做，是因为 Python 的 GIL。多线程时速度极慢，性能会下降
+    200 倍。因此我们需要用单个线程来完成所有工作。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Configuration object containing hyperparameters.
-        wandb_logger (WandBLogger | None): Logger for tracking training progress.
-        shutdown_event (Event): Event to signal shutdown.
-        transition_queue (Queue): Queue for receiving transitions from the actor.
-        interaction_message_queue (Queue): Queue for receiving interaction messages from the actor.
-        parameters_queue (Queue): Queue for sending policy parameters to the actor.
+        cfg (TrainRLServerPipelineConfig): 包含超参数的配置对象。
+        wandb_logger (WandBLogger | None): 用于跟踪训练进度的日志记录器。
+        shutdown_event (Event): 用于通知关闭的事件。
+        transition_queue (Queue): 用于从 actor 接收转移的队列。
+        interaction_message_queue (Queue): 用于从 actor 接收交互消息的队列。
+        parameters_queue (Queue): 用于向 actor 发送策略参数的队列。
     """
-    # Extract all configuration variables at the beginning, it improve the speed performance
-    # of 7%
+    # 在开头提取所有配置变量，这可以带来 7% 的速度提升
     device = get_safe_torch_device(try_device=cfg.policy.device, log=True)
     storage_device = get_safe_torch_device(try_device=cfg.policy.storage_device)
     online_step_before_learning = cfg.policy.online_step_before_learning
@@ -312,7 +311,7 @@ def add_actor_information_and_train(
     saving_checkpoint = cfg.save_checkpoint
     online_steps = cfg.policy.online_steps
 
-    # Initialize logging for multiprocessing
+    # 为多进程初始化日志记录
     if not use_threads(cfg):
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
@@ -338,7 +337,7 @@ def add_actor_information_and_train(
         dataset_stats=cfg.policy.dataset_stats,
     )
 
-    # Push initial policy weights to actors
+    # 将初始策略权重推送给各个 actor
     push_actor_policy_to_queue(parameters_queue=parameters_queue, algorithm=algorithm)
     last_time_policy_pushed = time.time()
 
@@ -355,13 +354,13 @@ def add_actor_information_and_train(
             storage_device=storage_device,
         )
 
-    # DataMixer: online-only or online/offline 50-50 mix
+    # DataMixer：仅在线数据，或在线/离线各 50% 混合
     data_mixer = OnlineOfflineMixer(
         online_buffer=replay_buffer,
         offline_buffer=offline_replay_buffer,
         online_ratio=cfg.online_ratio,
     )
-    # RLTrainer owns the iterator, preprocessor, and creates optimizers.
+    # RLTrainer 拥有迭代器和预处理器，并负责创建优化器。
     trainer = RLTrainer(
         algorithm=algorithm,
         data_mixer=data_mixer,
@@ -369,7 +368,7 @@ def add_actor_information_and_train(
         preprocessor=preprocessor,
     )
 
-    # If we are resuming, we need to load the training state
+    # 如果是恢复训练，则需要加载训练状态
     optimizers = algorithm.get_optimizers()
     resume_optimization_step, resume_interaction_step = load_training_state(
         cfg=cfg, optimizers=optimizers, algorithm=algorithm, device=device
@@ -385,14 +384,14 @@ def add_actor_information_and_train(
     if cfg.dataset is not None:
         dataset_repo_id = cfg.dataset.repo_id
 
-    # NOTE: THIS IS THE MAIN LOOP OF THE LEARNER
+    # 注意：这是 LEARNER 的主循环
     while True:
-        # Exit the training loop if shutdown is requested
+        # 如果收到关闭请求，则退出训练循环
         if shutdown_event is not None and shutdown_event.is_set():
             logging.info("[LEARNER] Shutdown signal received. Exiting...")
             break
 
-        # Process all available transitions to the replay buffer, send by the actor server
+        # 将 actor 服务器发送来的所有可用转移处理到回放缓冲区中
         process_transitions(
             transition_queue=transition_queue,
             replay_buffer=replay_buffer,
@@ -401,7 +400,7 @@ def add_actor_information_and_train(
             shutdown_event=shutdown_event,
         )
 
-        # Process all available interaction messages sent by the actor server
+        # 处理 actor 服务器发送来的所有可用交互消息
         interaction_message = process_interaction_messages(
             interaction_message_queue=interaction_message_queue,
             interaction_step_shift=interaction_step_shift,
@@ -409,23 +408,23 @@ def add_actor_information_and_train(
             shutdown_event=shutdown_event,
         )
 
-        # Wait until the replay buffer has enough samples to start training
+        # 等待回放缓冲区积累足够多的样本后再开始训练
         if len(replay_buffer) < online_step_before_learning:
             continue
 
         time_for_one_optimization_step = time.time()
 
-        # One training step (trainer owns data_mixer iterator; algorithm owns UTD loop)
+        # 执行一个训练步（trainer 拥有 data_mixer 迭代器；algorithm 拥有 UTD 循环）
         stats = trainer.training_step()
 
-        # Push policy to actors if needed
+        # 必要时将策略推送给各个 actor
         if time.time() - last_time_policy_pushed > policy_parameters_push_frequency:
             push_actor_policy_to_queue(parameters_queue=parameters_queue, algorithm=algorithm)
             last_time_policy_pushed = time.time()
 
         training_infos = stats.to_log_dict()
 
-        # Log training metrics at specified intervals
+        # 按指定间隔记录训练指标
         optimization_step = algorithm.optimization_step
         if optimization_step % log_freq == 0:
             training_infos["replay_buffer_size"] = len(replay_buffer)
@@ -433,17 +432,17 @@ def add_actor_information_and_train(
                 training_infos["offline_replay_buffer_size"] = len(offline_replay_buffer)
             training_infos["Optimization step"] = optimization_step
 
-            # Log training metrics
+            # 记录训练指标
             if wandb_logger:
                 wandb_logger.log_dict(d=training_infos, mode="train", custom_step_key="Optimization step")
 
-        # Calculate and log optimization frequency
+        # 计算并记录优化频率
         time_for_one_optimization_step = time.time() - time_for_one_optimization_step
         frequency_for_one_optimization_step = 1 / (time_for_one_optimization_step + 1e-9)
 
         logging.info(f"[LEARNER] Optimization frequency loop [Hz]: {frequency_for_one_optimization_step}")
 
-        # Log optimization frequency
+        # 记录优化频率
         if wandb_logger:
             wandb_logger.log_dict(
                 {
@@ -457,7 +456,7 @@ def add_actor_information_and_train(
         if optimization_step % log_freq == 0:
             logging.info(f"[LEARNER] Number of optimization step: {optimization_step}")
 
-        # Save checkpoint at specified intervals
+        # 按指定间隔保存检查点
         if saving_checkpoint and should_save_checkpoint(optimization_step, save_freq, online_steps):
             save_training_checkpoint(
                 cfg=cfg,
@@ -484,31 +483,31 @@ def start_learner(
     cfg: TrainRLServerPipelineConfig,
 ):
     """
-    Start the learner server for training.
-    It will receive transitions and interaction messages from the actor server,
-    and send policy parameters to the actor server.
+    启动训练用的 learner 服务器。
+    它将从 actor 服务器接收转移和交互消息，
+    并向 actor 服务器发送策略参数。
 
     Args:
-        parameters_queue: Queue for sending policy parameters to the actor
-        transition_queue: Queue for receiving transitions from the actor
-        interaction_message_queue: Queue for receiving interaction messages from the actor
-        shutdown_event: Event to signal shutdown
-        cfg: Training configuration
+        parameters_queue: 用于向 actor 发送策略参数的队列
+        transition_queue: 用于从 actor 接收转移的队列
+        interaction_message_queue: 用于从 actor 接收交互消息的队列
+        shutdown_event: 用于通知关闭的事件
+        cfg: 训练配置
     """
     if not use_threads(cfg):
-        # Create a process-specific log file
+        # 创建进程专属的日志文件
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"learner_process_{os.getpid()}.log")
 
-        # Initialize logging with explicit log file
+        # 使用显式指定的日志文件初始化日志记录
         init_logging(log_file=log_file, display_pid=True)
         logging.info("Learner server process logging initialized")
 
-        # Setup process handlers to handle shutdown signal
-        # But use shutdown event from the main process
-        # Return back for MP
-        # TODO: Check if its useful
+        # 设置进程处理器以处理关闭信号
+        # 但使用来自主进程的关闭事件
+        # 为多进程（MP）返回
+        # TODO: 检查这是否有用
         _ = ProcessSignalHandler(False, display_pid=True)
 
     service = LearnerService(
@@ -562,38 +561,38 @@ def save_training_checkpoint(
     postprocessor=None,
 ) -> None:
     """
-    Save training checkpoint and associated data.
+    保存训练检查点及相关数据。
 
-    This function performs the following steps:
-    1. Creates a checkpoint directory with the current optimization step
-    2. Saves the policy model, configuration, and optimizer states
-    3. Saves the current interaction step for resuming training
-    4. Updates the "last" checkpoint symlink to point to this checkpoint
-    5. Saves the replay buffer as a dataset for later use
-    6. If an offline replay buffer exists, saves it as a separate dataset
+    本函数执行以下步骤：
+    1. 创建以当前优化步命名的检查点目录
+    2. 保存策略模型、配置和优化器状态
+    3. 保存当前交互步，以便恢复训练
+    4. 更新 "last" 检查点符号链接，使其指向此检查点
+    5. 将回放缓冲区保存为数据集，供后续使用
+    6. 如果存在离线回放缓冲区，将其保存为单独的数据集
 
     Args:
-        cfg: Training configuration
-        optimization_step: Current optimization step
-        online_steps: Total number of online steps
-        interaction_message: Dictionary containing interaction information
-        policy: Policy model to save
-        optimizers: Dictionary of optimizers
-        replay_buffer: Replay buffer to save as dataset
-        offline_replay_buffer: Optional offline replay buffer to save
-        dataset_repo_id: Repository ID for dataset
-        fps: Frames per second for dataset
-        preprocessor: Optional preprocessor pipeline to save
-        postprocessor: Optional postprocessor pipeline to save
+        cfg: 训练配置
+        optimization_step: 当前优化步
+        online_steps: 在线步的总数
+        interaction_message: 包含交互信息的字典
+        policy: 要保存的策略模型
+        optimizers: 优化器字典
+        replay_buffer: 要保存为数据集的回放缓冲区
+        offline_replay_buffer: 可选的、要保存的离线回放缓冲区
+        dataset_repo_id: 数据集的仓库 ID
+        fps: 数据集的每秒帧数
+        preprocessor: 可选的、要保存的预处理器流水线
+        postprocessor: 可选的、要保存的后处理器流水线
     """
     logging.info(f"Checkpoint policy after step {optimization_step}")
     _num_digits = max(6, len(str(online_steps)))
     interaction_step = interaction_message["Interaction step"] if interaction_message is not None else 0
 
-    # Create checkpoint directory
+    # 创建检查点目录
     checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, online_steps, optimization_step)
 
-    # Save policy artifacts (pretrained_model/) + Trainer scaffolding (training_state/).
+    # 保存策略产物（pretrained_model/）以及 Trainer 脚手架（training_state/）。
     save_checkpoint(
         checkpoint_dir=checkpoint_dir,
         step=optimization_step,
@@ -605,31 +604,31 @@ def save_training_checkpoint(
         postprocessor=postprocessor,
     )
 
-    # Algorithm-owned tensors live in their own component subfolder
-    # so they can be `push_to_hub`'d independently and don't bloat the inference artifact.
+    # 算法自有的张量存放在其独立的组件子文件夹中，
+    # 这样它们可以单独被 `push_to_hub`，也不会让推理产物变得臃肿。
     if algorithm is not None:
         algorithm.save_pretrained(checkpoint_dir / ALGORITHM_DIR)
 
-    # Enrich training_step.json with the RL-specific interaction_step counter so
-    # both can be restored from a single file.
+    # 在 training_step.json 中补充 RL 特有的 interaction_step 计数器，
+    # 以便两者都能从单个文件恢复。
     training_state_dir = checkpoint_dir / TRAINING_STATE_DIR
     write_json(
         {"step": optimization_step, "interaction_step": interaction_step},
         training_state_dir / TRAINING_STEP,
     )
 
-    # Update the "last" symlink
+    # 更新 "last" 符号链接
     update_last_checkpoint(checkpoint_dir)
 
-    # TODO : temporary save replay buffer here, remove later when on the robot
-    # We want to control this with the keyboard inputs
+    # TODO：暂时把回放缓冲区保存在这里，以后部署到机器人上时移除
+    # 我们希望通过键盘输入来控制这一行为
     dataset_dir = os.path.join(cfg.output_dir, "dataset")
     if os.path.exists(dataset_dir) and os.path.isdir(dataset_dir):
         shutil.rmtree(dataset_dir)
 
-    # Save dataset
-    # NOTE: Handle the case where the dataset repo id is not specified in the config
-    # eg. RL training without demonstrations data
+    # 保存数据集
+    # 注意：处理配置中未指定数据集 repo id 的情况，
+    # 例如没有演示数据的 RL 训练
     repo_id_buffer_save = cfg.env.task if dataset_repo_id is None else dataset_repo_id
     replay_buffer.to_lerobot_dataset(repo_id=repo_id_buffer_save, fps=fps, root=dataset_dir)
 
@@ -647,35 +646,35 @@ def save_training_checkpoint(
     logging.info("Resume training")
 
 
-# Training setup functions
+# 训练设置相关函数
 
 
 def handle_resume_logic(cfg: TrainRLServerPipelineConfig) -> TrainRLServerPipelineConfig:
     """
-    Handle the resume logic for training.
+    处理训练的恢复（resume）逻辑。
 
-    If resume is True:
-    - Verifies that a checkpoint exists
-    - Loads the checkpoint configuration
-    - Logs resumption details
-    - Returns the checkpoint configuration
+    当 resume 为 True 时：
+    - 验证检查点是否存在
+    - 加载检查点配置
+    - 记录恢复详情
+    - 返回检查点配置
 
-    If resume is False:
-    - Checks if an output directory exists (to prevent accidental overwriting)
-    - Returns the original configuration
+    当 resume 为 False 时：
+    - 检查输出目录是否已存在（以防止意外覆盖）
+    - 返回原始配置
 
     Args:
-        cfg (TrainRLServerPipelineConfig): The training configuration
+        cfg (TrainRLServerPipelineConfig): 训练配置
 
     Returns:
-        TrainRLServerPipelineConfig: The updated configuration
+        TrainRLServerPipelineConfig: 更新后的配置
 
     Raises:
-        RuntimeError: If resume is True but no checkpoint found, or if resume is False but directory exists
+        RuntimeError: resume 为 True 但未找到检查点，或 resume 为 False 但目录已存在时抛出
     """
     out_dir = cfg.output_dir
 
-    # Case 1: Not resuming, but need to check if directory exists to prevent overwrites
+    # 情形 1：不恢复训练，但需要检查目录是否存在以防止覆盖
     if not cfg.resume:
         checkpoint_dir = os.path.join(out_dir, CHECKPOINTS_DIR, LAST_CHECKPOINT_LINK)
         if os.path.exists(checkpoint_dir):
@@ -684,12 +683,12 @@ def handle_resume_logic(cfg: TrainRLServerPipelineConfig) -> TrainRLServerPipeli
             )
         return cfg
 
-    # Case 2: Resuming training
+    # 情形 2：恢复训练
     checkpoint_dir = os.path.join(out_dir, CHECKPOINTS_DIR, LAST_CHECKPOINT_LINK)
     if not os.path.exists(checkpoint_dir):
         raise RuntimeError(f"No model checkpoint found in {checkpoint_dir} for resume=True")
 
-    # Log that we found a valid checkpoint and are resuming
+    # 记录已找到有效检查点并正在恢复
     logging.info(
         colored(
             "Valid checkpoint found: resume=True detected, resuming previous run",
@@ -698,11 +697,11 @@ def handle_resume_logic(cfg: TrainRLServerPipelineConfig) -> TrainRLServerPipeli
         )
     )
 
-    # Load config using Draccus
+    # 使用 Draccus 加载配置
     checkpoint_cfg_path = os.path.join(checkpoint_dir, PRETRAINED_MODEL_DIR, "train_config.json")
     checkpoint_cfg = TrainRLServerPipelineConfig.from_pretrained(checkpoint_cfg_path)
 
-    # Ensure resume flag is set in returned config
+    # 确保返回的配置中设置了 resume 标志
     checkpoint_cfg.resume = True
     return checkpoint_cfg
 
@@ -714,39 +713,39 @@ def load_training_state(
     device: str | torch.device = "cpu",
 ):
     """
-    Loads the training state (optimizers, RNG, step + interaction step, and
-    algorithm-owned tensors) from the most recent checkpoint.
+    从最近的检查点加载训练状态（优化器、随机数生成器、训练步 + 交互步，
+    以及算法自有的张量）。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Training configuration; `cfg.resume` gates the load and
-            `cfg.output_dir` locates the last checkpoint.
-        optimizers (Optimizer | dict[str, Optimizer]): Optimizers to load state into.
-        algorithm (RLAlgorithm | None, optional): Algorithm whose state dict should be restored.
-            Required for full main-equivalent resume; the policy itself is restored separately via
-            `make_policy`. Defaults to None.
-        device (str | torch.device, optional): Device on which to place loaded algorithm tensors.
-            Defaults to "cpu".
+        cfg (TrainRLServerPipelineConfig): 训练配置；`cfg.resume` 控制是否加载，
+            `cfg.output_dir` 用于定位最近的检查点。
+        optimizers (Optimizer | dict[str, Optimizer]): 要将状态加载到其中的优化器。
+        algorithm (RLAlgorithm | None, optional): 需要恢复状态字典的算法。
+            若要实现与主流程完全等价的恢复，则必须提供；策略本身通过
+            `make_policy` 单独恢复。默认为 None。
+        device (str | torch.device, optional): 加载后的算法张量所放置的设备。
+            默认为 "cpu"。
 
     Returns:
-        tuple[int | None, int | None]: `(optimization_step, interaction_step)`, or `(None, None)`
-        when not resuming or when loading the training state fails.
+        tuple[int | None, int | None]: `(optimization_step, interaction_step)`；
+        当未恢复训练或加载训练状态失败时返回 `(None, None)`。
     """
     if not cfg.resume:
         return None, None
 
-    # Construct path to the last checkpoint directory
+    # 构造最近检查点目录的路径
     checkpoint_dir = Path(cfg.output_dir) / CHECKPOINTS_DIR / LAST_CHECKPOINT_LINK
 
     logging.info(f"Loading training state from {checkpoint_dir}")
 
     try:
-        # Restore optimizers + RNG + step from the standard `training_state/` folder
+        # 从标准的 `training_state/` 文件夹恢复优化器 + RNG + 训练步
         training_state_dir = checkpoint_dir / TRAINING_STATE_DIR
         load_rng_state(training_state_dir)
         step = load_training_metadata(training_state_dir)["step"]
         optimizers = load_optimizer_state(optimizers, training_state_dir)
 
-        # Restore algorithm-owned tensors
+        # 恢复算法自有的张量
         if algorithm is not None:
             algo_dir = checkpoint_dir / ALGORITHM_DIR
             if algo_dir.is_dir():
@@ -760,7 +759,7 @@ def load_training_state(
                     "old optimizer state may not match these reset parameters."
                 )
 
-        # Read interaction_step from the enriched training_step.json
+        # 从补充后的 training_step.json 中读取 interaction_step
         training_step_path = checkpoint_dir / TRAINING_STATE_DIR / TRAINING_STEP
         interaction_step = int(load_json(training_step_path).get("interaction_step", 0))
 
@@ -774,11 +773,11 @@ def load_training_state(
 
 def log_training_info(cfg: TrainRLServerPipelineConfig, policy: nn.Module) -> None:
     """
-    Log information about the training process.
+    记录有关训练流程的信息。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Training configuration
-        policy (nn.Module): Policy model
+        cfg (TrainRLServerPipelineConfig): 训练配置
+        policy (nn.Module): 策略模型
     """
     num_learnable_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
     num_total_params = sum(p.numel() for p in policy.parameters())
@@ -794,15 +793,15 @@ def initialize_replay_buffer(
     cfg: TrainRLServerPipelineConfig, device: str, storage_device: str
 ) -> ReplayBuffer:
     """
-    Initialize a replay buffer, either empty or from a dataset if resuming.
+    初始化回放缓冲区：要么创建空缓冲区，要么在恢复训练时从数据集加载。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Training configuration
-        device (str): Device to store tensors on
-        storage_device (str): Device for storage optimization
+        cfg (TrainRLServerPipelineConfig): 训练配置
+        device (str): 存储张量所用的设备
+        storage_device (str): 用于存储优化的设备
 
     Returns:
-        ReplayBuffer: Initialized replay buffer
+        ReplayBuffer: 初始化后的回放缓冲区
     """
     if not cfg.resume:
         return ReplayBuffer(
@@ -816,7 +815,7 @@ def initialize_replay_buffer(
     logging.info("Resume training load the online dataset")
     dataset_path = os.path.join(cfg.output_dir, "dataset")
 
-    # NOTE: In RL is possible to not have a dataset.
+    # 注意：在 RL 中，有可能不存在数据集。
     repo_id = None
     if cfg.dataset is not None:
         repo_id = cfg.dataset.repo_id
@@ -839,15 +838,15 @@ def initialize_offline_replay_buffer(
     storage_device: str,
 ) -> ReplayBuffer:
     """
-    Initialize an offline replay buffer from a dataset.
+    从数据集初始化离线回放缓冲区。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): Training configuration
-        device (str): Device to store tensors on
-        storage_device (str): Device for storage optimization
+        cfg (TrainRLServerPipelineConfig): 训练配置
+        device (str): 存储张量所用的设备
+        storage_device (str): 用于存储优化的设备
 
     Returns:
-        ReplayBuffer: Initialized offline replay buffer
+        ReplayBuffer: 初始化后的离线回放缓冲区
     """
     if not cfg.resume:
         logging.info("make_dataset offline buffer")
@@ -872,7 +871,7 @@ def initialize_offline_replay_buffer(
     return offline_replay_buffer
 
 
-# Utilities/Helpers functions
+# 工具/辅助函数
 
 
 def use_threads(cfg: TrainRLServerPipelineConfig) -> bool:
@@ -886,20 +885,20 @@ def check_nan_in_transition(
     raise_error: bool = False,
 ) -> bool:
     """
-    Check for NaN values in transition data.
+    检查转移数据中是否存在 NaN 值。
 
     Args:
-        observations: Dictionary of observation tensors
-        actions: Action tensor
-        next_state: Dictionary of next state tensors
-        raise_error: If True, raises ValueError when NaN is detected
+        observations: 观测张量组成的字典
+        actions: 动作张量
+        next_state: 下一状态张量组成的字典
+        raise_error: 如果为 True，检测到 NaN 时抛出 ValueError
 
     Returns:
-        bool: True if NaN values were detected, False otherwise
+        bool: 检测到 NaN 值时返回 True，否则返回 False
     """
     nan_detected = False
 
-    # Check observations
+    # 检查观测
     for key, tensor in observations.items():
         if torch.isnan(tensor).any():
             logging.error(f"observations[{key}] contains NaN values")
@@ -907,7 +906,7 @@ def check_nan_in_transition(
             if raise_error:
                 raise ValueError(f"NaN detected in observations[{key}]")
 
-    # Check next state
+    # 检查下一状态
     for key, tensor in next_state.items():
         if torch.isnan(tensor).any():
             logging.error(f"next_state[{key}] contains NaN values")
@@ -915,7 +914,7 @@ def check_nan_in_transition(
             if raise_error:
                 raise ValueError(f"NaN detected in next_state[{key}]")
 
-    # Check actions
+    # 检查动作
     if torch.isnan(actions).any():
         logging.error("actions contains NaN values")
         nan_detected = True
@@ -928,7 +927,7 @@ def check_nan_in_transition(
 def push_actor_policy_to_queue(parameters_queue: Queue, algorithm: RLAlgorithm) -> None:
     logging.debug("[LEARNER] Pushing actor policy to the queue")
 
-    # Create a dictionary to hold all the state dicts
+    # 创建一个字典来容纳所有的 state dict
     state_dicts = algorithm.get_weights()
     state_bytes = state_to_bytes(state_dicts)
     parameters_queue.put(state_bytes)
@@ -937,12 +936,12 @@ def push_actor_policy_to_queue(parameters_queue: Queue, algorithm: RLAlgorithm) 
 def process_interaction_message(
     message, interaction_step_shift: int, wandb_logger: WandBLogger | None = None
 ):
-    """Process a single interaction message with consistent handling."""
+    """以一致的方式处理单条交互消息。"""
     message = bytes_to_python_object(message)
-    # Shift interaction step for consistency with checkpointed state
+    # 对交互步进行偏移，以与检查点中保存的状态保持一致
     message["Interaction step"] += interaction_step_shift
 
-    # Log if logger available
+    # 如果日志记录器可用，则进行记录
     if wandb_logger:
         wandb_logger.log_dict(d=message, mode="train", custom_step_key="Interaction step")
 
@@ -956,21 +955,21 @@ def process_transitions(
     dataset_repo_id: str | None,
     shutdown_event: Any,  # Event
 ):
-    """Process all available transitions from the queue.
+    """处理队列中所有可用的转移。
 
     Args:
-        transition_queue: Queue for receiving transitions from the actor
-        replay_buffer: Replay buffer to add transitions to
-        offline_replay_buffer: Offline replay buffer to add transitions to
-        dataset_repo_id: Repository ID for dataset
-        shutdown_event: Event to signal shutdown
+        transition_queue: 用于从 actor 接收转移的队列
+        replay_buffer: 用于添加转移的回放缓冲区
+        offline_replay_buffer: 用于添加转移的离线回放缓冲区
+        dataset_repo_id: 数据集的仓库 ID
+        shutdown_event: 用于通知关闭的事件
     """
     while not transition_queue.empty() and not shutdown_event.is_set():
         transition_list = transition_queue.get()
         transition_list = bytes_to_transitions(buffer=transition_list)
 
         for transition in transition_list:
-            # Skip transitions with NaN values
+            # 跳过含有 NaN 值的转移
             if check_nan_in_transition(
                 observations=transition["state"],
                 actions=transition[ACTION],
@@ -981,7 +980,7 @@ def process_transitions(
 
             replay_buffer.add(**transition)
 
-            # Add to offline buffer if it's an intervention
+            # 如果这是一次人工干预（intervention），则添加到离线缓冲区
             if dataset_repo_id is not None and transition.get("complementary_info", {}).get(
                 TeleopEvents.IS_INTERVENTION.value
             ):
@@ -994,16 +993,16 @@ def process_interaction_messages(
     wandb_logger: WandBLogger | None,
     shutdown_event: Any,  # Event
 ) -> dict | None:
-    """Process all available interaction messages from the queue.
+    """处理队列中所有可用的交互消息。
 
     Args:
-        interaction_message_queue: Queue for receiving interaction messages
-        interaction_step_shift: Amount to shift interaction step by
-        wandb_logger: Logger for tracking progress
-        shutdown_event: Event to signal shutdown
+        interaction_message_queue: 用于接收交互消息的队列
+        interaction_step_shift: 交互步的偏移量
+        wandb_logger: 用于跟踪进度的日志记录器
+        shutdown_event: 用于通知关闭的事件
 
     Returns:
-        dict | None: The last interaction message processed, or None if none were processed
+        dict | None: 处理的最后一条交互消息；如果没有处理任何消息则返回 None
     """
     last_message = None
     while not interaction_message_queue.empty() and not shutdown_event.is_set():

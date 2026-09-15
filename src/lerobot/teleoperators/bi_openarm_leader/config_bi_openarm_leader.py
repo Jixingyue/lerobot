@@ -23,7 +23,7 @@ from ..openarm_leader import OpenArmLeaderConfigBase
 @TeleoperatorConfig.register_subclass("bi_openarm_leader")
 @dataclass
 class BiOpenArmLeaderConfig(TeleoperatorConfig):
-    """Configuration class for Bi OpenArm Leader teleoperators."""
+    """双臂 OpenArm Leader 遥操作设备的配置类。"""
 
     left_arm_config: OpenArmLeaderConfigBase
     right_arm_config: OpenArmLeaderConfigBase

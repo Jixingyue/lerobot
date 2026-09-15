@@ -13,27 +13,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""In-process executor that runs the annotation phases.
+"""进程内执行器，运行标注阶段。
 
-The executor runs **six phases** in dependency order:
+执行器按依赖顺序运行**六个阶段**：
 
-    phase 1: ``plan`` module (plan + subtasks + memory)
-    phase 2: ``interjections`` module (interjections + speech)
-    phase 3: ``plan`` plan-update pass — re-runs plan emission at every
-             interjection timestamp produced by phase 2
-    phase 4: ``vqa`` module (VQA)
-    phase 5: validator
-    phase 6: writer
+    阶段 1：``plan`` 模块（计划 + 子任务 + 记忆）
+    阶段 2：``interjections`` 模块（插入语 + 语音）
+    阶段 3：``plan`` 计划更新阶段——在阶段 2 产生的每个插入语时间戳处
+             重新运行计划发射
+    阶段 4：``vqa`` 模块（VQA）
+    阶段 5：验证器
+    阶段 6：写入器
 
-Phase 3 is why the ``plan`` module must be re-entered after the
-``interjections`` module — to refresh ``plan`` rows at interjection
-timestamps.
+阶段 3 解释了为什么 ``plan`` 模块必须在 ``interjections`` 模块之后重新进入——
+以在插入语时间戳处刷新 ``plan`` 行。
 
-Distributed execution is provided by Hugging Face Jobs (see
-``lerobot.jobs.annotate``, reached via ``--job.target=<flavor>``); the pod
-inside the job invokes ``lerobot-annotate`` which uses this in-process executor.
-Episode-level concurrency is controlled by
-``ExecutorConfig.episode_parallelism``.
+分布式执行由 Hugging Face Jobs 提供（参见
+``lerobot.jobs.annotate``，通过 ``--job.target=<flavor>`` 访问）；
+作业内的 pod 调用 ``lerobot-annotate``，后者使用此进程内执行器。
+回合级并发由 ``ExecutorConfig.episode_parallelism`` 控制。
 """
 
 from __future__ import annotations
@@ -56,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PhaseResult:
-    """Summary of one pipeline phase across all episodes."""
+    """跨所有回合的一个流水线阶段的摘要。"""
 
     name: str
     episodes_processed: int
@@ -65,21 +63,20 @@ class PhaseResult:
 
 @dataclass
 class PipelineRunSummary:
-    """Aggregated result returned by :meth:`Executor.run`."""
+    """由 :meth:`Executor.run` 返回的聚合结果。"""
 
     phases: list[PhaseResult]
     written_paths: list[Path]
-    validation_report: Any  # ValidationReport, kept Any to avoid import cycle
+    validation_report: Any  # ValidationReport，保持 Any 以避免导入循环
 
 
 @dataclass
 class Executor:
-    """Run all six phases over a dataset root in-process.
+    """在数据集根目录上进程内运行所有六个阶段。
 
-    Episode-level concurrency comes from ``ExecutorConfig.episode_parallelism``
-    (a thread pool); cluster-level concurrency comes from running this
-    executor inside a Hugging Face Job. Tests construct the executor
-    directly with stub modules.
+    回合级并发来自 ``ExecutorConfig.episode_parallelism``（线程池）；
+    集群级并发来自在 Hugging Face Job 内运行此执行器。
+    测试直接使用存根模块构造执行器。
     """
 
     config: AnnotationPipelineConfig
@@ -102,15 +99,14 @@ class Executor:
 
         phases: list[PhaseResult] = []
 
-        # Phase 1: ``plan`` module (plan + subtasks + memory)
+        # 阶段 1：``plan`` 模块（计划 + 子任务 + 记忆）
         phases.append(self._run_module_phase("plan", records, staging_dir, self.plan))
-        # Phase 2: ``interjections`` module (interjections + speech). It
-        # reads the ``plan`` module's subtask rows from the same staging
-        # tree to ground the interjection prompt in the correct local subtask.
+        # 阶段 2：``interjections`` 模块（插入语 + 语音）。它从同一暂存树
+        # 读取 ``plan`` 模块的子任务行，以便将插入语提示词基于正确的本地子任务。
         phases.append(self._run_module_phase("interjections", records, staging_dir, self.interjections))
-        # Phase 3: ``plan`` plan-update pass at interjection timestamps.
+        # 阶段 3：在插入语时间戳处的 ``plan`` 计划更新阶段。
         phases.append(self._run_plan_update_phase(records, staging_dir))
-        # Phase 4: ``vqa`` module (VQA)
+        # 阶段 4：``vqa`` 模块（VQA）
         phases.append(self._run_module_phase("vqa", records, staging_dir, self.vqa))
 
         print("[annotate] running validator...", flush=True)
@@ -123,20 +119,19 @@ class Executor:
         written = self.writer.write_all(records, staging_dir, root)
         print(f"[annotate] wrote {len(written)} shard(s); pipeline complete", flush=True)
 
-        # Keep meta/info.json aligned with the parquet schema we just wrote.
-        # Idempotent and additive: existing user metadata is preserved.
+        # 保持 meta/info.json 与我们刚写入的 parquet 模式一致。
+        # 幂等且累加：现有的用户元数据被保留。
         self._ensure_annotation_metadata_in_info(root)
 
         return PipelineRunSummary(phases=phases, written_paths=written, validation_report=report)
 
     @staticmethod
     def _ensure_annotation_metadata_in_info(root: Path) -> None:
-        """Write language features and canonical tools to ``meta/info.json``.
+        """将语言特征和规范工具写入 ``meta/info.json``。
 
-        ``LanguageColumnsWriter`` adds ``language_persistent`` and
-        ``language_events`` to parquet shards. The metadata must advertise
-        those columns too, otherwise non-streaming ``LeRobotDataset`` loads
-        cast against the old schema and fail on the extra parquet columns.
+        ``LanguageColumnsWriter`` 向 parquet 分片添加 ``language_persistent`` 和
+        ``language_events``。元数据也必须通告这些列，否则非流式的 ``LeRobotDataset``
+        加载会针对旧模式进行转换，并在额外的 parquet 列上失败。
         """
         from lerobot.datasets.io_utils import load_info, write_info  # noqa: PLC0415
         from lerobot.datasets.language import SAY_TOOL_SCHEMA, language_feature_info  # noqa: PLC0415
@@ -224,12 +219,10 @@ class Executor:
     def _run_plan_update_phase(  # noqa: PLR0915
         self, records: list[EpisodeRecord], staging_dir: Path
     ) -> PhaseResult:
-        """Re-emit ``plan`` rows at each timestamp the ``interjections`` module produced.
+        """在 ``interjections`` 模块产生的每个时间戳处重新发射 ``plan`` 行。
 
-        The ``plan`` module owns the prompt; the ``interjections`` module
-        produced the timestamps. This phase therefore calls back into the
-        ``plan`` module with the interjection timestamps so its existing
-        prompt path is reused.
+        ``plan`` 模块拥有提示词；``interjections`` 模块产生了时间戳。
+        因此此阶段使用插入语时间戳回调到 ``plan`` 模块，以便复用其现有的提示词路径。
         """
         if not self.plan.enabled or not self.interjections.enabled:
             return PhaseResult(name="plan_update", episodes_processed=0, episodes_skipped=len(records))
@@ -244,8 +237,8 @@ class Executor:
             if interjection_times:
                 self.plan.run_plan_updates(record, staging, interjection_times, interjection_texts)
                 processed += 1
-        # Episodes without any interjections are skipped (no plan refresh
-        # needed); count them so the summary's processed+skipped == total.
+        # 没有任何插入语的回合被跳过（不需要计划刷新）；
+        # 计数它们以便摘要的 processed+skipped == total。
         return PhaseResult(
             name="plan_update",
             episodes_processed=processed,

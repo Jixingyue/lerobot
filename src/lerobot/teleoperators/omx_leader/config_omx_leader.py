@@ -22,9 +22,9 @@ from ..config import TeleoperatorConfig
 @TeleoperatorConfig.register_subclass("omx_leader")
 @dataclass
 class OmxLeaderConfig(TeleoperatorConfig):
-    # Port to connect to the arm
+    # 用于连接机械臂的端口
     port: str
 
-    # Sets the arm in torque mode with the gripper motor set to this value. This makes it possible to squeeze
-    # the gripper and have it spring back to an open position on its own.
+    # 将机械臂设置为力矩模式，并将夹爪电机设为该值。这样就可以挤压夹爪，
+    # 并让它自行弹回张开位置。
     gripper_open_pos: float = 60.0

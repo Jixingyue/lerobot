@@ -15,17 +15,17 @@
 # limitations under the License.
 
 """
-Helper to find the camera devices available in your system.
+查找系统中可用的相机设备的辅助工具。
 
-Example:
+示例：
 
 ```shell
 lerobot-find-cameras
 ```
 """
 
-# NOTE(Steven): RealSense can also be identified/opened as OpenCV cameras. If you know the camera is a RealSense, use the `lerobot-find-cameras realsense` flag to avoid confusion.
-# NOTE(Steven): macOS cameras sometimes report different FPS at init time, not an issue here as we don't specify FPS when opening the cameras, but the information displayed might not be truthful.
+# 注意（Steven）：RealSense 也可以被识别/打开为 OpenCV 相机。如果你知道相机是 RealSense，请使用 `lerobot-find-cameras realsense` 参数以避免混淆。
+# 注意（Steven）：macOS 相机在初始化时有时会报告不同的 FPS，在这里不是问题，因为我们打开相机时不指定 FPS，但显示的信息可能不准确。
 
 import argparse
 import logging
@@ -46,10 +46,10 @@ logger = logging.getLogger(__name__)
 
 def find_all_opencv_cameras() -> list[dict[str, Any]]:
     """
-    Finds all available OpenCV cameras plugged into the system.
+    查找插入系统的所有可用 OpenCV 相机。
 
-    Returns:
-        A list of all available OpenCV cameras with their metadata.
+    返回：
+        所有可用 OpenCV 相机及其元数据的列表。
     """
     all_opencv_cameras_info: list[dict[str, Any]] = []
     logger.info("Searching for OpenCV cameras...")
@@ -66,10 +66,10 @@ def find_all_opencv_cameras() -> list[dict[str, Any]]:
 
 def find_all_realsense_cameras() -> list[dict[str, Any]]:
     """
-    Finds all available RealSense cameras plugged into the system.
+    查找插入系统的所有可用 RealSense 相机。
 
-    Returns:
-        A list of all available RealSense cameras with their metadata.
+    返回：
+        所有可用 RealSense 相机及其元数据的列表。
     """
     all_realsense_cameras_info: list[dict[str, Any]] = []
     logger.info("Searching for RealSense cameras...")
@@ -88,14 +88,14 @@ def find_all_realsense_cameras() -> list[dict[str, Any]]:
 
 def find_and_print_cameras(camera_type_filter: str | None = None) -> list[dict[str, Any]]:
     """
-    Finds available cameras based on an optional filter and prints their information.
+    根据可选的过滤条件查找可用相机并打印其信息。
 
-    Args:
-        camera_type_filter: Optional string to filter cameras ("realsense" or "opencv").
-                            If None, lists all cameras.
+    参数：
+        camera_type_filter: 用于过滤相机的可选字符串（"realsense" 或 "opencv"）。
+                            若为 None，则列出所有相机。
 
-    Returns:
-        A list of all available cameras matching the filter, with their metadata.
+    返回：
+        所有匹配过滤条件的可用相机及其元数据的列表。
     """
     all_cameras_info: list[dict[str, Any]] = []
 
@@ -134,7 +134,7 @@ def save_image(
     camera_type: str,
 ) -> None:
     """
-    Saves a single image to disk using Pillow. Handles color conversion if necessary.
+    使用 Pillow 将单张图像保存到磁盘。如有需要会处理颜色转换。
     """
     try:
         img = Image.fromarray(img_array, mode="RGB")
@@ -152,7 +152,7 @@ def save_image(
 
 
 def create_camera_instance(cam_meta: dict[str, Any], *, warmup_s: int = 1) -> dict[str, Any] | None:
-    """Create and connect to a camera instance based on metadata."""
+    """根据元数据创建并连接相机实例。"""
     cam_type = cam_meta.get("type")
     cam_id = cam_meta.get("id")
     instance = None
@@ -190,7 +190,7 @@ def create_camera_instance(cam_meta: dict[str, Any], *, warmup_s: int = 1) -> di
 
 
 def process_camera_image(cam_dict: dict[str, Any], output_dir: Path, current_time: float) -> None:
-    """Capture and process an image from a single camera."""
+    """从单个相机捕获并处理一张图像。"""
     cam = cam_dict["instance"]
     meta = cam_dict["meta"]
     cam_type_str = str(meta.get("type", "unknown"))
@@ -215,7 +215,7 @@ def process_camera_image(cam_dict: dict[str, Any], output_dir: Path, current_tim
 
 
 def cleanup_camera(cam_dict: dict[str, Any]) -> None:
-    """Disconnect all cameras."""
+    """断开所有相机的连接。"""
     logger.info(f"Disconnecting camera with ID {cam_dict['meta'].get('id')}...")
     try:
         if cam_dict["instance"] and cam_dict["instance"].is_connected:
@@ -231,15 +231,15 @@ def save_images_from_all_cameras(
     warmup_s: int = 1,
 ):
     """
-    Connects to detected cameras (optionally filtered by type) and saves images from each.
-    Uses default stream profiles for width, height, and FPS.
+    连接检测到的相机（可选按类型过滤）并保存每个相机的图像。
+    宽度、高度和 FPS 使用默认的流配置文件。
 
-    Args:
-        output_dir: Directory to save images.
-        record_time_s: Duration in seconds to record images.
-        camera_type: Optional string to filter cameras ("realsense" or "opencv").
-                            If None, uses all detected cameras.
-        warmup_s: Duration in seconds to warmup camera before recording images.
+    参数：
+        output_dir: 保存图像的目录。
+        record_time_s: 录制图像的时长（秒）。
+        camera_type: 用于过滤相机的可选字符串（"realsense" 或 "opencv"）。
+                            若为 None，则使用所有检测到的相机。
+        warmup_s: 录制图像前预热相机的时长（秒）。
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Saving images to {output_dir}")

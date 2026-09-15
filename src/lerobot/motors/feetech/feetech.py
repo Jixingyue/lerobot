@@ -50,16 +50,13 @@ logger = logging.getLogger(__name__)
 
 
 class OperatingMode(Enum):
-    # position servo mode
+    # 位置舵机模式
     POSITION = 0
-    # The motor is in constant speed mode, which is controlled by parameter 0x2e, and the highest bit 15 is
-    # the direction bit
+    # 电机处于恒速模式，由参数 0x2e 控制，最高位 15 为方向位
     VELOCITY = 1
-    # PWM open-loop speed regulation mode, with parameter 0x2c running time parameter control, bit11 as
-    # direction bit
+    # PWM 开环调速模式，由参数 0x2c 运行时间参数控制，bit11 为方向位
     PWM = 2
-    # In step servo mode, the number of step progress is represented by parameter 0x2a, and the highest bit 15
-    # is the direction bit
+    # 步进舵机模式，步进进度数由参数 0x2a 表示，最高位 15 为方向位
     STEP = 3
 
 
@@ -75,12 +72,11 @@ class TorqueMode(Enum):
 
 def patch_setPacketTimeout(self, packet_length):  # noqa: N802
     """
-    HACK: This patches the PortHandler behavior to set the correct packet timeouts.
+    HACK：此补丁修改了 PortHandler 的行为，以设置正确的数据包超时时间。
 
-    It fixes https://gitee.com/ftservo/SCServoSDK/issues/IBY2S6
-    The bug is fixed on the official Feetech SDK repo (https://gitee.com/ftservo/FTServo_Python)
-    but because that version is not published on PyPI, we rely on the (unofficial) on that is, which needs
-    patching.
+    它修复了 https://gitee.com/ftservo/SCServoSDK/issues/IBY2S6
+    该 bug 已在官方 Feetech SDK 仓库（https://gitee.com/ftservo/FTServo_Python）中修复，
+    但由于该版本未发布到 PyPI，我们依赖的是已发布到 PyPI 的（非官方）版本，因此需要打补丁。
     """
     self.packet_start_time = self.getCurrentTime()
     self.packet_timeout = (self.tx_time_per_byte * packet_length) + (self.tx_time_per_byte * 3.0) + 50
@@ -88,8 +84,8 @@ def patch_setPacketTimeout(self, packet_length):  # noqa: N802
 
 class FeetechMotorsBus(SerialMotorsBus):
     """
-    The FeetechMotorsBus class allows to efficiently read and write to the attached motors. It relies on the
-    python feetech sdk to communicate with the motors, which is itself based on the dynamixel sdk.
+    FeetechMotorsBus 类可以高效地读写所连接的电机。它依赖 python feetech sdk 与电机通信，
+    该 sdk 本身基于 dynamixel sdk。
     """
 
     apply_drive_mode = True
@@ -208,17 +204,17 @@ class FeetechMotorsBus(SerialMotorsBus):
 
     def configure_motors(self, return_delay_time=0, maximum_acceleration=254, acceleration=254) -> None:
         for motor in self.motors:
-            # By default, Feetech motors have a 500µs delay response time (corresponding to a value of 250 on
-            # the 'Return_Delay_Time' address). We ensure this is reduced to the minimum of 2µs (value of 0).
+            # 默认情况下，Feetech 电机有 500µs 的响应延迟（对应 'Return_Delay_Time' 地址上的值 250）。
+            # 我们确保将其降低到最小值 2µs（值为 0）。
             self.write("Return_Delay_Time", motor, return_delay_time)
-            # Set 'Maximum_Acceleration' to 254 to speedup acceleration and deceleration of the motors.
+            # 将 'Maximum_Acceleration' 设为 254，以加快电机的加速和减速。
             if self.protocol_version == 0:
                 self.write("Maximum_Acceleration", motor, maximum_acceleration)
             self.write("Acceleration", motor, acceleration)
 
-            # Clear bit 4 (0x10) of the Phase register (0x12) to set angle feedback mode to 0.
-            # This forces position readings to be in the range [0, resolution - 1] and prevents overflow or negative values.
-            # Only known to be necessary for the STS3215.
+            # 清除 Phase 寄存器 (0x12) 的 bit 4 (0x10)，将角度反馈模式设为 0。
+            # 这迫使位置读数处于 [0, resolution - 1] 范围内，防止溢出或出现负值。
+            # 目前仅知对 STS3215 是必需的。
             if self.motors[motor].model == "sts3215":
                 phase = self.read("Phase", motor, normalize=False)
                 if phase & 0x10:
@@ -277,7 +273,7 @@ class FeetechMotorsBus(SerialMotorsBus):
 
     def _get_half_turn_homings(self, positions: dict[NameOrID, Value]) -> dict[NameOrID, Value]:
         """
-        On Feetech Motors:
+        对于 Feetech 电机：
         Present_Position = Actual_Position - Homing_Offset
         """
         half_turn_homings: dict[NameOrID, Value] = {}
@@ -359,7 +355,7 @@ class FeetechMotorsBus(SerialMotorsBus):
             self.port_handler.is_using = False
             return data_list, result
 
-        # set rx timeout
+        # 设置接收超时
         self.port_handler.setPacketTimeoutMillis((wait_length * tx_time_per_byte) + (3.0 * scs.MAX_ID) + 16.0)
 
         rxpacket = []
@@ -376,15 +372,15 @@ class FeetechMotorsBus(SerialMotorsBus):
             if rx_length < status_length:
                 return data_list, scs.COMM_RX_CORRUPT
 
-            # find packet header
+            # 查找数据包头
             for idx in range(0, (rx_length - 1)):
                 if (rxpacket[idx] == 0xFF) and (rxpacket[idx + 1] == 0xFF):
                     break
 
-            if idx == 0:  # found at the beginning of the packet
-                # calculate checksum
+            if idx == 0:  # 在数据包开头找到
+                # 计算校验和
                 checksum = 0
-                for idx in range(2, status_length - 1):  # except header & checksum
+                for idx in range(2, status_length - 1):  # 不包括包头和校验和
                     checksum += rxpacket[idx]
 
                 checksum = ~checksum & 0xFF
@@ -399,11 +395,11 @@ class FeetechMotorsBus(SerialMotorsBus):
                         return data_list, result
                 else:
                     result = scs.COMM_RX_CORRUPT
-                    # remove header (0xFF 0xFF)
+                    # 移除包头 (0xFF 0xFF)
                     del rxpacket[0:2]
                     rx_length = rx_length - 2
             else:
-                # remove unnecessary packets
+                # 移除无用的数据包
                 del rxpacket[0:idx]
                 rx_length = rx_length - idx
 

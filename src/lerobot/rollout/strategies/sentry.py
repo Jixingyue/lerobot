@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sentry rollout strategy: continuous autonomous recording with auto-upload."""
+"""Sentry rollout 策略：持续自主录制并自动上传。"""
 
 from __future__ import annotations
 
@@ -41,28 +41,26 @@ logger = logging.getLogger(__name__)
 
 
 class SentryStrategy(RolloutStrategy):
-    """Continuous autonomous rollout with always-on recording.
+    """持续自主 rollout，录制始终开启。
 
-    Episode duration is derived from camera resolution, FPS, and
-    ``DEFAULT_VIDEO_FILE_SIZE_IN_MB`` so that each saved episode
-    produces a video file that has crossed the chunk-size boundary.
-    This keeps ``push_to_hub`` efficient — it uploads complete video
-    files rather than re-uploading a still-growing one.
+    回合时长由相机分辨率、FPS 和
+    ``DEFAULT_VIDEO_FILE_SIZE_IN_MB`` 推导得出，使每个保存的回合所
+    产生的视频文件都已越过块大小边界。这保证了 ``push_to_hub`` 的
+    高效——它上传的是完整的视频文件，而不是重复上传一个仍在增长
+    的文件。
 
-    The dataset is pushed to the Hub via a bounded single-worker executor
-    so no push is ever silently dropped and exactly one push runs at a
-    time.
+    数据集通过一个有界的单工作线程执行器推送到 Hub，因此任何推送都
+    不会被静默丢弃，且同一时刻恰好只有一个推送在运行。
 
-    Policy state (hidden state, RTC queue) intentionally persists across
-    episode boundaries — Sentry slices one continuous rollout, the robot
-    does not reset between slices.
+    策略状态（隐藏状态、RTC 队列）有意跨回合边界保留——Sentry 是对
+    一段连续的 rollout 进行切片，机器人在各切片之间不会复位。
 
-    Requires ``streaming_encoding=True`` (enforced in config validation)
-    to prevent disk I/O from blocking the control loop.
+    要求 ``streaming_encoding=True``（在配置校验中强制执行），
+    以防止磁盘 I/O 阻塞控制循环。
 
-    ``run()`` is restartable, as ``--interactive=true`` requires: each call records
-    complete episodes plus one final partial one, and only ``teardown()`` finalizes
-    the dataset.
+    ``run()`` 可重复启动，这正是 ``--interactive=true`` 所要求的：
+    每次调用会录制若干完整回合外加最后一个不完整的回合，并且只有
+    ``teardown()`` 才会终结数据集。
     """
 
     config: SentryStrategyConfig
@@ -73,15 +71,15 @@ class SentryStrategy(RolloutStrategy):
         self._pending_push: Future | None = None
         self._needs_push = Event()
         self._episode_lock = Lock()
-        # Instance state, not run()-local, so the upload cadence survives segments.
+        # 实例状态，而不是 run() 的局部变量，从而使上传节奏能够跨片段保留。
         self._episodes_since_push = 0
-        # Latched when save_episode fails mid-write: the dataset on disk may then
-        # hold committed rows unreachable from metadata, so recording more into it
-        # or pushing it would grow/upload corruption.
+        # 当 save_episode 在写入中途失败时锁存：此时磁盘上的数据集可能含有
+        # 已提交但无法从元数据访问的行，因此继续往里录制或推送都会扩大/
+        # 上传损坏的数据。
         self._dataset_poisoned = False
 
     def setup(self, ctx: RolloutContext) -> None:
-        """Initialise the inference engine and background push executor."""
+        """初始化推理引擎和后台推送执行器。"""
         self._init_engine(ctx)
         self._push_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sentry-push")
         target_mb = self.config.target_video_file_size_mb or DEFAULT_VIDEO_FILE_SIZE_IN_MB
@@ -95,7 +93,7 @@ class SentryStrategy(RolloutStrategy):
         )
 
     def run(self, ctx: RolloutContext) -> None:
-        """Run the continuous recording loop with automatic episode rotation."""
+        """运行持续录制循环，并自动轮转回合。"""
         if self._dataset_poisoned:
             raise RuntimeError(
                 "Refusing to start a new segment: a previous save_episode failed mid-write, so "
@@ -108,7 +106,7 @@ class SentryStrategy(RolloutStrategy):
         interpolator = self._interpolator
         features = ctx.data.dataset_features
 
-        # Per-segment timer, never hoisted onto the instance (see ``RolloutStrategy.run``).
+        # 每个片段独立的计时器，绝不提升到实例上（见 ``RolloutStrategy.run``）。
         timer = CycleTimer(cfg.fps, interpolator.multiplier, report=ctx.runtime.cadence_report)
 
         engine.resume()
@@ -139,28 +137,26 @@ class SentryStrategy(RolloutStrategy):
                 if action_dict is not None:
                     with timer.section("telemetry"):
                         self._log_telemetry(obs_processed, action_dict, ctx.runtime)
-                    # Record once per interpolation cycle so the dataset cadence
-                    # matches its declared fps; interpolated ticks only send
-                    # commands to the robot.
+                    # 每个插值周期只录制一次，使数据集的节拍与其声明的 fps
+                    # 一致；被插值的节拍只向机器人发送指令。
                     if interpolator.emitted_policy_action:
                         with timer.section("record"):
                             obs_frame = build_dataset_frame(features, obs_processed, prefix=OBS_STR)
                             action_frame = build_dataset_frame(features, action_dict, prefix=ACTION)
-                            # Label with ``dispatched_task``, the instruction that generated the action just
-                            # sent (the live ``engine.task`` would mislabel actions still queued from the
-                            # previous one); sound at any multiplier, since no ``get_action`` has run since
-                            # the refill tick that produced this action.
+                            # 使用 ``dispatched_task`` 作为标签，即生成刚刚发送的那个动作
+                            # 所用的指令（实时的 ``engine.task`` 会错误标记仍在队列中、
+                            # 由上一条指令生成的动作）；在任意倍乘系数下都可靠，因为
+                            # 从产生此动作的补数据节拍以来还没有任何 ``get_action`` 执行过。
                             frame = {**obs_frame, **action_frame, "task": engine.dispatched_task}
-                            # ``add_frame`` writes to the in-progress episode buffer; the
-                            # background pusher only ever touches *finalised* episode
-                            # artifacts on disk.  The two operate on disjoint state, so
-                            # ``add_frame`` does not need ``_episode_lock``.
+                            # ``add_frame`` 写入的是进行中回合的缓冲区；后台推送方
+                            # 只会接触磁盘上*已终结*的回合产物。两者操作的状态互不
+                            # 相交，因此 ``add_frame`` 不需要 ``_episode_lock``。
                             dataset.add_frame(frame)
 
-                # Episode rotation derived from video file-size target.
-                # The duration is a conservative estimate so the actual
-                # video has crossed DEFAULT_VIDEO_FILE_SIZE_IN_MB by now,
-                # keeping push_to_hub efficient (uploads complete files).
+                # 由视频文件大小目标推导出的回合轮转。
+                # 此时长是保守估计，因此实际视频到目前为止必已超过
+                # DEFAULT_VIDEO_FILE_SIZE_IN_MB，从而保持 push_to_hub 的
+                # 高效（上传完整文件）。
                 elapsed = time.perf_counter() - episode_start
                 if elapsed >= episode_duration_s:
                     self._checked_save_episode(dataset)
@@ -169,10 +165,9 @@ class SentryStrategy(RolloutStrategy):
                         dataset.num_episodes,
                         elapsed,
                     )
-                    # ``save_episode`` blocks for a good fraction of a second
-                    # inside the timed loop body.  That is episode finalisation,
-                    # not the steady-state cadence, so report the episode and then
-                    # drop the partial group and the gap the save opened.
+                    # ``save_episode`` 会在被计时的循环体中阻塞相当一部分秒。
+                    # 这属于回合终结，而不是稳态节拍，因此先上报该回合，然后
+                    # 丢弃不完整的分组以及保存操作造成的空隙。
                     timer.log_episode_summary(f"episode {dataset.num_episodes}")
                     timer.restart()
 
@@ -180,9 +175,9 @@ class SentryStrategy(RolloutStrategy):
 
                     episode_start = time.perf_counter()
 
-                # Service the text-query channel after the frame is recorded, so a
-                # multi-second generate cannot land between this tick's observation
-                # and its ``add_frame``; outside the guard above so starved ticks pump too.
+                # 在帧录制完成后再处理文本查询通道，这样耗时数秒的生成就不会
+                # 落在本拍的观测与其 ``add_frame`` 之间；放在上面的守卫之外，
+                # 以便饥饿节拍也能执行 pump。
                 with timer.section("query"):
                     engine.pump_query(obs_processed)
 
@@ -190,17 +185,17 @@ class SentryStrategy(RolloutStrategy):
 
         finally:
             logger.info("Sentry control loop ended")
-            # Report before the tail save, which re-raises on a broken save.
+            # 先上报，再进行尾部保存，因为后者在保存失败时会重新抛出异常。
             timer.log_run_summary()
             self._save_tail_episode(dataset, cfg)
 
     def _checked_save_episode(self, dataset) -> None:
-        """``save_episode`` under the push lock; a failure poisons the dataset and re-raises.
+        """在推送锁的保护下执行 ``save_episode``；一旦失败就将数据集标记为中毒并重新抛出异常。
 
-        A failed ``save_episode`` is *not* recoverable by discarding the buffer:
-        rows and counters are committed before the failure-prone steps (video
-        encode, metadata commit), so the next segment would reuse the same episode
-        index.  Hence the poison latch, which refuses further segments and pushes.
+        失败的 ``save_episode`` *无法*通过丢弃缓冲区来恢复：数据行和计数器
+        在那些容易失败的步骤（视频编码、元数据提交）之前就已经提交了，因此
+        下一个片段会复用相同的回合索引。这就是中毒锁存（poison latch）存在
+        的原因，它会拒绝后续的片段和推送。
         """
         self._warn_if_push_in_flight()
         try:
@@ -213,11 +208,11 @@ class SentryStrategy(RolloutStrategy):
             raise
 
     def _save_tail_episode(self, dataset, cfg) -> None:
-        """Commit the segment's partial tail episode; fail loudly on real errors.
+        """提交该片段不完整的尾部回合；遇到真正的错误时显式报错。
 
-        Runs in ``run()``'s ``finally``.  Returns early on an already-poisoned
-        dataset so the original error propagates, and on a segment that recorded
-        nothing, so :meth:`_checked_save_episode` only ever fails on a broken save.
+        在 ``run()`` 的 ``finally`` 中运行。当数据集已处于中毒状态时提前
+        返回，以便原始错误得以传播；当该片段没有录制任何内容时也提前返回，
+        从而使 :meth:`_checked_save_episode` 只可能因保存本身损坏而失败。
         """
         if self._dataset_poisoned:
             return
@@ -229,10 +224,10 @@ class SentryStrategy(RolloutStrategy):
         self._register_saved_episode(dataset, cfg)
 
     def _register_saved_episode(self, dataset, cfg) -> None:
-        """Post-save bookkeeping, shared by the rotation and tail-save sites.
+        """保存后的记账工作，由轮转处和尾部保存处共用。
 
-        Tail episodes must count toward ``upload_every_n_episodes`` too, or a session
-        of short segments would never background-push.
+        尾部回合也必须计入 ``upload_every_n_episodes``，否则一个由短小
+        片段组成的会话将永远不会触发后台推送。
         """
         self._episodes_since_push += 1
         self._needs_push.set()
@@ -242,10 +237,10 @@ class SentryStrategy(RolloutStrategy):
             self._episodes_since_push = 0
 
     def _warn_if_push_in_flight(self) -> None:
-        """Warn before a save that must wait on a background upload.
+        """在一次必须等待后台上传完成的保存之前发出警告。
 
-        ``save_episode`` contends with a background Hub push for ``_episode_lock``,
-        so on a slow uplink a ``/reset`` freezes the robot for minutes.
+        ``save_episode`` 会与后台 Hub 推送争夺 ``_episode_lock``，因此在
+        上行链路较慢时，一次 ``/reset`` 可能会让机器人僵住数分钟。
         """
         if self._pending_push is not None and not self._pending_push.done():
             logger.warning(
@@ -254,12 +249,12 @@ class SentryStrategy(RolloutStrategy):
             )
 
     def teardown(self, ctx: RolloutContext) -> None:
-        """Flush pending pushes, finalise the dataset, and disconnect hardware."""
+        """冲刷待处理的推送、终结数据集，并断开硬件连接。"""
         play_sounds = ctx.runtime.cfg.play_sounds
         logger.info("Stopping sentry recording")
         log_say("Stopping sentry recording", play_sounds)
 
-        # Flush any queued/running push cleanly.
+        # 干净地冲刷所有已排队/正在运行的推送。
         if self._push_executor is not None:
             logger.info("Shutting down push executor (waiting for pending pushes)...")
             self._push_executor.shutdown(wait=True)
@@ -295,10 +290,10 @@ class SentryStrategy(RolloutStrategy):
         logger.info("Sentry strategy teardown complete")
 
     def _background_push(self, dataset, cfg) -> None:
-        """Queue a Hub push on the single-worker executor.
+        """在单工作线程执行器上排队一次 Hub 推送。
 
-        The executor's max_workers=1 guarantees at most one push runs at
-        a time; submitted tasks are queued rather than dropped.
+        执行器的 max_workers=1 保证同一时刻至多有一个推送在运行；
+        提交的任务会被排队而不是被丢弃。
         """
         if self._push_executor is None:
             return
@@ -313,7 +308,7 @@ class SentryStrategy(RolloutStrategy):
             try:
                 with self._episode_lock:
                     if self._dataset_poisoned:
-                        # Poisoned while queued, after the submit-time check passed.
+                        # 在提交时的检查通过之后、任务排队期间变成了中毒状态。
                         logger.error(
                             "Skipping queued Hub push: a failed save_episode left the dataset "
                             "possibly corrupt"

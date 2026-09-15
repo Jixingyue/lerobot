@@ -40,7 +40,7 @@ from .action_hub import build_action_space
 from .configuration_xvla import XVLAConfig
 from .soft_transformer import SoftPromptedTransformer
 
-# Florence2 config and modeling depend on transformers
+# Florence2 的配置和建模依赖 transformers
 if TYPE_CHECKING or _transformers_available:
     from transformers import Florence2Config, Florence2Model
 else:
@@ -50,7 +50,7 @@ else:
 
 class XVLAModel(nn.Module):
     """
-    XVLA backbone that stitches Florence-2 embeddings with the temporal/action transformer head.
+    XVLA 主干网络，将 Florence-2 的嵌入与时间/动作 transformer 头衔接起来。
     """
 
     def __init__(
@@ -64,9 +64,9 @@ class XVLAModel(nn.Module):
         self.chunk_size: int = config.chunk_size
         self.use_proprio: bool = config.use_proprio
 
-        # Build action space with auto-detection for "auto" mode
+        # 在 "auto" 模式下构建带自动检测的动作空间
         if config.action_mode.lower() == "auto":
-            # Auto-detect real action dim from config.action_feature
+            # 从 config.action_feature 自动检测真实动作维度
             real_dim = (
                 config.action_feature.shape[-1]
                 if config.action_feature is not None
@@ -84,7 +84,7 @@ class XVLAModel(nn.Module):
         self.dim_proprio = proprio_dim
 
         self.vlm = Florence2Model(florence_config)
-        # XVLA only uses the encoder-side path of Florence-2; drop the text decoder entirely.
+        # XVLA 只使用 Florence-2 的编码器侧路径；完全移除文本解码器。
         del self.vlm.language_model.decoder
 
         projection_dim = getattr(florence_config.vision_config, "projection_dim", None)
@@ -106,54 +106,54 @@ class XVLAModel(nn.Module):
             use_hetero_proj=config.use_hetero_proj,
         )
 
-        # Apply freezing based on config
+        # 根据配置应用冻结
         self._apply_freezing()
 
-        # Apply dtype casting based on config
+        # 根据配置应用 dtype 转换
         self._apply_dtype()
 
     def _get_target_dtype(self) -> torch.dtype:
-        """Get the target dtype based on config."""
+        """根据配置获取目标 dtype。"""
         if self.config.dtype == "bfloat16":
             return torch.bfloat16
         return torch.float32
 
     def _apply_dtype(self) -> None:
         """
-        Apply dtype casting to model components based on config.
+        根据配置对模型组件进行 dtype 转换。
         """
         target_dtype = self._get_target_dtype()
         self.to(dtype=target_dtype)
 
     def _apply_freezing(self) -> None:
         """
-        Freeze VLM vision and language encoders based on config options.
-        Keep only policy transformer and soft prompts trainable.
+        根据配置选项冻结 VLM 视觉编码器和语言编码器。
+        只保留策略 transformer 和 soft prompt 可训练。
         """
-        # Freeze vision encoder
+        # 冻结视觉编码器
         if self.config.freeze_vision_encoder and hasattr(self.vlm, "vision_tower"):
             for param in self.vlm.vision_tower.parameters():
                 param.requires_grad = False
 
-        # Freeze language encoder
+        # 冻结语言编码器
         if self.config.freeze_language_encoder and hasattr(self.vlm, "language_model"):
             lm = self.vlm.language_model
-            # Freeze encoder
+            # 冻结编码器
             if hasattr(lm, "encoder"):
                 for param in lm.encoder.parameters():
                     param.requires_grad = False
-            # Freeze shared embeddings
+            # 冻结共享嵌入
             if hasattr(lm, "shared"):
                 for param in lm.shared.parameters():
                     param.requires_grad = False
 
-        # Freeze or unfreeze policy transformer
+        # 冻结或解冻策略 transformer
         if not self.config.train_policy_transformer:
             for name, param in self.transformer.named_parameters():
                 if "soft_prompt" not in name:
                     param.requires_grad = False
 
-        # Freeze or unfreeze soft prompts
+        # 冻结或解冻 soft prompt
         if not self.config.train_soft_prompts and hasattr(self.transformer, "soft_prompt_hub"):
             for param in self.transformer.soft_prompt_hub.parameters():
                 param.requires_grad = False
@@ -165,7 +165,7 @@ class XVLAModel(nn.Module):
         image_mask: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         """
-        Encode text and multi-view images via Florence2 encoder.
+        通过 Florence2 编码器对文本和多视角图像进行编码。
         """
         batch_size, num_views = pixel_values.shape[:2]
         flat_mask = image_mask.view(-1).to(dtype=torch.bool)
@@ -183,7 +183,7 @@ class XVLAModel(nn.Module):
         image_features = image_features.view(batch_size, num_views, tokens_per_view, hidden_dim)
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
-        # XVLA prepends the primary view's image tokens to the text embeddings and attends to everything.
+        # XVLA 将主视角的图像 token 前置到文本嵌入中，并对所有内容做注意力。
         merged_embeds = torch.cat([image_features[:, 0], inputs_embeds], dim=1)
         attention_mask = torch.ones(merged_embeds.shape[:2], dtype=torch.long, device=merged_embeds.device)
 
@@ -205,7 +205,7 @@ class XVLAModel(nn.Module):
         action: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         """
-        Forward pass for the XVLA model.
+        XVLA 模型的前向传播。
         """
         target_dtype = self._get_target_dtype()
         image_input = image_input.to(dtype=target_dtype)
@@ -272,7 +272,7 @@ class XVLAModel(nn.Module):
 
 
 class XVLAPolicy(PreTrainedPolicy):
-    """LeRobot-compliant wrapper built around the XVLA model."""
+    """围绕 XVLA 模型构建的、符合 LeRobot 规范的包装器。"""
 
     config_class = XVLAConfig
     name = "xvla"
@@ -292,11 +292,11 @@ class XVLAPolicy(PreTrainedPolicy):
         }
 
     def get_optim_params(self) -> dict:
-        """Return trainable named parameters for optimization.
+        """返回用于优化的、带名称的可训练参数。
 
-        Returns a dict of name -> param for all trainable parameters.
-        This enables the xvla-adamw optimizer to apply differential learning rates
-        based on parameter names (e.g., 1/10 LR for VLM components).
+        返回一个包含所有可训练参数的 name -> param 字典。
+        这使 xvla-adamw 优化器能够根据参数名称应用差异化的学习率
+        （例如 VLM 组件使用 1/10 的学习率）。
         """
         return dict(filter(lambda kv: kv[1].requires_grad, self.named_parameters()))
 
@@ -437,13 +437,13 @@ class XVLAPolicy(PreTrainedPolicy):
         **kwargs,
     ):
         """
-        Loads XVLA model weights with:
-        - automatic prefix 'model.' added to all keys
-        - skip list for layers that should remain randomly initialized
+        加载 XVLA 模型权重，具备：
+        - 自动为所有键添加 'model.' 前缀
+        - 针对应保持随机初始化的层的跳过列表
         """
         import safetensors.torch
 
-        # step 1: load config
+        # 第 1 步：加载 config
         # TODO: jadechoghari, fix this
         if config is None:
             config = PreTrainedConfig.from_pretrained(
@@ -460,7 +460,7 @@ class XVLAPolicy(PreTrainedPolicy):
 
         model_id = str(pretrained_name_or_path)
         instance = cls(config, **kwargs)
-        # step 2: locate model.safetensors
+        # 第 2 步：定位 model.safetensors
         if os.path.isdir(model_id):
             logging.info("Loading weights from local directory")
             model_file = os.path.join(model_id, "model.safetensors")
@@ -484,9 +484,9 @@ class XVLAPolicy(PreTrainedPolicy):
                 raise FileNotFoundError(f"model.safetensors not found on the Hub at {model_id}") from e
 
         logging.info(f"Loading checkpoint from {model_file}")
-        # step 3: load state dict, remapping checkpoints saved with the old vendored
-        # Florence-2 module layout to the native transformers layout
-        # (see openpi model.py `_fix_pytorch_state_dict_keys` / pi0 for the same pattern)
+        # 第 3 步：加载 state dict，把以旧的内嵌 Florence-2 模块布局保存的
+        # checkpoint 重映射为原生 transformers 布局
+        # （openpi model.py 的 `_fix_pytorch_state_dict_keys` / pi0 中有相同模式）
         state_dict = safetensors.torch.load_file(model_file)
         if _is_vendored_florence_state_dict(state_dict):
             logging.info(
@@ -494,19 +494,19 @@ class XVLAPolicy(PreTrainedPolicy):
                 "remapping keys to the native transformers layout."
             )
             state_dict = _remap_vendored_florence_state_dict(state_dict)
-        # safetensors deduplicates tied tensors on save: restore whichever alias of the
-        # shared/encoder token embedding is missing
+        # safetensors 在保存时会对绑定张量去重：恢复共享/编码器 token 嵌入中
+        # 缺失的那个别名
         shared_key = "model.vlm.language_model.shared.weight"
         embed_key = "model.vlm.language_model.encoder.embed_tokens.weight"
         if shared_key in state_dict and embed_key not in state_dict:
             state_dict[embed_key] = state_dict[shared_key]
         elif embed_key in state_dict and shared_key not in state_dict:
             state_dict[shared_key] = state_dict[embed_key]
-        # step 4: load into instance
+        # 第 4 步：加载到实例中
         instance.load_state_dict(state_dict, strict=True)
         logging.info("Loaded XVLA checkpoint")
-        # step 5: finalize
-        # Reapply dtype after loading state dict
+        # 第 5 步：收尾
+        # 加载 state dict 后重新应用 dtype
         instance.model._apply_dtype()
         instance.to(config.device)
         instance.eval()
@@ -514,8 +514,8 @@ class XVLAPolicy(PreTrainedPolicy):
 
 
 def _is_vendored_florence_state_dict(state_dict: dict[str, Tensor], prefix: str = "model.vlm.") -> bool:
-    """Detect XVLA checkpoints saved with the old vendored (Microsoft remote-code) Florence-2
-    module layout by their signature keys."""
+    """通过标志性键检测以旧的内嵌（Microsoft 远程代码版）Florence-2
+    模块布局保存的 XVLA checkpoint。"""
     return f"{prefix}image_projection" in state_dict or any(
         key.startswith(f"{prefix}language_model.model.") for key in state_dict
     )
@@ -524,25 +524,25 @@ def _is_vendored_florence_state_dict(state_dict: dict[str, Tensor], prefix: str 
 def _remap_vendored_florence_state_dict(
     state_dict: dict[str, Tensor], prefix: str = "model.vlm."
 ) -> dict[str, Tensor]:
-    """Remap a state dict from the vendored (Microsoft remote-code) Florence-2 layout to the
-    native ``transformers.models.florence2`` layout.
+    """将 state dict 从内嵌（Microsoft 远程代码版）Florence-2 布局重映射为
+    原生 ``transformers.models.florence2`` 布局。
 
-    Only keys under ``prefix`` are rewritten; everything else passes through unchanged.
+    只有 ``prefix`` 下的键会被改写；其他所有键原样透传。
     """
     vision = re.escape(prefix) + r"vision_tower\."
     block = vision + r"blocks\.(\d+)\.(\d+)\.(spatial_block|channel_block)\."
     new_block = prefix + r"vision_tower.blocks.\1.\2.\3."
     rules: list[tuple[str, str]] = [
-        # DaViT stem: ConvEmbed.proj -> Florence2VisionConvEmbed.conv
+        # DaViT stem：ConvEmbed.proj -> Florence2VisionConvEmbed.conv
         (vision + r"convs\.(\d+)\.proj\.", prefix + r"vision_tower.convs.\1.conv."),
-        # DaViT blocks: the PreNorm/Mlp wrappers are flattened in the native implementation
+        # DaViT blocks：PreNorm/Mlp 包装层在原生实现中被展平
         (block + r"conv1\.fn\.dw\.", new_block + r"conv1."),
         (block + r"conv2\.fn\.dw\.", new_block + r"conv2."),
         (block + r"(window_attn|channel_attn)\.norm\.", new_block + r"norm1."),
         (block + r"(window_attn|channel_attn)\.fn\.", new_block + r"\4."),
         (block + r"ffn\.norm\.", new_block + r"norm2."),
         (block + r"ffn\.fn\.net\.", new_block + r"ffn."),
-        # multimodal projection layers moved into a dedicated projector module
+        # 多模态投影层被移入专门的 projector 模块
         (re.escape(prefix) + r"image_proj_norm\.", prefix + r"multi_modal_projector.image_proj_norm."),
         (
             re.escape(prefix) + r"image_pos_embed\.",
@@ -552,18 +552,18 @@ def _remap_vendored_florence_state_dict(
             re.escape(prefix) + r"visual_temporal_embed\.",
             prefix + r"multi_modal_projector.visual_temporal_embed.",
         ),
-        # language model: Florence2LanguageForConditionalGeneration.model -> BartModel
+        # 语言模型：Florence2LanguageForConditionalGeneration.model -> BartModel
         (re.escape(prefix) + r"language_model\.model\.", prefix + r"language_model."),
     ]
 
     remapped: dict[str, Tensor] = {}
     for key, value in state_dict.items():
         if key == f"{prefix}language_model.final_logits_bias":
-            # generation-only buffer of the vendored language model; the native BartModel has none
+            # 内嵌语言模型中仅用于生成的 buffer；原生 BartModel 没有这个东西
             continue
         if key == f"{prefix}image_projection":
-            # vendored: nn.Parameter of shape (embed_dim, projection_dim), used as `x @ p`;
-            # native: nn.Linear(embed_dim, projection_dim, bias=False) whose weight is the transpose
+            # 内嵌版：形状为 (embed_dim, projection_dim) 的 nn.Parameter，按 `x @ p` 使用；
+            # 原生版：nn.Linear(embed_dim, projection_dim, bias=False)，其权重是前者的转置
             remapped[f"{prefix}multi_modal_projector.image_projection.weight"] = value.transpose(
                 0, 1
             ).contiguous()

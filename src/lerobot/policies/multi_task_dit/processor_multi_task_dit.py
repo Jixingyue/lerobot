@@ -37,27 +37,27 @@ def make_multi_task_dit_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for a Multi-Task DiT policy.
+    为 Multi-Task DiT 策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares the input data for the model by:
-    1. Renaming features.
-    2. Adding a batch dimension.
-    3. Tokenizing the language task description (if present).
-    4. Moving the data to the specified device.
-    5. Normalizing the input and output features based on dataset statistics.
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征。
+    2. 添加批次维度。
+    3. 对语言任务描述进行分词（如果存在）。
+    4. 将数据移动到指定设备。
+    5. 根据数据集统计量对输入和输出特征进行归一化。
 
-    The post-processing pipeline handles the model's output by:
-    1. Unnormalizing the output features to their original scale.
-    2. Moving the data to the CPU.
+    后处理流水线通过以下步骤处理模型的输出：
+    1. 将输出特征反归一化到原始尺度。
+    2. 将数据移动到 CPU。
 
-    Args:
-        config: The configuration object for the Multi-Task DiT policy,
-            containing feature definitions, normalization mappings, and device information.
-        dataset_stats: A dictionary of statistics used for normalization.
-            Defaults to None.
+    参数：
+        config：Multi-Task DiT 策略的配置对象，
+            包含特征定义、归一化映射和设备信息。
+        dataset_stats：用于归一化的统计量字典。
+            默认为 None。
 
-    Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+    返回：
+        包含配置好的预处理器和后处理器流水线的元组。
     """
 
     steps = make_default_policy_processor_steps(config, dataset_stats, normalizer_device=config.device)

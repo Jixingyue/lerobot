@@ -41,26 +41,26 @@ from .qwen_interface import Qwen3VLInterface
 from .world_model import ActionConditionedVideoPredictor
 
 # ============================================================================
-# Native VLA-JEPA Model - follows original starVLA VLA_JEPA.py implementation
+# 原生 VLA-JEPA 模型 - 遵循 starVLA 原始的 VLA_JEPA.py 实现
 # ============================================================================
 
 
 class VLAJEPAModel(nn.Module):
     """
-    Native VLA-JEPA model following the original starVLA VLA_JEPA.py.
+    原生 VLA-JEPA 模型，遵循 starVLA 原始的 VLA_JEPA.py。
 
-    Components:
-      - Qwen3-VL: vision-language backbone for fused embeddings
-      - DiT-B: flow-matching action head for future action prediction
-      - V-JEPA: world model for video frame prediction
+    组成部分：
+      - Qwen3-VL：视觉-语言主干网络，用于生成融合嵌入
+      - DiT-B：flow-matching 动作头，用于预测未来动作
+      - V-JEPA：世界模型，用于预测视频帧
 
-    Inputs are batched tensors kept on the model device
-      - images: List[List[Tensor [C, H, W]]] (float [0,1]) — per sample, per view (Qwen messages)
+    输入为保留在模型设备上的批量张量
+      - images: List[List[Tensor [C, H, W]]]（float，[0,1]）— 每个样本、每个视角一个（Qwen messages）
       - instructions: List[str]
-      - videos: Tensor [B, V, T, C, H, W] (float [0,1], world model only)
-      - actions: Tensor [B, T, action_dim] (optional, training only)
-      - state: Tensor [B, 1, state_dim] (optional)
-      - action_is_pad: Tensor [B, T] (optional)
+      - videos: Tensor [B, V, T, C, H, W]（float，[0,1]，仅世界模型使用）
+      - actions: Tensor [B, T, action_dim]（可选，仅训练时使用）
+      - state: Tensor [B, 1, state_dim]（可选）
+      - action_is_pad: Tensor [B, T]（可选）
     """
 
     def __init__(self, config: VLAJEPAConfig) -> None:
@@ -68,10 +68,10 @@ class VLAJEPAModel(nn.Module):
         require_package("transformers", extra="vla_jepa")
         self.config = config
 
-        # Vision-language backbone
+        # 视觉-语言主干网络
         self.qwen = Qwen3VLInterface(config)
 
-        # Tokenizer expansion for special action tokens
+        # 扩展分词器以加入特殊动作 token
         self.action_tokens, self.action_token_ids, self.embodied_action_token_id = (
             self.qwen.expand_tokenizer()
         )
@@ -81,10 +81,10 @@ class VLAJEPAModel(nn.Module):
             persistent=False,
         )
 
-        # Action head (flow-matching DiT)
+        # 动作头（flow-matching DiT）
         self.action_model = VLAJEPAActionHead(config, cross_attention_dim=self.qwen.model.config.hidden_size)
 
-        # JEPA world model components
+        # JEPA 世界模型组件
         if config.enable_world_model:
             self.video_encoder = AutoModel.from_pretrained(
                 config.jepa_encoder_name,
@@ -119,9 +119,9 @@ class VLAJEPAModel(nn.Module):
         if config.freeze_qwen:
             self.qwen.requires_grad_(False)
 
-        # Build prompt placeholders.
-        # Use the encoder's actual tubelet_size when available (world model enabled),
-        # otherwise fall back to config.
+        # 构建 prompt 占位符。
+        # 如果可以拿到编码器实际的 tubelet_size（已启用世界模型）就使用它，
+        # 否则回退到 config 中的配置。
         _tubelet_size = (
             self.video_encoder.config.tubelet_size
             if config.enable_world_model
@@ -137,15 +137,15 @@ class VLAJEPAModel(nn.Module):
         )
 
     def _qwen_last_decoder_hidden(self, qwen_inputs: dict[str, torch.Tensor]) -> torch.Tensor:
-        """Return the last decoder hidden state before the final RMSNorm.
+        """返回最后一个 decoder 层在最终 RMSNorm 之前的隐藏状态。
 
-        The model was trained on the last block's pre-RMSNorm output, but in transformers 5.x
-        `hidden_states[-1]` is post-norm, so hook `language_model.layers[-1]` instead.
+        模型训练时使用的是最后一个 block 在 RMSNorm 之前的输出，但在 transformers 5.x 中
+        `hidden_states[-1]` 是 norm 之后的结果，因此改为 hook `language_model.layers[-1]`。
 
-        Calls the inner `Qwen3VLModel`, not the `Qwen3VLForConditionalGeneration` wrapper, whose
-        forward would build and discard full-sequence logits over the 151936-token vocab (~3.4 GB
-        in bf16 at batch 8). The wrapper stays as `self.qwen.model` so `lm_head` keeps its
-        checkpoint key; only this path skips it.
+        这里调用的是内部的 `Qwen3VLModel`，而不是 `Qwen3VLForConditionalGeneration` 包装器；
+        后者的 forward 会针对 151936 大小的词表构建并丢弃整条序列的 logits（batch 8、bf16 时
+        约 3.4 GB）。包装器仍保留为 `self.qwen.model`，以便 `lm_head` 保持其 checkpoint 键名；
+        只有这条路径会跳过它。
         """
         captured: list[torch.Tensor] = []
 
@@ -162,12 +162,12 @@ class VLAJEPAModel(nn.Module):
 
         return captured[0]  # [B, seq_len, H]
 
-    # ---- Native VLA-JEPA forward (follows original VLA_JEPA.py) ----
+    # ---- 原生 VLA-JEPA forward（遵循原始 VLA_JEPA.py）----
 
     def _encode_qwen(
         self, images: list[list[Tensor]], instructions: list[str], *, need_action_tokens: bool
     ) -> tuple[Tensor, Tensor | None]:
-        """Run Qwen and gather the embodied-action (and optionally action) token hidden states."""
+        """运行 Qwen，并收集具身动作（embodied-action）token（以及可选的动作 token）的隐藏状态。"""
         qwen_inputs = self.qwen.build_inputs(
             images=images,
             instructions=instructions,
@@ -194,12 +194,11 @@ class VLAJEPAModel(nn.Module):
         return embodied_action_tokens, action_tokens
 
     def _causal_video_embeddings(self, video_pixels: Tensor, tubelet_size: int, num_positions: int) -> Tensor:
-        """Encode `num_positions` leading temporal positions from only their own raw-frame prefix.
+        """仅依据各时间位置自身的原始帧前缀来编码前 `num_positions` 个时间位置。
 
-        A single V-JEPA2 pass over the full clip lets bidirectional attention leak future frames
-        into every position's embedding, including the context positions used as predictor input
-        (#4153). Running one prefix-only pass per context position keeps position i blind to frames
-        after it, at the cost of `num_positions` encoder calls instead of one.
+        对完整 clip 只做一次 V-JEPA2 前向时，双向注意力会让未来帧泄漏到每个位置的嵌入中，
+        包括用作预测器输入的上下文位置（#4153）。为每个上下文位置分别做一次仅前缀的前向，
+        可以让位置 i 看不到它之后的帧，代价是需要调用 `num_positions` 次编码器而不是一次。
         """
         positions = []
         for position in range(num_positions):
@@ -212,22 +211,22 @@ class VLAJEPAModel(nn.Module):
 
     @staticmethod
     def _merge_views(embeddings: Tensor, b: int, v: int) -> Tensor:
-        """Merge per-view features: [B*V, N, H] -> [B, N, V*H].
+        """合并各视角的特征：[B*V, N, H] -> [B, N, V*H]。
 
-        Rows run view-fastest, since `videos.reshape(b * v, ...)` flattens (B, V) row-major. A
-        `chunk(chunks=v, dim=0)` + `cat(dim=2)` merge assumes view-slowest and so concatenates
-        features from *different* samples — shape-valid, so it fails silently for b > 1.
+        行的排列以 view 为最快变化维度，因为 `videos.reshape(b * v, ...)` 按行优先（row-major）
+        展平 (B, V)。而使用 `chunk(chunks=v, dim=0)` + `cat(dim=2)` 的合并方式假定 view 为最慢
+        变化维度，因此会把*不同*样本的特征拼接在一起——形状上仍然合法，所以在 b > 1 时会静默出错。
         """
         n_tokens, hidden = embeddings.shape[1], embeddings.shape[2]
         return embeddings.reshape(b, v, n_tokens, hidden).permute(0, 2, 1, 3).reshape(b, n_tokens, v * hidden)
 
     def _world_model_loss(self, videos: Tensor, action_tokens: Tensor, reduction: str = "mean") -> Tensor:
-        """JEPA encode + predictor L1 loss. `videos` is [B, V, T, C, H, W] float in [0, 1].
+        """JEPA 编码 + 预测器 L1 损失。`videos` 形状为 [B, V, T, C, H, W]，float，取值 [0, 1]。
 
-        `reduction="none"` returns a per-sample loss (B,) for sample weighting (RA-BC);
-        "mean" returns the scalar loss.
+        `reduction="none"` 返回逐样本损失 (B,)，用于样本加权（RA-BC）；
+        "mean" 返回标量损失。
         """
-        # Match the world model's expected view count: pad with the first view, or trim extras.
+        # 对齐世界模型所需的视角数：用第一个视角填充不足的部分，或裁掉多余的视角。
         num_views = self.config.num_world_model_views
         if videos.shape[1] < num_views:
             missing = num_views - videos.shape[1]
@@ -237,7 +236,7 @@ class VLAJEPAModel(nn.Module):
 
         b, v, t_frames, c, h_img, w_img = videos.shape
         flat = videos.reshape(b * v, t_frames, c, h_img, w_img)
-        # Fast (torchvision) video processor on-device, do_rescale=False (frames already in [0, 1]).
+        # 在设备上使用快速（torchvision）视频处理器，do_rescale=False（帧已经在 [0, 1] 范围内）。
         video_pixels = self.video_processor(
             videos=list(flat),
             return_tensors="pt",
@@ -250,19 +249,19 @@ class VLAJEPAModel(nn.Module):
             video_embeddings = self.video_encoder.get_vision_features(pixel_values_videos=video_pixels)
             video_embeddings = self._merge_views(video_embeddings, b, v)
 
-        # num_video_frames raw frames → t_enc_total temporal positions after tubelet compression
+        # num_video_frames 个原始帧 → 经 tubelet 压缩后得到 t_enc_total 个时间位置
         t_enc_total = self.config.num_video_frames // tubelet_size
         if t_enc_total < 2:
             zero_shape = (video_embeddings.shape[0],) if reduction == "none" else ()
             return torch.zeros(zero_shape, device=video_embeddings.device)
 
-        # Shift-by-one JEPA split: input_states = positions 0..T-2, gt_states = positions 1..T-1
+        # 错开一位的 JEPA 划分：input_states = 位置 0..T-2，gt_states = 位置 1..T-1
         t_enc_ctx = t_enc_total - 1
         tokens_per_frame = video_embeddings.shape[1] // t_enc_total
         if self.config.causal_world_model_context:
-            # The shared pass above lets bidirectional attention leak future frames into the context
-            # positions used as predictor input (#4153). Recompute input_states causally instead;
-            # gt_states keeps the full-pass embeddings (a target encoder seeing full context is fine).
+            # 上面那次共享前向会让双向注意力把未来帧泄漏到用作预测器输入的上下文位置中（#4153）。
+            # 因此改为以因果方式重新计算 input_states；gt_states 仍保留全序列前向的嵌入
+            # （目标编码器能看到完整上下文是没有问题的）。
             with torch.no_grad():
                 input_states = self._causal_video_embeddings(video_pixels, tubelet_size, t_enc_ctx)
                 input_states = self._merge_views(input_states, b, v)
@@ -279,7 +278,7 @@ class VLAJEPAModel(nn.Module):
             input_states.float(), action_tokens[:, :expected_actions].float()
         )
         if reduction == "none":
-            # Per-sample loss (B,): mean over all non-batch dims (tokens, feature).
+            # 逐样本损失 (B,)：对所有非 batch 维度（tokens、feature）取均值。
             elementwise = F.l1_loss(predicted_states, gt_states.float(), reduction="none")
             return elementwise.mean(dim=tuple(range(1, elementwise.ndim)))
         return F.l1_loss(predicted_states, gt_states.float(), reduction="mean")
@@ -292,10 +291,10 @@ class VLAJEPAModel(nn.Module):
         action_is_pad: Tensor | None,
         reduction: str = "mean",
     ) -> Tensor:
-        """Flow-matching action-head loss, repeated over `repeated_diffusion_steps`.
+        """Flow-matching 动作头损失，按 `repeated_diffusion_steps` 重复计算。
 
-        `reduction="none"` returns a per-sample loss (B,) — the `repeated_diffusion_steps`
-        independent noise draws are averaged back per original sample — for RA-BC weighting.
+        `reduction="none"` 返回逐样本损失 (B,)——`repeated_diffusion_steps` 次独立的噪声采样
+        会按原始样本平均回去——用于 RA-BC 加权。
         """
         device_type = next(self.parameters()).device.type
         with get_autocast_context(device_type, torch.float32):
@@ -308,7 +307,7 @@ class VLAJEPAModel(nn.Module):
             pad_rep = action_is_pad[:, -horizon:].repeat(r, 1) if action_is_pad is not None else None
             loss = self.action_model(embodied, actions_target, state_rep, pad_rep, reduction=reduction)
             if reduction == "none":
-                # `.repeat(r, 1, 1)` tiles as [rep0(b0..b_{B-1}), rep1(...), ...] → (r, B); mean over reps.
+                # `.repeat(r, 1, 1)` 的排布为 [rep0(b0..b_{B-1}), rep1(...), ...] → (r, B)；对各次重复取均值。
                 return loss.view(r, b).mean(dim=0)
             return loss
 
@@ -322,10 +321,10 @@ class VLAJEPAModel(nn.Module):
         action_is_pad: Tensor | None = None,
         reduction: str = "mean",
     ) -> dict[str, Tensor]:
-        """Native forward: Qwen encode → optional world-model loss → optional action-head loss.
+        """原生 forward：Qwen 编码 → 可选的世界模型损失 → 可选的动作头损失。
 
-        `reduction="none"` makes both loss terms per-sample (B,) for RA-BC weighting; "mean"
-        returns scalar losses.
+        `reduction="none"` 会让两个损失项都变为逐样本形式 (B,)，用于 RA-BC 加权；"mean"
+        返回标量损失。
         """
         embodied_action_tokens, action_tokens = self._encode_qwen(
             images, instructions, need_action_tokens=self.config.enable_world_model
@@ -345,7 +344,7 @@ class VLAJEPAModel(nn.Module):
         )
         return {"action_loss": action_loss, "wm_loss": wm_loss * self.config.world_model_loss_weight}
 
-    # ---- Native predict_action (follows original VLA_JEPA.predict_action) ----
+    # ---- 原生 predict_action（遵循原始 VLA_JEPA.predict_action）----
 
     @torch.no_grad()
     def predict_action(
@@ -354,7 +353,7 @@ class VLAJEPAModel(nn.Module):
         instructions: list[str],
         state: Tensor | None = None,
     ) -> Tensor:
-        """Predict an action chunk. `images` is per-sample, per-view float [0,1] [C, H, W] tensors."""
+        """预测一个动作块。`images` 为逐样本、逐视角的 float [0,1]、形状 [C, H, W] 的张量。"""
         if self.config.resize_images_to is not None:
             height, width = self.config.resize_images_to
             images = [
@@ -369,17 +368,16 @@ class VLAJEPAModel(nn.Module):
 
 
 # ============================================================================
-# LeRobot Adapter Layer - converts between LeRobot batch format and native VLA-JEPA format
+# LeRobot 适配层 - 在 LeRobot 批格式与原生 VLA-JEPA 格式之间进行转换
 # ============================================================================
 
 
 class VLAJEPAPolicy(PreTrainedPolicy):
     """
-    LeRobot adapter for VLA-JEPA.
+    VLA-JEPA 的 LeRobot 适配器。
 
-    Converts LeRobot's standard batch format (dict[str, Tensor]) to the batched tensors
-    the native model expects (keeping everything on-device), calls the native model, and
-    converts outputs back to LeRobot format.
+    将 LeRobot 的标准批格式（dict[str, Tensor]）转换为原生模型所需的批量张量
+    （所有数据都保留在设备上），调用原生模型，再把输出转换回 LeRobot 格式。
     """
 
     config_class = VLAJEPAConfig
@@ -388,46 +386,46 @@ class VLAJEPAPolicy(PreTrainedPolicy):
     def __init__(self, config: VLAJEPAConfig, **kwargs) -> None:
         super().__init__(config)
         config.validate_features()
-        # Dataset dim derivation lives in `VLAJEPAConfig.set_dataset_feature_metadata` (called by
-        # `make_policy` before this): keeps `__init__` from mutating a config it does not own, and
-        # makes the derived dims visible to the processor factory too.
+        # 数据集维度的推导位于 `VLAJEPAConfig.set_dataset_feature_metadata` 中（由 `make_policy`
+        # 在此之前调用）：这样可以避免 `__init__` 修改一个不属于它的 config，同时也让推导出来的
+        # 维度对 processor 工厂可见。
         self.model = VLAJEPAModel(config)
         self.reset()
 
     def reset(self) -> None:
         self._queues = {ACTION: deque(maxlen=self.config.n_action_steps)}
 
-    # ---- Format Conversion: LeRobot → Native ----
+    # ---- 格式转换：LeRobot → 原生 ----
 
     def _prepare_model_inputs(self, batch: dict[str, Tensor], training=True) -> dict[str, Any]:
-        """Convert a LeRobot batch to the model's batched, on-device inputs.
+        """将 LeRobot 批转换为模型所需的、保留在设备上的批量输入。
 
-        LeRobot format:
+        LeRobot 格式：
             batch = {
-                "observation.images.<key>": Tensor [B, C, H, W] or [B, T, C, H, W],
-                "observation.state": Tensor [B, state_dim] or [B, T, state_dim],
-                "action": Tensor [B, chunk_size, action_dim],  (training only)
-                "task": str | List[str],  (optional instruction)
+                "observation.images.<key>": Tensor [B, C, H, W] 或 [B, T, C, H, W],
+                "observation.state": Tensor [B, state_dim] 或 [B, T, state_dim],
+                "action": Tensor [B, chunk_size, action_dim],  （仅训练时）
+                "task": str | List[str],  （可选的指令）
             }
 
-        Returns the kwargs for `VLAJEPAModel.forward` / `.predict_action` (everything stays
-        on the batch device; no per-sample shredding): `images` (per-sample, per-view list for
-        Qwen messages), `instructions`, and the batched `videos` / `actions` / `state` /
-        `action_is_pad` when present.
+        返回 `VLAJEPAModel.forward` / `.predict_action` 所需的 kwargs（所有数据都保留在批所在
+        设备上，不做逐样本拆分）：`images`（供 Qwen messages 使用的逐样本、逐视角列表）、
+        `instructions`，以及在存在时给出的批量 `videos` / `actions` / `state` /
+        `action_is_pad`。
         """
         image_keys = list(self.config.image_features.keys())
         if not image_keys:
             raise ValueError("VLAJEPA requires at least one image feature.")
         batch_size = batch[image_keys[0]].shape[0]
 
-        # Current-frame image per view ([B, C, H, W]); regroup per sample for Qwen messages. Resize to
-        # `resize_images_to` as `predict_action` does, so training and inference feed Qwen the same
-        # resolution and native frames (e.g. 720x1280) don't blow up the vision-tower patch count.
+        # 每个视角的当前帧图像（[B, C, H, W]）；按样本重新分组以供 Qwen messages 使用。与
+        # `predict_action` 一样缩放到 `resize_images_to`，使训练和推理向 Qwen 输入相同的分辨率，
+        # 避免原生帧（例如 720x1280）导致视觉塔的 patch 数量爆炸。
         resize_hw = tuple(self.config.resize_images_to) if self.config.resize_images_to else None
         frames = []
         for key in image_keys:
             t = batch[key]
-            if t.ndim == 5:  # [B, T, C, H, W] -> current observation (delta=0)
+            if t.ndim == 5:  # [B, T, C, H, W] -> 当前观测（delta=0）
                 t = t[:, 0]
             px = self.model.qwen.to_pixel_values(t)  # [B, C, H, W]
             if resize_hw is not None and tuple(px.shape[-2:]) != resize_hw:
@@ -445,13 +443,13 @@ class VLAJEPAPolicy(PreTrainedPolicy):
 
         inputs: dict[str, Any] = {"images": images, "instructions": instructions}
 
-        # Videos [B, V, T, C, H, W] - only assembled during training when the world model consumes them.
+        # Videos [B, V, T, C, H, W] - 仅在训练期间、世界模型需要用到时才组装。
         if self.model.config.enable_world_model and training:
             views = [batch[k].unsqueeze(1) if batch[k].ndim == 4 else batch[k] for k in image_keys]
-            # A single stacked [B, V, T, C, H, W] tensor needs one spatial size for every view, and
-            # cameras can differ (base 480x640 vs wrist 720x1280). Resize to `resize_images_to`, else
-            # to the first view's size (a no-op for single-resolution datasets). The vjepa video
-            # processor handles the final resize to the encoder resolution.
+            # 单个堆叠而成的 [B, V, T, C, H, W] 张量要求所有视角具有相同的空间尺寸，而各个相机
+            # 可能不同（基座 480x640 对比腕部 720x1280）。缩放到 `resize_images_to`，否则缩放到
+            # 第一个视角的尺寸（对于单一分辨率数据集这是空操作）。vjepa 视频处理器会负责最终缩放到
+            # 编码器所需的分辨率。
             cfg = self.model.config
             target_hw = tuple(cfg.resize_images_to) if cfg.resize_images_to else tuple(views[0].shape[-2:])
             resized = []
@@ -476,16 +474,16 @@ class VLAJEPAPolicy(PreTrainedPolicy):
         state = batch.get(OBS_STATE)
         if state is not None:
             if state.ndim > 2:
-                # deltas are forward-looking here, so index 0 is the current observation, not -1.
+                # 这里的 delta 是前向的，因此索引 0 才是当前观测，而不是 -1。
                 state = state[:, 0, :]
             inputs["state"] = (state.unsqueeze(1) if state.ndim == 2 else state).float()  # [B, 1, dim]
 
         return inputs
 
-    # ---- LeRobot Policy Interface ----
+    # ---- LeRobot Policy 接口 ----
 
     def forward(self, batch: dict[str, Tensor], reduction: str = "mean") -> tuple[Tensor, dict]:
-        """LeRobot train forward: convert → native forward → aggregate losses."""
+        """LeRobot 训练 forward：转换 → 原生 forward → 聚合损失。"""
         native_output = self.model.forward(
             **self._prepare_model_inputs(batch, training=True), reduction=reduction
         )
@@ -502,7 +500,7 @@ class VLAJEPAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
-        """LeRobot inference: convert → native predict → return as Tensor."""
+        """LeRobot 推理：转换 → 原生预测 → 以 Tensor 形式返回。"""
         self.eval()
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
@@ -512,7 +510,7 @@ class VLAJEPAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
-        """LeRobot select_action with action queue caching."""
+        """带动作队列缓存的 LeRobot select_action。"""
         self.eval()
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
         if len(self._queues[ACTION]) == 0:
@@ -526,9 +524,9 @@ class VLAJEPAPolicy(PreTrainedPolicy):
         if not reinit_prefixes:
             return super()._load_as_safetensor(model, model_file, map_location, strict)
 
-        # `resolve_safetensors_device` is what keeps every rank from materializing the whole
-        # checkpoint on GPU 0: safetensors maps the bare string "cuda" to cuda:0 regardless of
-        # torch.cuda.current_device(), and `config.device` is exactly that bare string.
+        # 正是 `resolve_safetensors_device` 避免了每个 rank 都把整个 checkpoint 实例化到
+        # GPU 0 上：safetensors 会把裸字符串 "cuda" 映射到 cuda:0，而不管
+        # torch.cuda.current_device() 是什么，`config.device` 恰好就是这个裸字符串。
         state_dict = load_file(model_file, device=resolve_safetensors_device(map_location))
         current = model.state_dict()
 
@@ -553,8 +551,8 @@ class VLAJEPAPolicy(PreTrainedPolicy):
                 f"(randomly re-initialised):\n  " + "\n  ".join(reinitialized)
             )
 
-        # Deliberately non-strict: the reinitialized tensors above are *expected* to be missing.
-        # `strict` still has to mean something, so enforce it on everything else.
+        # 这里有意使用 non-strict：上面那些被重新初始化的张量*本来就应该*缺失。
+        # 但 `strict` 仍然需要有意义，因此对其他所有键强制严格检查。
         missing_keys, unexpected_keys = model.load_state_dict(filtered, strict=False)
         if strict:
             reinit_keys = {entry.split(":", 1)[0] for entry in reinitialized}

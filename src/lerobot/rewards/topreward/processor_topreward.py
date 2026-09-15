@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TOPReward pre/post processing pipeline."""
+"""TOPReward 预处理/后处理流水线。"""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ TOPREWARD_INPUT_KEYS = TOPREWARD_VLM_INPUT_KEYS + ("labels",)
 
 
 def _prepare_video_batch(video: Tensor, *, max_frames: int | None) -> Tensor:
-    """Return videos as ``(B, T, C, H, W)`` uint8 tensors for Qwen3-VL."""
+    """将视频以 ``(B, T, C, H, W)`` uint8 张量的形式返回，供 Qwen3-VL 使用。"""
     if video.ndim == 4:
         video = video.unsqueeze(1)
     elif video.ndim != 5:
@@ -108,21 +108,21 @@ def _expand_tasks(task: Any, *, batch_size: int, default: str | None) -> list[st
 @dataclass
 @ProcessorStepRegistry.register(name="topreward_encoder")
 class TOPRewardEncoderProcessorStep(ProcessorStep):
-    """Encode raw frames + task into Qwen-VL tensors for the TOPReward model.
+    """将原始帧 + 任务编码为供 TOPReward 模型使用的 Qwen-VL 张量。
 
-    Loads a :class:`~transformers.AutoProcessor` matching ``vlm_name`` and
-    builds the full chat prompt including the instruction suffix. The
-    resulting ``input_ids``, ``attention_mask``, vision tensors, and
-    ``labels`` are written under the ``observation.topreward.*`` namespace
-    so the model can score without re-tokenising.
+    加载与 ``vlm_name`` 匹配的 :class:`~transformers.AutoProcessor`，
+    并构建包含指令后缀的完整聊天提示词。所得的
+    ``input_ids``、``attention_mask``、视觉张量和
+    ``labels`` 会写入 ``observation.topreward.*`` 命名空间，
+    使模型无需重新分词即可评分。
 
-    At call time the step reads:
+    调用时该步骤读取：
 
-    - ``observation[image_key]``: ``(B, T, C, H, W)`` or ``(B, C, H, W)`` frames.
-    - ``complementary_data[task_key]``: a string or list of strings.
+    - ``observation[image_key]``：``(B, T, C, H, W)`` 或 ``(B, C, H, W)`` 帧。
+    - ``complementary_data[task_key]``：字符串或字符串列表。
 
-    and writes ``observation[f"{TOPREWARD_FEATURE_PREFIX}<name>"]`` for the
-    Qwen-VL tensors plus ``labels``.
+    并将 Qwen-VL 张量及 ``labels`` 写入
+    ``observation[f"{TOPREWARD_FEATURE_PREFIX}<name>"]``。
     """
 
     vlm_name: str = "Qwen/Qwen3-VL-8B-Instruct"
@@ -170,10 +170,10 @@ class TOPRewardEncoderProcessorStep(ProcessorStep):
         return new_transition
 
     def _encode_batch(self, videos: Tensor, tasks: list[str], batch_size) -> dict[str, Any]:
-        """Tokenise a batch of (frames, task) pairs into Qwen-VL tensors.
+        """将一批 (帧, 任务) 对分词为 Qwen-VL 张量。
 
-        The loop only builds per-sample chat strings. Tokenisation, padding,
-        video preprocessing, and label construction are batched.
+        循环仅构建每个样本的聊天字符串。分词、填充、
+        视频预处理和 label 构建都是批量进行的。
         """
 
         texts: list[str] = []
@@ -272,12 +272,12 @@ def make_topreward_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Pipeline that pre-encodes frames + task into Qwen-VL tensors.
+    """将帧 + 任务预先编码为 Qwen-VL 张量的流水线。
 
-    The preprocessor adds a batch dimension if needed, runs TOPReward's
-    encoder (which tokenises the full prompt and emits ``labels``), and
-    moves everything to the configured device. The postprocessor is
-    the identity since TOPReward outputs a single reward tensor.
+    预处理器在需要时添加批次维度，运行 TOPReward 的
+    编码器（对完整提示词分词并输出 ``labels``），并
+    将所有内容移动到配置的设备上。后处理器是
+    恒等变换，因为 TOPReward 输出单个奖励张量。
     """
     preprocessor = PolicyProcessorPipeline[dict[str, Any], dict[str, Any]](
         steps=[

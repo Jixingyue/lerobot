@@ -12,25 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Display-independent keyboard input for interactive controls.
+"""与显示环境无关的键盘输入，用于交互式控制。
 
-This module centralizes everything related to *discrete* keyboard controls
-(end-episode-early, re-record, stop, and the rollout strategies' custom keys):
+本模块集中处理所有与*离散*键盘控制相关的内容
+（提前结束 episode、重新录制、停止，以及 rollout 策略的自定义按键）：
 
-* environment detection — :func:`is_headless`, :func:`is_wayland`,
-  :func:`pynput_can_capture` (the single predicate every call-site should use to
-  decide whether ``pynput`` can actually capture keys here);
-* a shared key mapping — :func:`apply_recording_control`; and
-* two interchangeable backends behind one ``(listener, events)`` contract:
-  the ``pynput`` global listener (X11 / trusted-macOS / Windows) and a
-  standard-library :class:`TerminalKeyListener` that reads the controlling TTY
-  (Wayland / headless-SSH-with-TTY / macOS without Accessibility permission).
+* 环境检测——:func:`is_headless`、:func:`is_wayland`、
+  :func:`pynput_can_capture`（每个调用点都应使用这一个谓词来
+  判断 ``pynput`` 在此处是否真的能捕获按键）；
+* 一套共享的按键映射——:func:`apply_recording_control`；以及
+* 在同一个 ``(listener, events)`` 约定之后的两个可互换后端：
+  ``pynput`` 全局监听器（X11 / 受信任的 macOS / Windows）和一个
+  标准库 :class:`TerminalKeyListener`，它读取控制终端 TTY
+  （Wayland / 带 TTY 的无头 SSH / 没有辅助功能权限的 macOS）。
 
-NOTE: *continuous* key-state teleoperation ("hold a key to keep moving") is
-deliberately NOT served here. A terminal in cbreak mode delivers only key-down
-bytes — there is no key-release event — so the held-key model cannot be
-reproduced. Those teleoperators stay on ``pynput`` and use
-:func:`pynput_can_capture` to warn instead of silently doing nothing.
+注意：*连续*按键状态遥操作（“按住一个键持续移动”）被有意
+放在本模块之外处理。cbreak 模式下的终端只会传递按键按下
+字节——没有按键释放事件——因此无法重现
+按住按键的模型。这类遥操作器仍使用 ``pynput``，并通过
+:func:`pynput_can_capture` 发出警告，而不是静默地什么都不做。
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from .import_utils import _pynput_available
 
 logger = logging.getLogger(__name__)
 
-# POSIX-only terminal modules (absent on Windows, where the pynput backend is used).
+# 仅 POSIX 提供的终端模块（Windows 上不存在，那里使用 pynput 后端）。
 if TYPE_CHECKING:
     import termios
     import tty
@@ -64,7 +64,7 @@ else:
         import tty
 
         _TERMIOS_AVAILABLE = True
-    except ImportError:  # POSIX-only modules; unavailable on Windows
+    except ImportError:  # 仅 POSIX 提供的模块；Windows 上不可用
         termios = tty = None
         _TERMIOS_AVAILABLE = False
 
@@ -72,18 +72,18 @@ keyboard = None
 if _pynput_available:
     try:
         from pynput import keyboard
-    except Exception as e:  # e.g. no reachable X display on a headless Linux box
+    except Exception as e:  # 例如无头 Linux 机器上没有可连接的 X 显示
         logger.info("Could not import pynput keyboard backend: %s", e)
 
 
 @cache
 def is_headless() -> bool:
-    """Return ``True`` when no display server is available.
+    """当没有可用的显示服务器时返回 ``True``。
 
-    * Linux: headless when neither ``DISPLAY`` (X11) nor ``WAYLAND_DISPLAY`` is set.
-    * macOS / Windows: a display is always assumed to be present. A genuinely GUI-less
-    Mac/Windows CI host would be misclassified but it doesn't matter, because the
-    sys.stdin.isatty() gate returns None there regardless.
+    * Linux：当 ``DISPLAY``（X11）和 ``WAYLAND_DISPLAY`` 都未设置时为无头环境。
+    * macOS / Windows：始终假定存在显示。一个真正没有 GUI 的
+      Mac/Windows CI 主机可能会被误分类，但这无关紧要，因为
+      sys.stdin.isatty() 门控在那里无论如何都会返回 None。
     """
     if platform.system() == "Linux":
         return not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -92,12 +92,12 @@ def is_headless() -> bool:
 
 @cache
 def is_wayland() -> bool:
-    """Return ``True`` when running under a Wayland session.
+    """当运行在 Wayland 会话下时返回 ``True``。
 
-    ``pynput`` relies on an X11 backend. Under Wayland it still imports (XWayland
-    is usually present and ``$DISPLAY`` is set) but cannot capture *global*
-    hotkeys, so the documented arrow/Esc shortcuts silently do nothing. This case
-    is invisible to :func:`is_headless`, hence the dedicated check.
+    ``pynput`` 依赖 X11 后端。在 Wayland 下它仍能导入（XWayland
+    通常存在且 ``$DISPLAY`` 已设置），但无法捕获*全局*
+    热键，因此文档中所述的方向键/Esc 快捷键会静默失效。:func:`is_headless`
+    无法识别这种情况，因此需要专门的检查。
     """
     return os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland" or bool(
         os.environ.get("WAYLAND_DISPLAY")
@@ -106,20 +106,20 @@ def is_wayland() -> bool:
 
 @cache
 def pynput_can_capture() -> bool:
-    """Return ``True`` when a ``pynput`` global listener can actually capture keys.
+    """当 ``pynput`` 全局监听器确实能捕获按键时返回 ``True``。
 
-    This is the single predicate every keyboard call-site should use to choose
-    between the ``pynput`` backend and a fallback. It is intentionally
-    conservative:
+    这是每个键盘调用点在 ``pynput`` 后端与回退方案之间做选择时
+    都应使用的唯一谓词。它被有意设计得
+    保守：
 
-    * Linux: only a real X11 session (a display is present *and* it is not Wayland).
-    * macOS: ``True`` here — Accessibility / Input-Monitoring permission
-      (``IS_TRUSTED``) can only be confirmed at runtime *after* starting a
-      listener, so :func:`init_keyboard_listener` refines this with
-      :func:`pynput_listener_is_trusted`.
-    * Windows: ``True`` (the low-level global hook needs no special permission).
+    * Linux：只有真正的 X11 会话（存在显示*且*不是 Wayland）才为真。
+    * macOS：此处返回 ``True``——辅助功能 / 输入监控权限
+      （``IS_TRUSTED``）只能在启动监听器*之后*于运行时确认，
+      因此 :func:`init_keyboard_listener` 会用
+      :func:`pynput_listener_is_trusted` 进一步细化。
+    * Windows：``True``（底层全局钩子不需要特殊权限）。
 
-    Always ``False`` when ``pynput`` is not installed.
+    当未安装 ``pynput`` 时始终为 ``False``。
     """
     if not _pynput_available:
         return False
@@ -129,16 +129,16 @@ def pynput_can_capture() -> bool:
 
 
 def pynput_listener_is_trusted(listener, timeout_s: float = 1.0) -> bool:
-    """Best-effort check that a freshly started ``pynput`` listener can capture.
+    """尽力检查一个刚启动的 ``pynput`` 监听器是否能够捕获按键。
 
-    On macOS, ``pynput`` sets ``listener.IS_TRUSTED`` on its *listener thread*
-    once the Quartz event tap is created; the class default is ``False``. We
-    therefore wait for the thread to either flip it ``True`` (trusted) or for a
-    short timeout to elapse (untrusted — it stays ``False`` forever). This biases
-    toward the common trusted case (returns as soon as the flag flips) and only
-    pays the full ``timeout_s`` on an already-broken untrusted machine.
+    在 macOS 上，``pynput`` 会在 Quartz 事件点击创建后，在其*监听器线程*上
+    设置 ``listener.IS_TRUSTED``；类默认值为 ``False``。因此
+    我们等待该线程把它翻转为 ``True``（受信任），或等待一个
+    短暂的超时过去（不受信任——它会永远保持 ``False``）。这偏向于
+    常见的受信任情形（标志一翻转就立即返回），只有在已经不可用的
+    不受信任机器上才会付出完整的 ``timeout_s`` 等待。
 
-    On non-macOS backends the attribute is absent and capture is assumed to work.
+    在非 macOS 后端上不存在该属性，并假定捕获可以正常工作。
     """
     if platform.system() != "Darwin":
         return True
@@ -151,11 +151,11 @@ def pynput_listener_is_trusted(listener, timeout_s: float = 1.0) -> bool:
 
 
 def apply_recording_control(control: str, events: dict) -> None:
-    """Apply a recording control-flow key press to the shared ``events`` dict.
+    """将一次录制控制流按键应用到共享的 ``events`` 字典上。
 
-    Centralizes the mapping so the ``pynput`` and terminal backends behave
-    identically. ``control`` is one of ``"right"`` (end the loop early), ``"left"``
-    (re-record the last episode), or ``"esc"`` (stop recording).
+    集中管理该映射，使 ``pynput`` 和终端后端表现
+    一致。``control`` 是 ``"right"``（提前结束循环）、``"left"``
+    （重新录制上一个 episode）或 ``"esc"``（停止录制）之一。
     """
     if control == "right":
         print("Right arrow key pressed. Exiting loop...")
@@ -170,34 +170,35 @@ def apply_recording_control(control: str, events: dict) -> None:
         events["exit_early"] = True
 
 
-# Terminal arrow keys arrive as a 3-byte escape sequence whose *final* byte identifies
-# the direction. Two encodings exist depending on the terminal's cursor-key mode — CSI
-# ("ESC [ X") and SS3 ("ESC O X", common over SSH/tmux) — but both share the same final
-# byte, so this single table decodes either. Looked up by TerminalKeyListener._parse;
-# an unknown final byte yields None (sequence ignored).
+# 终端方向键以 3 字节转义序列的形式到达，其*最后一个*字节标识
+# 方向。根据终端的光标键模式存在两种编码——CSI
+# （"ESC [ X"）和 SS3（"ESC O X"，在 SSH/tmux 上常见）——但两者的
+# 最后一个字节相同，因此这一张表即可解码两者。由
+# TerminalKeyListener._parse 查表；遇到未知的最后一个字节时返回
+# None（忽略该序列）。
 _ARROW_FINAL_BYTES = {"A": "up", "B": "down", "C": "right", "D": "left"}
 
 
 class TerminalKeyListener:
-    """Display-independent keyboard listener that reads keys from the controlling TTY.
+    """与显示环境无关的键盘监听器，从控制终端 TTY 读取按键。
 
-    Used as the Wayland / headless / macOS-untrusted equivalent of the ``pynput``
-    listener for *discrete* controls. It puts the terminal into cbreak mode with
-    echo disabled and reads bytes on a daemon thread, decoding them into logical
-    key names that are passed to ``on_key``:
+    在 *离散*控制方面用作 ``pynput``
+    监听器在 Wayland / 无头 / macOS 不受信任情形下的等价替代。它将终端置于
+    关闭回显的 cbreak 模式，并在一个守护线程上读取字节，将其解码为
+    传递给 ``on_key`` 的逻辑按键名：
 
-    * arrow keys (``ESC [ C`` / ``ESC O C`` …) -> ``"right"`` / ``"left"`` / ``"up"`` / ``"down"``
-    * a bare ``ESC`` -> ``"esc"``
-    * Enter / Tab / Space / Backspace -> ``"enter"`` / ``"tab"`` / ``"space"`` / ``"backspace"``
-    * any other printable byte -> that character (e.g. ``"n"``, ``"s"``)
+    * 方向键（``ESC [ C`` / ``ESC O C``……）-> ``"right"`` / ``"left"`` / ``"up"`` / ``"down"``
+    * 单独的 ``ESC`` -> ``"esc"``
+    * 回车 / Tab / 空格 / 退格 -> ``"enter"`` / ``"tab"`` / ``"space"`` / ``"backspace"``
+    * 任何其他可打印字节 -> 对应字符（例如 ``"n"``、``"s"``）
 
-    Only key-down events are produced (terminals have no key-release), so this is
-    suitable for discrete commands but NOT for continuous "hold-to-move" teleop.
+    它只产生按键按下事件（终端没有按键释放），因此
+    适用于离散命令，但不适用于连续的“按住移动”遥操作。
 
-    The terminal is restored on :meth:`stop` and also via an ``atexit`` hook, so a
-    crash or Ctrl-C never leaves the shell in a no-echo cbreak state. POSIX-only
-    (``termios`` / ``tty`` / ``select``); those modules are imported lazily so this
-    file stays importable on Windows (where ``pynput`` is used instead).
+    终端会在 :meth:`stop` 时恢复，也会通过 ``atexit`` 钩子恢复，因此
+    崩溃或 Ctrl-C 绝不会让 shell 停留在无回显的 cbreak 状态。仅支持 POSIX
+    （``termios`` / ``tty`` / ``select``）；这些模块采用懒导入，因此本
+    文件在 Windows 上仍可导入（那里改用 ``pynput``）。
     """
 
     def __init__(self, on_key: Callable[[str], None]):
@@ -208,7 +209,7 @@ class TerminalKeyListener:
         self._old_attrs = None
 
     def _read_char(self, timeout: float) -> str | None:
-        """Return one character from stdin within ``timeout`` seconds, or ``None``."""
+        """在 ``timeout`` 秒内从 stdin 返回一个字符，超时则返回 ``None``。"""
         if self._fd is None:
             return None
         ready, _, _ = select.select([self._fd], [], [], timeout)
@@ -223,17 +224,17 @@ class TerminalKeyListener:
         return data.decode(errors="ignore")
 
     def _parse(self, ch: str) -> str | None:
-        """Decode one (possibly multi-byte) key starting at ``ch`` into a key name."""
+        """将从 ``ch`` 开始的一个（可能是多字节的）按键解码为按键名。"""
         if ch == "\x1b":
-            # Possible CSI / SS3 escape sequence (arrow keys) or a bare ESC. Use
-            # short follow-up reads so a lone ESC is not mistaken for a sequence.
+            # 可能是 CSI / SS3 转义序列（方向键），也可能是单独的 ESC。
+            # 使用短暂的后续读取，以免把孤立的 ESC 误认为序列。
             ch2 = self._read_char(timeout=0.02)
             if ch2 is None:
                 return "esc"
             if ch2 in ("[", "O"):
                 ch3 = self._read_char(timeout=0.02)
                 return _ARROW_FINAL_BYTES.get(ch3 or "")
-            # Some other escape sequence (e.g. Alt+key); ignore it.
+            # 其他某种转义序列（例如 Alt+键）；忽略它。
             return None
         if ch in ("\r", "\n"):
             return "enter"
@@ -257,31 +258,31 @@ class TerminalKeyListener:
                 continue
             try:
                 self._on_key(name)
-            except Exception as e:  # never let a handler error kill the reader thread
+            except Exception as e:  # 绝不让处理器的错误杀死读取线程
                 logger.debug("Terminal key handler error: %s", e)
 
     def start(self) -> None:
-        """Switch the terminal to cbreak mode (echo off) and read keys on a daemon thread.
+        """将终端切换到 cbreak 模式（关闭回显），并在守护线程上读取按键。
 
-        No-op when stdin is not a TTY (piped/redirected input) or on platforms
-        without ``termios`` (e.g. Windows), so non-interactive runs are unaffected.
+        当 stdin 不是 TTY（管道/重定向输入）或所在平台没有
+        ``termios``（例如 Windows）时为空操作，因此非交互式运行不受影响。
         """
         if not sys.stdin.isatty():
             return
-        if not _TERMIOS_AVAILABLE:  # POSIX-only modules (e.g. unavailable on Windows)
+        if not _TERMIOS_AVAILABLE:  # 仅 POSIX 提供的模块（例如 Windows 上不可用）
             logger.warning("Terminal keyboard input is not supported on this platform.")
             return
 
         self._fd = sys.stdin.fileno()
         self._old_attrs = termios.tcgetattr(self._fd)
         tty.setcbreak(self._fd)
-        # Explicitly disable ECHO so arrow-key escape sequences (e.g. ^[[C) are not
-        # echoed as garbage into the recording terminal. (Independent of the
-        # version-specific behavior of tty.setcbreak.)
+        # 显式禁用 ECHO，以免方向键转义序列（例如 ^[[C）作为乱码
+        # 回显到录制终端中。（这与 tty.setcbreak
+        # 随版本而异的行为无关。）
         new_attrs = termios.tcgetattr(self._fd)
-        new_attrs[3] &= ~termios.ECHO  # index 3 == lflags
+        new_attrs[3] &= ~termios.ECHO  # 索引 3 == lflags
         termios.tcsetattr(self._fd, termios.TCSADRAIN, new_attrs)
-        # Safety net: restore the terminal even if stop() is never reached (crash).
+        # 安全网：即使永远走不到 stop()（崩溃），也要恢复终端。
         atexit.register(self.stop)
 
         self._running = True
@@ -289,9 +290,9 @@ class TerminalKeyListener:
         self._thread.start()
 
     def stop(self) -> None:
-        """Stop the reader thread and restore the original terminal attributes.
+        """停止读取线程并恢复终端的原始属性。
 
-        Idempotent: safe to call multiple times (e.g. explicitly and via atexit).
+        幂等：可安全地多次调用（例如显式调用与通过 atexit 调用）。
         """
         self._running = False
         thread = self._thread
@@ -307,8 +308,8 @@ class TerminalKeyListener:
             atexit.unregister(self.stop)
 
 
-# Map pynput key objects to the same canonical names TerminalKeyListener emits, so a
-# single dispatch works across both backends. Empty when pynput is unavailable.
+# 将 pynput 按键对象映射为与 TerminalKeyListener 发出的相同的规范名称，
+# 以便同一个 dispatch 在两个后端上都能工作。pynput 不可用时为空。
 if keyboard is not None:
     _PYNPUT_KEY_NAMES = {
         keyboard.Key.right: "right",
@@ -326,35 +327,37 @@ else:
 
 
 def _resolve_pynput_key(key) -> str | None:
-    """Resolve a pynput key event to the canonical name TerminalKeyListener also emits.
+    """将一个 pynput 按键事件解析为 TerminalKeyListener 同样会发出的规范名称。
 
-    Special keys map through :data:`_PYNPUT_KEY_NAMES`; character keys fall back to their
-    ``.char`` (e.g. ``"n"``). Returns ``None`` for keys with no mapping and no character.
+    特殊按键通过 :data:`_PYNPUT_KEY_NAMES` 映射；字符按键回退到其
+    ``.char``（例如 ``"n"``）。对于既无映射又无字符的按键返回 ``None``。
     """
     name = _PYNPUT_KEY_NAMES.get(key)
     if name is not None:
         return name
-    # ``or None`` keeps the historical truthy-char semantics: an empty/None char is "no key".
+    # ``or None`` 保留了历史上“字符为真”的语义：空字符/None 字符表示“没有按键”。
     return getattr(key, "char", None) or None
 
 
 def create_key_listener(dispatch: Callable[[str], None], *, controls_help: str = ""):
-    """Start a keyboard listener that routes resolved key names to ``dispatch``.
+    """启动一个键盘监听器，将解析出的按键名路由给 ``dispatch``。
 
-    Shared backend selection used by recording and the rollout strategies:
+    这是录制和 rollout 策略共用的后端选择逻辑：
 
-    * the ``pynput`` global listener on X11 / trusted-macOS / Windows (on macOS the
-      listener's ``IS_TRUSTED`` flag is checked after start, and an untrusted listener is
-      stopped so the terminal backend is used instead);
-    * the stdlib :class:`TerminalKeyListener` on Wayland / headless sessions with a TTY;
-    * ``None`` when no backend is usable (non-interactive / piped runs).
+    * 在 X11 / 受信任的 macOS / Windows 上使用 ``pynput`` 全局监听器
+      （在 macOS 上，启动后会检查监听器的 ``IS_TRUSTED`` 标志，不受信任的监听器会被
+      停止，从而改用终端后端）；
+    * 在带 TTY 的 Wayland / 无头会话上使用标准库
+      :class:`TerminalKeyListener`；
+    * 当没有可用后端时返回 ``None``（非交互式 / 管道运行）。
 
-    Both backends pass ``dispatch`` the same canonical key names ("right" / "left" / "up" /
-    "down" / "esc" / "enter" / "tab" / "space" / "backspace", or a character), so one
-    ``dispatch`` works regardless of backend. ``controls_help`` is an optional hint
-    appended to the log messages.
+    两个后端都会向 ``dispatch`` 传递相同的规范按键名
+    （"right" / "left" / "up" /
+    "down" / "esc" / "enter" / "tab" / "space" / "backspace"，或单个字符），因此无论
+    使用哪个后端，同一个 ``dispatch`` 都能工作。``controls_help`` 是一个可选提示，
+    会追加到日志消息之后。
 
-    Returns the listener (exposing ``.stop()``) or ``None``.
+    返回监听器（暴露 ``.stop()``）或 ``None``。
     """
     suffix = f" ({controls_help})" if controls_help else ""
 
@@ -371,8 +374,8 @@ def create_key_listener(dispatch: Callable[[str], None], *, controls_help: str =
         if pynput_listener_is_trusted(listener):
             logger.info("Keyboard listener started%s.", suffix)
             return listener
-        # macOS without Accessibility / Input-Monitoring permission: the listener never
-        # fires. Stop it and fall through to the terminal backend.
+        # macOS 缺少辅助功能 / 输入监控权限时：监听器永远不会
+        # 触发。停止它并继续回退到终端后端。
         logger.warning(
             "pynput keyboard listener is not trusted (missing macOS Accessibility / "
             "Input Monitoring permission); falling back to terminal keyboard input."
@@ -394,28 +397,30 @@ def create_key_listener(dispatch: Callable[[str], None], *, controls_help: str =
 
 
 def init_keyboard_listener():
-    """Initialize a non-blocking keyboard listener for interactive recording controls.
+    """为交互式录制控制初始化一个非阻塞键盘监听器。
 
-    Backend selection:
+    后端选择：
 
-    * ``pynput`` global listener when :func:`pynput_can_capture` is true (real
-      X11, macOS, Windows). On macOS the listener's ``IS_TRUSTED`` flag is checked
-      after start; if the process lacks Accessibility / Input-Monitoring
-      permission, the listener is stopped and the terminal backend is used.
-    * a :class:`TerminalKeyListener` reading the controlling TTY when ``pynput``
-      cannot capture (Wayland / headless-SSH / macOS-untrusted) *and* stdin is a TTY.
-    * otherwise no listener (non-interactive / piped runs) — recording relies on
-      the episode/reset timers (or Ctrl+C).
+    * 当 :func:`pynput_can_capture` 为真时使用 ``pynput`` 全局监听器
+      （真正的 X11、macOS、Windows）。在 macOS 上，启动后会检查
+      监听器的 ``IS_TRUSTED`` 标志；如果进程缺少辅助功能 /
+      输入监控权限，监听器会被停止并改用终端后端。
+    * 当 ``pynput`` 无法捕获（Wayland / 无头 SSH / macOS 不受信任）
+      *且* stdin 是 TTY 时，使用读取控制终端 TTY 的
+      :class:`TerminalKeyListener`。
+    * 否则不使用监听器（非交互式 / 管道运行）——录制依赖
+      episode/重置计时器（或 Ctrl+C）。
 
-    Both backends accept the same controls: Right/Left/Esc, plus the single-byte letter
-    equivalents ``n`` (next), ``r`` (re-record) and ``q`` (quit). The letters are the most
-    reliable choice over high-latency SSH/VNC links, where arrow-key escape sequences can
-    be split, delayed, or intercepted by the terminal.
+    两个后端接受相同的控制：右/左/Esc，以及对应的单字节字母
+    等价键 ``n``（下一个）、``r``（重新录制）和 ``q``（退出）。在高延迟的
+    SSH/VNC 链路上，字母是最可靠的选择，因为方向键转义序列可能
+    被终端拆分、延迟或拦截。
 
-    Returns:
-        A tuple ``(listener, events)`` where ``listener`` exposes ``.stop()`` or is
-        ``None``, and ``events`` is the dict of flags (``exit_early``,
-        ``rerecord_episode``, ``stop_recording``) set by key presses.
+    返回:
+        一个元组 ``(listener, events)``，其中 ``listener`` 暴露 ``.stop()`` 或为
+        ``None``，``events`` 是由按键设置的标志字典
+        （``exit_early``、
+        ``rerecord_episode``、``stop_recording``）。
     """
     events = {
         "exit_early": False,
@@ -423,9 +428,9 @@ def init_keyboard_listener():
         "stop_recording": False,
     }
 
-    # Accept the single-byte letter equivalents n/r/q alongside the arrow/Esc keys: the
-    # letters are immune to the escape-sequence split/delay/interception that affects arrows
-    # over laggy SSH/VNC links. Case-insensitive so Shift+letter still works.
+    # 在方向键/Esc 之外接受单字节字母等价键 n/r/q：在卡顿的
+    # SSH/VNC 链路上，字母不受影响方向键的转义序列拆分/延迟/拦截的影响。
+    # 不区分大小写，因此 Shift+字母仍然有效。
     def on_key(name: str) -> None:
         key = name.lower()
         if key in ("right", "n"):
@@ -434,7 +439,7 @@ def init_keyboard_listener():
             apply_recording_control("left", events)
         elif key in ("esc", "q"):
             apply_recording_control("esc", events)
-        # other keys (incl. up/down) are intentionally ignored
+        # 其他按键（包括上/下）被有意忽略
 
     listener = create_key_listener(on_key, controls_help="Right/Left/Esc, or n=next, r=re-record, q=quit")
     return listener, events

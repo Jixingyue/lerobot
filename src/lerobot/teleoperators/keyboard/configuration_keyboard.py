@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Configuration for keyboard teleoperators."""
+"""键盘遥操作设备的配置。"""
 
 from dataclasses import dataclass
 
@@ -25,18 +25,18 @@ from ..config import TeleoperatorConfig
 class KeyboardTeleopConfig(TeleoperatorConfig):
     """KeyboardTeleopConfig"""
 
-    # TODO(Steven): Consider setting in here the keys that we want to capture/listen
+    # TODO(Steven): 考虑在这里设置我们想要捕获/监听的按键
 
 
 @TeleoperatorConfig.register_subclass("keyboard_ee")
 @dataclass
 class KeyboardEndEffectorTeleopConfig(KeyboardTeleopConfig):
-    """Configuration for keyboard end-effector teleoperator.
+    """键盘末端执行器遥操作设备的配置。
 
-    Used for controlling robot end-effectors with keyboard inputs.
+    用于通过键盘输入控制机器人末端执行器。
 
     Attributes:
-        use_gripper: Whether to include gripper control in actions
+        use_gripper: 是否在动作中包含夹爪控制
     """
 
     use_gripper: bool = True
@@ -45,18 +45,18 @@ class KeyboardEndEffectorTeleopConfig(KeyboardTeleopConfig):
 @TeleoperatorConfig.register_subclass("keyboard_rover")
 @dataclass
 class KeyboardRoverTeleopConfig(TeleoperatorConfig):
-    """Configuration for keyboard rover teleoperator.
+    """键盘漫游车遥操作设备的配置。
 
-    Used for controlling mobile robots like EarthRover Mini Plus with WASD controls.
+    用于通过 WASD 按键控制 EarthRover Mini Plus 等移动机器人。
 
     Attributes:
-        linear_speed: Default linear velocity magnitude (-1 to 1 range for SDK robots)
-        angular_speed: Default angular velocity magnitude (-1 to 1 range for SDK robots)
-        speed_increment: Amount to increase/decrease speed with +/- keys
-        turn_assist_ratio: Forward motion multiplier when turning with A/D keys (0.0-1.0)
-        angular_speed_ratio: Ratio of angular to linear speed for synchronized adjustments
-        min_linear_speed: Minimum linear speed when decreasing (prevents zero speed)
-        min_angular_speed: Minimum angular speed when decreasing (prevents zero speed)
+        linear_speed: 默认线速度大小（SDK 机器人的范围为 -1 到 1）
+        angular_speed: 默认角速度大小（SDK 机器人的范围为 -1 到 1）
+        speed_increment: 使用 +/- 键增加/减少速度的步长
+        turn_assist_ratio: 使用 A/D 键转向时前进运动的倍率（0.0-1.0）
+        angular_speed_ratio: 用于同步调整的角速度与线速度之比
+        min_linear_speed: 减速时的最小线速度（防止降为零）
+        min_angular_speed: 减速时的最小角速度（防止降为零）
     """
 
     linear_speed: float = 1.0

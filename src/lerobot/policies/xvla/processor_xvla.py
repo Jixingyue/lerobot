@@ -51,7 +51,7 @@ def make_xvla_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Build the LeRobot processor pipelines for XVLA.
+    为 XVLA 构建 LeRobot 处理器流水线。
     """
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
@@ -79,32 +79,32 @@ def make_xvla_pre_post_processors(
     return make_policy_processor_pipelines(input_steps=input_steps, output_steps=output_steps)
 
 
-# Custom XVLA processor steps
+# XVLA 自定义处理器步骤
 @dataclass
 class LiberoProcessorStep(ObservationProcessorStep):
     """
-    Processes LIBERO observations into the LeRobot format.
+    将 LIBERO 观测处理为 LeRobot 格式。
 
-    This step handles the specific observation structure from LIBERO environments,
-    which includes nested robot_state dictionaries and image observations.
+    该步骤处理来自 LIBERO 环境的特定观测结构，
+    其中包含嵌套的 robot_state 字典和图像观测。
 
-    **State Processing:**
-    -   Processes the `robot_state` dictionary which contains nested end-effector,
-        gripper, and joint information.
-    -   Extracts and concatenates:
-        - End-effector position (3D)
-        - End-effector quaternion converted to axis-angle (3D)
-        - Gripper joint positions (2D)
-    -   Maps the concatenated state to `"observation.state"`.
+    **状态处理：**
+    -   处理 `robot_state` 字典，其中包含嵌套的末端执行器、
+        夹爪和关节信息。
+    -   提取并拼接：
+        - 末端执行器位置（3D）
+        - 转换为轴角的末端执行器四元数（3D）
+        - 夹爪关节位置（2D）
+    -   将拼接后的状态映射到 `"observation.state"`。
 
-    **Image Processing:**
-    -   Rotates images by 180 degrees by flipping both height and width dimensions.
-    -   This accounts for the HuggingFaceVLA/libero camera orientation convention.
+    **图像处理：**
+    -   通过同时翻转高度和宽度维度，将图像旋转 180 度。
+    -   这是为了适配 HuggingFaceVLA/libero 的相机朝向约定。
     """
 
     def _process_observation(self, observation):
         """
-        Processes both image and robot_state observations from LIBERO.
+        处理来自 LIBERO 的图像和 robot_state 观测。
         """
         processed_obs = observation.copy()
         for key in list(processed_obs.keys()):
@@ -112,16 +112,16 @@ class LiberoProcessorStep(ObservationProcessorStep):
                 img = processed_obs[key]
 
                 if key == f"{OBS_IMAGES}.image":
-                    # Flip both H and W
+                    # 同时翻转 H 和 W
                     img = torch.flip(img, dims=[2, 3])
 
                 processed_obs[key] = img
-        # Process robot_state into a flat state vector
+        # 将 robot_state 处理为扁平的状态向量
         robot_state_str = OBS_PREFIX + "robot_state"
         if robot_state_str in processed_obs:
             robot_state = processed_obs.pop(robot_state_str)
 
-            # Extract components
+            # 提取各组成部分
             eef_pos = robot_state["eef"]["pos"]  # (B, 3,)
             eef_mat = robot_state["eef"]["mat"]  # (B, 3, 3)
             eef_rot6d = self._mat_to_rotate6d(eef_mat)  # (B, 6)
@@ -130,7 +130,7 @@ class LiberoProcessorStep(ObservationProcessorStep):
 
             proprio_state = torch.cat((eef_pos, eef_rot6d, extra), dim=-1)  # (B, 10)
             state = torch.cat((proprio_state, torch.zeros_like(proprio_state)), dim=-1)  # (B, 20)
-            # ensure float32
+            # 确保为 float32
             state = state.float()
             if state.dim() == 1:
                 state = state.unsqueeze(0)
@@ -142,19 +142,19 @@ class LiberoProcessorStep(ObservationProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        Transforms feature keys from the LIBERO format to the LeRobot standard.
+        将特征键从 LIBERO 格式转换为 LeRobot 标准格式。
         """
         new_features: dict[PipelineFeatureType, dict[str, PolicyFeature]] = {}
 
-        # copy over non-STATE features
+        # 复制非 STATE 特征
         for ft, feats in features.items():
             if ft != PipelineFeatureType.STATE:
                 new_features[ft] = feats.copy()
 
-        # rebuild STATE features
+        # 重建 STATE 特征
         state_feats = {}
 
-        # add our new flattened state
+        # 添加我们新的扁平化状态
         state_feats[OBS_STATE] = PolicyFeature(
             key=OBS_STATE,
             shape=(20,),
@@ -167,17 +167,17 @@ class LiberoProcessorStep(ObservationProcessorStep):
 
     def _mat_to_rotate6d(self, rot_mats: torch.Tensor) -> torch.Tensor:
         """
-        Convert batched rotation matrices (B, 3, 3) into 6D rotation representation (B, 6).
+        将批量旋转矩阵 (B, 3, 3) 转换为 6D 旋转表示 (B, 6)。
 
         Args:
-            rot_mats (Tensor): Rotation matrices of shape (B, 3, 3)
+            rot_mats (Tensor): 形状为 (B, 3, 3) 的旋转矩阵
 
         Returns:
-            Tensor: 6D rotation representation, shape (B, 6)
+            Tensor: 6D 旋转表示，形状 (B, 6)
 
         Raises:
-            TypeError: if input is not a torch tensor
-            ValueError: if shape is not (B, 3, 3)
+            TypeError: 输入不是 torch 张量时
+            ValueError: 形状不是 (B, 3, 3) 时
         """
 
         if not isinstance(rot_mats, torch.Tensor):
@@ -202,35 +202,35 @@ class LiberoProcessorStep(ObservationProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="xvla_image_scale")
 class XVLAImageScaleProcessorStep(ProcessorStep):
-    """Scale image observations by 255 to convert from [0, 1] to [0, 255] range.
+    """将图像观测乘以 255，以从 [0, 1] 范围转换到 [0, 255] 范围。
 
-    This processor step multiplies all image observations by 255, which is required
-    for XVLA models that expect images in uint8-like range.
+    该处理器步骤会将所有图像观测乘以 255，期望图像处于类 uint8
+    范围的 XVLA 模型需要这一处理。
 
     Args:
-        image_keys: List of observation keys that contain images to scale.
-                   If None, will automatically detect keys starting with "observation.images."
+        image_keys: 包含待缩放图像的观测键列表。
+                   如果为 None，将自动检测以 "observation.images." 开头的键。
     """
 
     image_keys: list[str] | None = None
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        """Scale image observations by 255."""
+        """将图像观测乘以 255。"""
         new_transition = transition.copy()
         obs = new_transition.get(TransitionKey.OBSERVATION, {})
         if obs is None:
             return new_transition
 
-        # Make a copy of observations to avoid modifying the original
+        # 复制一份观测，以避免修改原始数据
         obs = obs.copy()
 
-        # Determine which keys to scale
+        # 确定要缩放哪些键
         keys_to_scale = self.image_keys
         if keys_to_scale is None:
-            # Auto-detect image keys
+            # 自动检测图像键
             keys_to_scale = [k for k in obs if k.startswith(OBS_IMAGES)]
 
-        # Scale each image
+        # 缩放每张图像
         for key in keys_to_scale:
             if key in obs and isinstance(obs[key], torch.Tensor):
                 obs[key] = obs[key] * 255
@@ -239,11 +239,11 @@ class XVLAImageScaleProcessorStep(ProcessorStep):
         return new_transition
 
     def transform_features(self, features):
-        """Image scaling doesn't change feature structure."""
+        """图像缩放不会改变特征结构。"""
         return features
 
     def get_config(self) -> dict[str, Any]:
-        """Return serializable configuration."""
+        """返回可序列化的配置。"""
         return {
             "image_keys": self.image_keys,
         }
@@ -252,41 +252,41 @@ class XVLAImageScaleProcessorStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="xvla_image_to_float")
 class XVLAImageToFloatProcessorStep(ProcessorStep):
-    """Convert image observations from [0, 255] to [0, 1] range.
+    """将图像观测从 [0, 255] 范围转换到 [0, 1] 范围。
 
-    This processor step divides image observations by 255 to convert from uint8-like
-    range [0, 255] to float range [0, 1]. This is typically used when loading images
-    that are stored as uint8 values.
+    该处理器步骤会将图像观测除以 255，从类 uint8 的
+    [0, 255] 范围转换为浮点的 [0, 1] 范围。通常在加载
+    以 uint8 值存储的图像时使用。
 
     Args:
-        image_keys: List of observation keys that contain images to convert.
-                   If None, will automatically detect keys starting with "observation.images."
-        validate_range: If True, validates that input values are in [0, 255] range (default: True)
+        image_keys: 包含待转换图像的观测键列表。
+                   如果为 None，将自动检测以 "observation.images." 开头的键。
+        validate_range: 如果为 True，校验输入值是否在 [0, 255] 范围内（默认：True）
 
     Raises:
-        ValueError: If validate_range is True and image values are not in [0, 255] range.
+        ValueError: 当 validate_range 为 True 且图像值不在 [0, 255] 范围内时。
     """
 
     image_keys: list[str] | None = None
     validate_range: bool = True
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        """Convert image observations from [0, 255] to [0, 1]."""
+        """将图像观测从 [0, 255] 转换到 [0, 1]。"""
         new_transition = transition.copy()
         obs = new_transition.get(TransitionKey.OBSERVATION, {})
         if obs is None:
             return new_transition
 
-        # Make a copy of observations to avoid modifying the original
+        # 复制一份观测，以避免修改原始数据
         obs = obs.copy()
 
-        # Determine which keys to convert
+        # 确定要转换哪些键
         keys_to_convert = self.image_keys
         if keys_to_convert is None:
-            # Auto-detect image keys
+            # 自动检测图像键
             keys_to_convert = [k for k in obs if k.startswith(OBS_IMAGES)]
 
-        # Convert each image
+        # 转换每张图像
         for key in keys_to_convert:
             if key in obs and isinstance(obs[key], torch.Tensor):
                 tensor = obs[key]
@@ -295,9 +295,9 @@ class XVLAImageToFloatProcessorStep(ProcessorStep):
                 max_val = tensor.max().item()
 
                 if max_val <= 1.0:
-                    obs[key] = tensor.float()  # ensure float dtype, but no division
+                    obs[key] = tensor.float()  # 确保为 float dtype，但不做除法
                     continue
-                # Validate that values are in [0, 255] range if requested
+                # 如果要求，则校验值是否在 [0, 255] 范围内
                 if self.validate_range and (min_val < 0.0 or max_val > 255.0):
                     raise ValueError(
                         f"Image '{key}' has values outside [0, 255] range: "
@@ -305,18 +305,18 @@ class XVLAImageToFloatProcessorStep(ProcessorStep):
                         f"Cannot convert to [0, 1] range."
                     )
 
-                # Convert to float and divide by 255
+                # 转换为 float 并除以 255
                 obs[key] = tensor.float() / 255.0
 
         new_transition[TransitionKey.OBSERVATION] = obs
         return new_transition
 
     def transform_features(self, features):
-        """Image conversion doesn't change feature structure."""
+        """图像转换不会改变特征结构。"""
         return features
 
     def get_config(self) -> dict[str, Any]:
-        """Return serializable configuration."""
+        """返回可序列化的配置。"""
         return {
             "image_keys": self.image_keys,
             "validate_range": self.validate_range,
@@ -326,45 +326,45 @@ class XVLAImageToFloatProcessorStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="xvla_imagenet_normalize")
 class XVLAImageNetNormalizeProcessorStep(ProcessorStep):
-    """Normalize image observations using ImageNet statistics.
+    """使用 ImageNet 统计量对图像观测进行归一化。
 
-    This processor step applies ImageNet normalization (mean and std) to image observations.
-    It validates that input values are in the [0, 1] range before normalizing.
+    该处理器步骤对图像观测应用 ImageNet 归一化（均值和标准差）。
+    在归一化之前会校验输入值是否处于 [0, 1] 范围内。
 
-    The normalization formula is: (image - mean) / std
+    归一化公式为：(image - mean) / std
 
     Args:
-        image_keys: List of observation keys that contain images to normalize.
-                   If None, will automatically detect keys starting with "observation.images."
+        image_keys: 包含待归一化图像的观测键列表。
+                   如果为 None，将自动检测以 "observation.images." 开头的键。
 
     Raises:
-        ValueError: If image values are not in the [0, 1] range.
+        ValueError: 当图像值不在 [0, 1] 范围内时。
     """
 
     image_keys: list[str] | None = None
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        """Normalize image observations using ImageNet statistics."""
+        """使用 ImageNet 统计量对图像观测进行归一化。"""
         new_transition = transition.copy()
         obs = new_transition.get(TransitionKey.OBSERVATION, {})
         if obs is None:
             return new_transition
 
-        # Make a copy of observations to avoid modifying the original
+        # 复制一份观测，以避免修改原始数据
         obs = obs.copy()
 
-        # Determine which keys to normalize
+        # 确定要归一化哪些键
         keys_to_normalize = self.image_keys
         if keys_to_normalize is None:
-            # Auto-detect image keys
+            # 自动检测图像键
             keys_to_normalize = [k for k in obs if k.startswith(OBS_IMAGES)]
 
-        # Normalize each image
+        # 对每张图像进行归一化
         for key in keys_to_normalize:
             if key in obs and isinstance(obs[key], torch.Tensor):
                 tensor = obs[key]
 
-                # Validate that values are in [0, 1] range
+                # 校验值是否在 [0, 1] 范围内
                 min_val = tensor.min().item()
                 max_val = tensor.max().item()
                 if min_val < 0.0 or max_val > 1.0:
@@ -374,27 +374,27 @@ class XVLAImageNetNormalizeProcessorStep(ProcessorStep):
                         f"ImageNet normalization requires input values in [0, 1]."
                     )
 
-                # Apply ImageNet normalization
+                # 应用 ImageNet 归一化
                 mean = torch.tensor(IMAGENET_STATS["mean"], device=tensor.device, dtype=tensor.dtype)
                 std = torch.tensor(IMAGENET_STATS["std"], device=tensor.device, dtype=tensor.dtype)
 
-                # Expand mean/std to match tensor dims (e.g., BCHW or BNCHW)
+                # 扩展 mean/std 以匹配张量维度（例如 BCHW 或 BNCHW）
                 while mean.dim() < tensor.dim():
                     mean = mean.unsqueeze(0)
                     std = std.unsqueeze(0)
 
-                # Normalize: (image - mean) / std
+                # 归一化：(image - mean) / std
                 obs[key] = (tensor - mean) / std
 
         new_transition[TransitionKey.OBSERVATION] = obs
         return new_transition
 
     def transform_features(self, features):
-        """ImageNet normalization doesn't change feature structure."""
+        """ImageNet 归一化不会改变特征结构。"""
         return features
 
     def get_config(self) -> dict[str, Any]:
-        """Return serializable configuration."""
+        """返回可序列化的配置。"""
         return {
             "image_keys": self.image_keys,
         }
@@ -403,24 +403,24 @@ class XVLAImageNetNormalizeProcessorStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="xvla_add_domain_id")
 class XVLAAddDomainIdProcessorStep(ProcessorStep):
-    """Add domain_id to complementary data.
+    """向 complementary data 中添加 domain_id。
 
-    This processor step adds a domain_id tensor to the complementary data,
-    which is used by XVLA to identify different robot embodiments or task domains.
+    该处理器步骤会向 complementary data 添加一个 domain_id 张量，
+    XVLA 用它来识别不同的机器人本体或任务域。
 
     Args:
-        domain_id: The domain ID to add (default: 3)
+        domain_id: 要添加的域 ID（默认：3）
     """
 
     domain_id: int = 0
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        """Add domain_id to complementary data."""
+        """向 complementary data 中添加 domain_id。"""
         new_transition = transition.copy()
         comp = new_transition.get(TransitionKey.COMPLEMENTARY_DATA, {})
         comp = {} if comp is None else comp.copy()
 
-        # Infer batch size from observation tensors
+        # 从观测张量推断 batch size
         obs = new_transition.get(TransitionKey.OBSERVATION, {})
         batch_size = 1
         if obs:
@@ -429,18 +429,18 @@ class XVLAAddDomainIdProcessorStep(ProcessorStep):
                     batch_size = v.shape[0]
                     break
 
-        # Add domain_id tensor
+        # 添加 domain_id 张量
         comp["domain_id"] = torch.tensor([int(self.domain_id)] * batch_size, dtype=torch.long)
 
         new_transition[TransitionKey.COMPLEMENTARY_DATA] = comp
         return new_transition
 
     def transform_features(self, features):
-        """Domain ID addition doesn't change feature structure."""
+        """添加域 ID 不会改变特征结构。"""
         return features
 
     def get_config(self) -> dict[str, Any]:
-        """Return serializable configuration."""
+        """返回可序列化的配置。"""
         return {
             "domain_id": self.domain_id,
         }
@@ -449,64 +449,64 @@ class XVLAAddDomainIdProcessorStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="xvla_rotation_6d_to_axis_angle")
 class XVLARotation6DToAxisAngleProcessorStep(ProcessorStep):
-    """Convert 6D rotation representation to axis-angle and reorganize action dimensions.
+    """将 6D 旋转表示转换为轴角，并重新组织动作维度。
 
-    This processor step takes actions with 6D rotation representation and converts them to
-    axis-angle representation, reorganizing the action dimensions as:
-    - action[:, :3] -> target_eef (end-effector position)
-    - action[:, 3:9] -> 6D rotation (converted to axis-angle, 3D)
-    - action[:, 9:10] -> gripper action
+    该处理器步骤接收带 6D 旋转表示的动作，并将其转换为
+    轴角表示，同时按如下方式重新组织动作维度：
+    - action[:, :3] -> target_eef（末端执行器位置）
+    - action[:, 3:9] -> 6D 旋转（转换为 3D 轴角）
+    - action[:, 9:10] -> 夹爪动作
 
-    Final output: [target_eef (3), axis_angle (3), gripper (1)] = 7D action
+    最终输出：[target_eef (3), axis_angle (3), gripper (1)] = 7 维动作
 
     Args:
-        expected_action_dim: Expected input action dimension (default: 10, supports 6D rotation + extras)
+        expected_action_dim: 预期的输入动作维度（默认：10，支持 6D 旋转加额外维度）
     """
 
     expected_action_dim: int = 10
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        """Convert 6D rotation to axis-angle in action."""
+        """将动作中的 6D 旋转转换为轴角。"""
         new_transition = transition.copy()
         action = new_transition.get(TransitionKey.ACTION)
 
         if action is None or not isinstance(action, torch.Tensor):
             return new_transition
 
-        # Convert to numpy for processing
+        # 转换为 numpy 以便处理
         device = action.device
         dtype = action.dtype
         action_np = action.cpu().numpy()
 
-        # Extract components
-        # action shape: (B, D) where D >= 10
+        # 提取各组成部分
+        # action 形状：(B, D)，其中 D >= 10
         target_eef = action_np[:, :3]  # (B, 3)
         rotation_6d = action_np[:, 3:9]  # (B, 6)
         target_act = action_np[:, 9:10]  # (B, 1)
 
-        # Convert 6D rotation to axis-angle
+        # 将 6D 旋转转换为轴角
         target_axis = rotate6d_to_axis_angle(rotation_6d)  # (B, 3)
 
-        # Concatenate: [eef (3), axis_angle (3), gripper (1)] = 7D
+        # 拼接：[eef (3), axis_angle (3), gripper (1)] = 7 维
         action_np = np.concatenate([target_eef, target_axis, target_act], axis=-1)
 
-        # Convert gripper action to -1 or 1
+        # 将夹爪动作转换为 -1 或 1
         action_np[:, -1] = np.where(action_np[:, -1] > 0.5, 1.0, -1.0)
 
-        # Convert back to tensor
+        # 转换回张量
         action = torch.from_numpy(action_np).to(device=device, dtype=dtype)
 
         new_transition[TransitionKey.ACTION] = action
         return new_transition
 
     def transform_features(self, features):
-        """Rotation conversion changes action dimension from 10 to 7."""
-        # Note: This is a simplified version. In practice, you might want to
-        # update the action feature shape in the features dict.
+        """旋转转换会将动作维度从 10 变为 7。"""
+        # 注意：这是简化版本。实际中可能还需要
+        # 更新 features 字典中的动作特征形状。
         return features
 
     def get_config(self) -> dict[str, Any]:
-        """Return serializable configuration."""
+        """返回可序列化的配置。"""
         return {
             "expected_action_dim": self.expected_action_dim,
         }
@@ -517,7 +517,7 @@ def make_xvla_libero_pre_post_processors() -> tuple[
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Build the LeRobot processor pipelines for XVLA with LIBERO environment.
+    为配合 LIBERO 环境使用的 XVLA 构建 LeRobot 处理器流水线。
     """
     pre_processor_steps: list[ProcessorStep] = []
     post_processor_steps: list[ProcessorStep] = []

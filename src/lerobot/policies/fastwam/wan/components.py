@@ -41,19 +41,19 @@ from .video_dit import WanVideoDiT
 
 logger = logging.getLogger(__name__)
 
-# The custom MoT video DiT still ships in the original (non-diffusers) Wan2.2
-# repo as sharded `diffusion_pytorch_model*.safetensors`; the VAE and UMT5 text
-# encoder come from the diffusers conversion. Tokenizer is the stock UMT5 one.
+# 自定义 MoT 视频 DiT 仍以分片的 `diffusion_pytorch_model*.safetensors` 形式
+# 随原始（非 diffusers 的）Wan2.2 仓库发布；VAE 和 UMT5 文本编码器来自
+# diffusers 转换版本。分词器是标准的 UMT5 分词器。
 WAN_DIT_PATTERN = "diffusion_pytorch_model*.safetensors"
 WAN_T5_TOKENIZER = "google/umt5-xxl"
 WAN22_DIFFUSERS_MODEL_ID = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
 
 
 class WanTextEncoder(torch.nn.Module):
-    """FastWAM text-encoder contract over `transformers.UMT5EncoderModel`.
+    """基于 `transformers.UMT5EncoderModel` 的 FastWAM 文本编码器契约。
 
-    Exposes `.dim` (hidden size) and `forward(ids, mask) -> [B, L, dim]`, matching
-    the call in `FastWAM.encode_prompt`.
+    暴露 `.dim`（隐藏层大小）和 `forward(ids, mask) -> [B, L, dim]`，
+    与 `FastWAM.encode_prompt` 中的调用方式匹配。
     """
 
     def __init__(
@@ -64,9 +64,9 @@ class WanTextEncoder(torch.nn.Module):
         pretrained: torch.nn.Module,
     ) -> None:
         super().__init__()
-        # UMT5-XXL is a fixed pretrained encoder — never trained from scratch, so a real
-        # `UMT5EncoderModel` (with weights) must always be supplied (loaded from the
-        # diffusers repo by `load_pretrained_wan_text_encoder`). No random/offline build.
+        # UMT5-XXL 是固定的预训练编码器——从不从头训练，因此必须始终提供一个
+        # 真实的 `UMT5EncoderModel`（带权重，由 `load_pretrained_wan_text_encoder`
+        # 从 diffusers 仓库加载）。不存在随机/离线构建。
         self.model = pretrained.to(device=device, dtype=dtype)
         self.dim = int(self.model.config.d_model)
 
@@ -75,8 +75,8 @@ class WanTextEncoder(torch.nn.Module):
 
 
 class WanTokenizer:
-    """UMT5 tokenizer wrapper returning `(input_ids, attention_mask)` like the
-    FastWAM call site expects."""
+    """UMT5 分词器封装，按 FastWAM 调用处所期望的方式返回
+    `(input_ids, attention_mask)`。"""
 
     def __init__(self, name: str = WAN_T5_TOKENIZER, seq_len: int = 512) -> None:
         require_package("transformers", extra="fastwam")
@@ -110,7 +110,7 @@ def build_wan_tokenizer(*, model_id: str = WAN_T5_TOKENIZER, tokenizer_max_len: 
 
 
 def load_pretrained_wan_vae(*, torch_dtype: torch.dtype, device: str) -> WanVideoVAE38:
-    """Load real Wan2.2 VAE weights from the diffusers repo (offline base creation)."""
+    """从 diffusers 仓库加载真实的 Wan2.2 VAE 权重（离线创建基础模型）。"""
     require_package("diffusers", extra="fastwam")
     vae = AutoencoderKLWan.from_pretrained(WAN22_DIFFUSERS_MODEL_ID, subfolder="vae", torch_dtype=torch_dtype)
     return WanVideoVAE38(dtype=torch_dtype, device=device, pretrained=vae)
@@ -123,10 +123,10 @@ def load_pretrained_wan_text_encoder(
     torch_dtype: torch.dtype,
     device: str,
 ) -> WanTextEncoder:
-    """Load UMT5-XXL encoder weights (defaults to the Wan2.2 diffusers repo).
+    """加载 UMT5-XXL 编码器权重（默认为 Wan2.2 的 diffusers 仓库）。
 
-    Must stay compatible with the tokenizer (see `build_wan_tokenizer`): the encoder's
-    embedding table is indexed by the tokenizer's vocabulary.
+    必须与分词器保持兼容（参见 `build_wan_tokenizer`）：编码器的嵌入表
+    按分词器的词表进行索引。
     """
     require_package("transformers", extra="fastwam")
     encoder = UMT5EncoderModel.from_pretrained(model_id, subfolder=subfolder, torch_dtype=torch_dtype)
@@ -140,7 +140,7 @@ def resolve_wan_dit_paths(
     local_files_only: bool = False,
     revision: str | None = None,
 ) -> list[Path]:
-    """Resolve the custom MoT DiT shards from the original Wan2.2 repo or a local dir."""
+    """从原始 Wan2.2 仓库或本地目录解析自定义 MoT DiT 的分片文件。"""
     path = Path(model_id_or_path).expanduser()
     if path.is_dir():
         return sorted(path.glob(WAN_DIT_PATTERN))

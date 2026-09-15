@@ -50,9 +50,9 @@ from .streaming_dataset import StreamingLeRobotDataset
 from .utils import DEFAULT_EPISODES_PATH, create_lerobot_dataset_card, resolve_episode_indices
 from .video_utils import VideoEncodingManager
 
-# NOTE: Low-level I/O functions (cast_stats_to_numpy, get_parquet_file_size_in_mb, etc.)
-# and legacy migration constants are intentionally NOT re-exported here.
-# Import directly: ``from lerobot.datasets.io_utils import ...``
+# 注意：底层 I/O 函数（cast_stats_to_numpy、get_parquet_file_size_in_mb 等）
+# 以及旧版迁移常量有意不在此处重新导出。
+# 请直接导入：``from lerobot.datasets.io_utils import ...``
 
 __all__ = [
     "BaseDatasetReader",

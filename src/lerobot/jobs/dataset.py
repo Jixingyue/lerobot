@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Make a training dataset reachable from an HF Job pod.
+"""使训练数据集可从 HF Job pod 访问。
 
-The pod can't see the host's ~/.cache/huggingface/lerobot, so the dataset has to
-live on the Hub: the pod downloads it by repo_id at train time (the forwarded
-HF_TOKEN covers private datasets). A dataset already on the Hub is used as-is; a
-local-only dataset is pushed to a PRIVATE repo first (never public).
+pod 看不到主机的 ~/.cache/huggingface/lerobot，因此数据集必须
+位于 Hub 上：pod 在训练时通过 repo_id 下载它（转发的
+HF_TOKEN 覆盖私有数据集）。已在 Hub 上的数据集按原样使用；
+仅本地数据集先推送到 PRIVATE 仓库（从不公开）。
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ if TYPE_CHECKING:
 
 
 def ensure_dataset_available(repo_id: str, *, api: HfApi, tags: list[str] | None = None) -> None:
-    """Ensure repo_id resolves on the Hub, pushing a local-only dataset privately first.
+    """确保 repo_id 在 Hub 上可解析，先将仅本地数据集推送到私有仓库。
 
-    `tags` are attached to the dataset only when we push it (an already-on-Hub
-    dataset is left untouched). Raises RuntimeError if the dataset is neither on
-    the Hub nor in the local cache.
+    `tags` 仅在我们推送时附加到数据集（已在 Hub 上的
+    数据集保持不变）。如果数据集既不在 Hub 上也不在
+    本地缓存中，则引发 RuntimeError。
     """
     if api.repo_exists(repo_id, repo_type="dataset"):
         return

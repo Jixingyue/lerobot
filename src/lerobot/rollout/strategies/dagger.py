@@ -118,8 +118,7 @@ class DAggerEvents:
         self.stop_recording = Event()
         self.upload_requested = Event()
 
-    # -- Thread-safe phase access ------------------------------------------
-
+    #  -- 线程安全阶段访问 ------------------------------------------
     @property
     def phase(self) -> DAggerPhase:
         """Current phase of the DAgger state machine."""

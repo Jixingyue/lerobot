@@ -43,22 +43,22 @@ logger = logging.getLogger(__name__)
 
 
 def _batched_resize_01(images: torch.Tensor, image_size: int) -> torch.Tensor:
-    """Resize a batch of ``[0, 1]`` images to ``(image_size, image_size)`` on-device.
+    """在设备上将一批 ``[0, 1]`` 图像缩放到 ``(image_size, image_size)``。
 
-    Numerically mirrors InternVL3's reference PIL preprocessing
-    (``to_pil_image`` -> ``Image.resize`` -> ``to_tensor``): the float input is quantized to uint8
-    exactly as ``to_pil_image`` does, then resized with bicubic interpolation and antialiasing,
-    which matches PIL's default resampler. Matching the reference pixel-for-pixel keeps the policy
-    interchangeable with checkpoints produced by the upstream EVO1 preprocessing.
+    在数值上复刻 InternVL3 的参考 PIL 预处理
+    （``to_pil_image`` -> ``Image.resize`` -> ``to_tensor``）：浮点输入会像
+    ``to_pil_image`` 一样被精确量化为 uint8，然后使用双三次插值加抗锯齿进行缩放，
+    这与 PIL 的默认重采样器一致。与参考实现逐像素保持一致，使该策略可以与
+    上游 EVO1 预处理生成的检查点互换使用。
 
     Args:
-        images: float tensor of shape ``(N, C, H, W)`` with values in ``[0, 1]``.
+        images: 形状为 ``(N, C, H, W)``、取值在 ``[0, 1]`` 内的浮点张量。
 
     Returns:
-        float32 tensor of shape ``(N, C, image_size, image_size)`` with values in ``[0, 1]``.
+        形状为 ``(N, C, image_size, image_size)``、取值在 ``[0, 1]`` 内的 float32 张量。
     """
-    # to_pil_image() quantizes float [0, 1] to uint8 (x * 255, truncated); replicate that so the
-    # bicubic resample sees the same integer pixels PIL would.
+    # to_pil_image() 会将浮点 [0, 1] 量化为 uint8（x * 255，截断）；这里复现该行为，
+    # 使双三次重采样看到的整数像素与 PIL 看到的相同。
     pixels_u8 = (images * 255.0).clamp(0, 255).to(torch.uint8)
     resized = tvf.resize(
         pixels_u8, [image_size, image_size], interpolation=InterpolationMode.BICUBIC, antialias=True
@@ -75,16 +75,16 @@ def _batched_pixel_values(
     dtype: torch.dtype,
     device: torch.device | str,
 ) -> torch.Tensor:
-    """Build InternVL3 ``pixel_values`` from per-camera ``[0, 1]`` image batches without leaving the device.
+    """在不离开设备的情况下，从各相机的 ``[0, 1]`` 图像批次构建 InternVL3 的 ``pixel_values``。
 
-    Each image is resized, converted to ``dtype``, and ImageNet-normalized (a single tile per
-    image), batched across the whole minibatch. Absent views (fewer cameras than ``max_views``)
-    are filled with zero images; their placeholder tokens are masked out of attention downstream
-    via ``_mask_absent_image_tokens``.
+    每张图像会被缩放、转换为 ``dtype``，并进行 ImageNet 归一化（每张图像
+    单个 tile），在整个小批次上进行批处理。缺失的视图（相机数量少于
+    ``max_views``）用零图像填充；它们的占位符 token 会在下游通过
+    ``_mask_absent_image_tokens`` 从注意力中掩蔽掉。
 
     Returns:
-        ``pixel_values`` of shape ``(B * max_views, C, image_size, image_size)``, ordered row-major
-        over ``(sample, view)`` to line up with the per-view image placeholders in the prompt.
+        形状为 ``(B * max_views, C, image_size, image_size)`` 的 ``pixel_values``，
+        按 ``(sample, view)`` 行主序排列，以与提示词中逐视图的图像占位符对齐。
     """
     resized: list[torch.Tensor] = []
     for image in camera_images:
@@ -103,7 +103,7 @@ def _batched_pixel_values(
 
 
 class InternVL3Embedder(nn.Module):
-    """Vision-language embedder using the native HF InternVL3 model (no trust_remote_code)."""
+    """使用原生 HF InternVL3 模型的视觉-语言嵌入器（无需 trust_remote_code）。"""
 
     def __init__(
         self,
@@ -166,7 +166,7 @@ class InternVL3Embedder(nn.Module):
 
         self.num_image_token = self.model.config.image_seq_length
 
-        # Truncate language model to the requested number of layers
+        # 将语言模型截断到请求的层数
         layers = self.model.language_model.layers
         if self.num_language_layers is not None:
             layers = layers[: self.num_language_layers]
@@ -246,18 +246,18 @@ class InternVL3Embedder(nn.Module):
         text_prompts: Sequence[str],
         return_cls_only: bool = True,
     ):
-        """Fused VL embedding from per-camera ``[0, 1]`` image batches (no PIL, no host round-trip).
+        """从各相机的 ``[0, 1]`` 图像批次获取融合的 VL 嵌入（无 PIL，无主机往返）。
 
         Args:
-            camera_images: list of per-camera tensors, each shaped ``(B, C, H, W)`` in ``[0, 1]``.
-            image_masks: bool tensor ``(B, max_views)`` marking present views.
+            camera_images: 逐相机张量的列表，每个形状为 ``(B, C, H, W)``，取值在 ``[0, 1]`` 内。
+            image_masks: 布尔张量 ``(B, max_views)``，标记存在的视图。
 
         Returns:
-            A ``(embeddings, valid_mask)`` tuple. With ``return_cls_only=False``, ``embeddings`` is
-            ``(B, L, H)`` and ``valid_mask`` is a ``(B, L)`` bool tensor marking tokens downstream
-            attention may attend to (padding and absent-view tokens are False). With
-            ``return_cls_only=True``, ``embeddings`` is the pooled ``(B, H)`` last-valid-token state
-            and ``valid_mask`` is None.
+            ``(embeddings, valid_mask)`` 元组。当 ``return_cls_only=False`` 时，``embeddings`` 为
+            ``(B, L, H)``，``valid_mask`` 是标记下游注意力可关注的 token 的 ``(B, L)`` 布尔张量
+            （填充和缺失视图的 token 为 False）。当 ``return_cls_only=True`` 时，
+            ``embeddings`` 是池化后的 ``(B, H)`` 最后一个有效 token 状态，
+            ``valid_mask`` 为 None。
         """
         max_views = int(image_masks.shape[1])
         batch_size = int(image_masks.shape[0])
@@ -266,7 +266,7 @@ class InternVL3Embedder(nn.Module):
         pixel_values = _batched_pixel_values(
             camera_images, max_views, self.image_size, mean, std, self.model_dtype, self.device
         )
-        # InternVL3 preprocessing uses a single tile per image (max_num=1).
+        # InternVL3 预处理对每张图像使用单个 tile（max_num=1）。
         batch_num_tiles_list = [[1] * max_views for _ in range(batch_size)]
         return self._forward_vlm(
             pixel_values, batch_num_tiles_list, image_masks, text_prompts, return_cls_only
@@ -279,12 +279,12 @@ class InternVL3Embedder(nn.Module):
         image_masks: torch.Tensor,
         batch_num_tiles_list: list[list[int]],
     ) -> torch.Tensor:
-        """Zero attention over the image-context tokens of absent (zero-padded) views.
+        """将缺失（零填充）视图的图像上下文 token 的注意力置零。
 
-        Fully vectorized: runs without any host<->device synchronization.
+        完全向量化：运行时没有任何主机<->设备同步。
         """
-        # A single tile per image (max_num=1), so every image occupies the same number of
-        # context tokens.
+        # 每张图像单个 tile（max_num=1），因此每张图像占据相同数量的
+        # 上下文 token。
         tiles_per_image = (
             batch_num_tiles_list[0][0] if batch_num_tiles_list and batch_num_tiles_list[0] else 1
         )
@@ -292,9 +292,9 @@ class InternVL3Embedder(nn.Module):
 
         image_masks = image_masks.to(device=input_ids.device).bool()
         img_token_mask = input_ids == self.img_context_token_id  # (B, L)
-        # keep[b, k] tells whether the k-th image-context token (ordered view0, view1, ...) survives.
+        # keep[b, k] 表示第 k 个图像上下文 token（按 view0、view1... 排序）是否保留。
         per_token_keep = image_masks.repeat_interleave(tokens_per_image, dim=1)  # (B, V * tokens_per_image)
-        # Rank each context token by its running position among the row's context tokens.
+        # 按每个上下文 token 在该行上下文 token 中的累计位置为其排序。
         ctx_index = img_token_mask.to(torch.long).cumsum(dim=1) - 1
         ctx_index = ctx_index.clamp(min=0, max=per_token_keep.shape[1] - 1)
         keep_here = torch.gather(per_token_keep, 1, ctx_index)  # (B, L)
@@ -329,9 +329,9 @@ class InternVL3Embedder(nn.Module):
         ).to(self.device)
         input_ids = model_inputs["input_ids"]
         if input_ids.shape[1] >= self.max_text_length:
-            # Truncation cuts from the right, so text is dropped before image placeholders — but a
-            # large max_views * image_seq_length budget can still eat into them. Fail loudly instead
-            # of letting the VLM crash on a placeholder/vision-feature count mismatch.
+            # 截断从右侧切除，因此文本会在图像占位符之前被丢弃——但
+            # 较大的 max_views * image_seq_length 预算仍可能侵占占位符。
+            # 与其让 VLM 因占位符/视觉特征数量不匹配而崩溃，不如显式报错。
             expected_image_tokens = self.num_image_token * sum(batch_num_tiles_list[0])
             image_token_counts = (input_ids == self.img_context_token_id).sum(dim=1)
             if not bool((image_token_counts == expected_image_tokens).all()):
@@ -354,8 +354,8 @@ class InternVL3Embedder(nn.Module):
         fused_hidden = outputs.hidden_states[-1].to(torch.float32)
         valid_mask = attention_mask.to(torch.bool)
         if return_cls_only:
-            # Right-padded causal decoder: the last valid token is the only one that has attended
-            # to the full image + text prompt.
+            # 右填充的因果解码器：最后一个有效 token 是唯一关注过
+            # 完整图像 + 文本提示词的 token。
             positions = torch.arange(valid_mask.shape[1], device=valid_mask.device)
             last_valid = (valid_mask.long() * positions).argmax(dim=1)
             batch_index = torch.arange(fused_hidden.shape[0], device=fused_hidden.device)

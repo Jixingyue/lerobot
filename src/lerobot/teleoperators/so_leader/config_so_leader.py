@@ -21,18 +21,18 @@ from ..config import TeleoperatorConfig
 
 @dataclass
 class SOLeaderConfig:
-    """Base configuration class for SO Leader teleoperators."""
+    """SO Leader 遥操作设备的基础配置类。"""
 
-    # Port to connect to the arm
+    # 用于连接机械臂的端口
     port: str
 
-    # Whether to use degrees for angles
+    # 角度是否使用度数
     use_degrees: bool = True
 
-    # Number of extra attempts when a `sync_read` of the motors fails. Feetech buses can occasionally
-    # return a corrupted status packet ("Incorrect status packet!"), especially when several joints move
-    # at once, which otherwise aborts the teleoperation loop. Retries are immediate (no sleep) and only
-    # happen on failure, so the steady-state read cost is unchanged.
+    # 电机的 `sync_read` 失败时的额外重试次数。Feetech 总线偶尔会返回损坏的
+    # 状态包（"Incorrect status packet!"），尤其是在多个关节同时移动时，
+    # 否则会导致遥操作循环中止。重试是立即进行的（不休眠），且仅在失败时发生，
+    # 因此稳态下的读取开销不变。
     num_read_retries: int = 2
 
 

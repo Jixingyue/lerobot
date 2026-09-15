@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dataset tools utilities for LeRobotDataset.
+"""LeRobotDataset 的数据集工具函数。
 
-This module provides utilities for:
-- Deleting episodes from datasets
-- Splitting datasets into multiple smaller datasets
-- Adding/removing features from datasets
-- Merging datasets (wrapper around aggregate functionality)
+本模块提供以下工具：
+- 从数据集中删除 episode
+- 将数据集拆分为多个更小的数据集
+- 向数据集添加/移除特征
+- 合并数据集（聚合功能的封装）
 """
 
 import logging
@@ -83,14 +83,14 @@ from .video_utils import (
 
 
 def _load_episode_with_stats(src_dataset: LeRobotDataset, episode_idx: int) -> dict:
-    """Load a single episode's metadata including stats from parquet file.
+    """从 parquet 文件加载单个 episode 的元数据（包括统计信息）。
 
     Args:
-        src_dataset: Source dataset
-        episode_idx: Episode index to load
+        src_dataset: 源数据集
+        episode_idx: 要加载的 episode 索引
 
     Returns:
-        dict containing episode metadata and stats
+        包含 episode 元数据和统计信息的字典
     """
     ep_meta = src_dataset.meta.episodes[episode_idx]
     chunk_idx = ep_meta["meta/episodes/chunk_index"]
@@ -110,18 +110,17 @@ def delete_episodes(
     output_dir: str | Path | None = None,
     repo_id: str | None = None,
 ) -> LeRobotDataset:
-    """Delete episodes from a LeRobotDataset and create a new dataset.
+    """从 LeRobotDataset 中删除 episode 并创建一个新数据集。
 
-    Video segments that need re-encoding (because the source file mixes kept and
-    deleted episodes) are re-encoded with the source dataset's existing encoder
-    settings — read back from ``meta/info.json`` — so the output dataset stays
-    consistent with its own metadata.
+    需要重新编码的视频片段（因为源文件混合了保留和删除的 episode）
+    会使用源数据集现有的编码器设置重新编码——从 ``meta/info.json``
+    读回——从而使输出数据集与其自身的元数据保持一致。
 
     Args:
-        dataset: The source LeRobotDataset.
-        episode_indices: List of episode indices to delete.
-        output_dir: Root directory where the edited dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id. Equivalent to new_root in EditDatasetConfig.
-        repo_id: Edited dataset identifier. Equivalent to new_repo_id in EditDatasetConfig.
+        dataset: 源 LeRobotDataset。
+        episode_indices: 要删除的 episode 索引列表。
+        output_dir: 编辑后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/repo_id。等同于 EditDatasetConfig 中的 new_root。
+        repo_id: 编辑后的数据集标识符。等同于 EditDatasetConfig 中的 new_repo_id。
     """
     if not episode_indices:
         raise ValueError("No episodes to delete")
@@ -177,25 +176,25 @@ def split_dataset(
     splits: dict[str, float | list[int]],
     output_dir: str | Path | None = None,
 ) -> dict[str, LeRobotDataset]:
-    """Split a LeRobotDataset into multiple smaller datasets.
+    """将 LeRobotDataset 拆分为多个更小的数据集。
 
-    Video segments that need re-encoding (because the source file mixes episodes
-    that fall into different splits) are re-encoded with the source dataset's
-    existing encoder settings — read back from ``meta/info.json`` — so each
-    output split stays consistent with its own metadata.
+    需要重新编码的视频片段（因为源文件混合了落入不同划分的
+    episode）会使用源数据集现有的编码器设置重新编码——从
+    ``meta/info.json`` 读回——从而使每个输出划分与其自身的
+    元数据保持一致。
 
     Args:
-        dataset: The source LeRobotDataset to split.
-        splits: Either a dict mapping split names to episode indices, or a dict mapping
-                split names to fractions (must sum to <= 1.0).
-        output_dir: Root directory where the split datasets will be stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id.
+        dataset: 要拆分的源 LeRobotDataset。
+        splits: 将划分名称映射到 episode 索引的字典，或者将划分名称
+                映射到比例（总和必须 <= 1.0）的字典。
+        output_dir: 拆分后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/repo_id。
 
     Examples:
-      Split by specific episodes
+      按特定 episode 拆分
         splits = {"train": [0, 1, 2], "val": [3, 4]}
         datasets = split_dataset(dataset, splits)
 
-      Split by fractions
+      按比例拆分
         splits = {"train": 0.8, "val": 0.2}
         datasets = split_dataset(dataset, splits)
     """
@@ -275,16 +274,16 @@ def merge_datasets(
     concatenate_videos: bool = True,
     concatenate_data: bool = True,
 ) -> LeRobotDataset:
-    """Merge multiple LeRobotDatasets into a single dataset.
+    """将多个 LeRobotDataset 合并为一个数据集。
 
-    This is a wrapper around the aggregate_datasets functionality with a cleaner API.
+    这是对 aggregate_datasets 功能的封装，提供更简洁的 API。
 
     Args:
-        datasets: List of LeRobotDatasets to merge.
-        output_repo_id: Merged dataset identifier.
-        output_dir: Root directory where the merged dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/output_repo_id.
-        concatenate_videos: When False, keep one mp4 per source file instead of packing into shards.
-        concatenate_data: When False, keep one parquet per source file instead of packing into shards.
+        datasets: 要合并的 LeRobotDataset 列表。
+        output_repo_id: 合并后的数据集标识符。
+        output_dir: 合并后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/output_repo_id。
+        concatenate_videos: 为 False 时，每个源文件保留一个 mp4，而不是打包成分片。
+        concatenate_data: 为 False 时，每个源文件保留一个 parquet，而不是打包成分片。
     """
     if not datasets:
         raise ValueError("No datasets to merge")
@@ -321,20 +320,20 @@ def modify_features(
     output_dir: str | Path | None = None,
     repo_id: str | None = None,
 ) -> LeRobotDataset:
-    """Modify a LeRobotDataset by adding and/or removing features in a single pass.
+    """通过一次遍历添加和/或移除特征来修改 LeRobotDataset。
 
-    This is the most efficient way to modify features, as it only copies the dataset once
-    regardless of how many features are being added or removed.
+    这是修改特征最高效的方式，因为无论添加或移除多少个特征，
+    它都只复制数据集一次。
 
     Args:
-        dataset: The source LeRobotDataset.
-        add_features: Optional dict mapping feature names to (feature_values, feature_info) tuples.
-        remove_features: Optional feature name(s) to remove. Can be a single string or list.
-        output_dir: Root directory where the edited dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id. Equivalent to new_root in EditDatasetConfig.
-        repo_id: Edited dataset identifier. Equivalent to new_repo_id in EditDatasetConfig.
+        dataset: 源 LeRobotDataset。
+        add_features: 可选字典，将特征名映射到 (feature_values, feature_info) 元组。
+        remove_features: 可选的要移除的特征名。可以是单个字符串或列表。
+        output_dir: 编辑后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/repo_id。等同于 EditDatasetConfig 中的 new_root。
+        repo_id: 编辑后的数据集标识符。等同于 EditDatasetConfig 中的 new_repo_id。
 
     Returns:
-        New dataset with features modified.
+        特征已修改的新数据集。
 
     Example:
         new_dataset = modify_features(
@@ -424,19 +423,19 @@ def add_features(
     output_dir: str | Path | None = None,
     repo_id: str | None = None,
 ) -> LeRobotDataset:
-    """Add multiple features to a LeRobotDataset in a single pass.
+    """通过一次遍历向 LeRobotDataset 添加多个特征。
 
-    This is more efficient than calling add_feature() multiple times, as it only
-    copies the dataset once regardless of how many features are being added.
+    这比多次调用 add_feature() 更高效，因为无论添加多少个特征，
+    它都只复制数据集一次。
 
     Args:
-        dataset: The source LeRobotDataset.
-        features: Dictionary mapping feature names to (feature_values, feature_info) tuples.
-        output_dir: Root directory where the edited dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id. Equivalent to new_root in EditDatasetConfig.
-        repo_id: Edited dataset identifier. Equivalent to new_repo_id in EditDatasetConfig.
+        dataset: 源 LeRobotDataset。
+        features: 将特征名映射到 (feature_values, feature_info) 元组的字典。
+        output_dir: 编辑后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/repo_id。等同于 EditDatasetConfig 中的 new_root。
+        repo_id: 编辑后的数据集标识符。等同于 EditDatasetConfig 中的 new_repo_id。
 
     Returns:
-        New dataset with all features added.
+        已添加所有特征的新数据集。
 
     Example:
         features = {
@@ -464,16 +463,16 @@ def remove_feature(
     output_dir: str | Path | None = None,
     repo_id: str | None = None,
 ) -> LeRobotDataset:
-    """Remove features from a LeRobotDataset.
+    """从 LeRobotDataset 中移除特征。
 
     Args:
-        dataset: The source LeRobotDataset.
-        feature_names: Name(s) of features to remove. Can be a single string or list.
-        output_dir: Root directory where the edited dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id. Equivalent to new_root in EditDatasetConfig.
-        repo_id: Edited dataset identifier. Equivalent to new_repo_id in EditDatasetConfig.
+        dataset: 源 LeRobotDataset。
+        feature_names: 要移除的特征名。可以是单个字符串或列表。
+        output_dir: 编辑后数据集的存储根目录。如果未指定，默认为 $HF_LEROBOT_HOME/repo_id。等同于 EditDatasetConfig 中的 new_root。
+        repo_id: 编辑后的数据集标识符。等同于 EditDatasetConfig 中的 new_repo_id。
 
     Returns:
-        New dataset with features removed.
+        已移除特征的新数据集。
     """
     return modify_features(
         dataset=dataset,
@@ -488,11 +487,11 @@ def _fractions_to_episode_indices(
     total_episodes: int,
     splits: dict[str, float],
 ) -> dict[str, list[int]]:
-    """Convert split fractions to episode indices.
+    """将划分比例转换为 episode 索引。
 
-    Every episode is assigned to exactly one split, and every split with a positive
-    fraction receives at least one episode, so a small fraction can no longer round
-    down to zero and drop both its split and its episodes.
+    每个 episode 恰好被分配到一个划分，并且每个比例为正的划分
+    至少获得一个 episode，因此较小的比例不会再向下取整为零
+    而同时丢失该划分及其 episode。
     """
     for name, fraction in splits.items():
         if fraction < 0:
@@ -538,15 +537,15 @@ def _copy_and_reindex_data(
     dst_meta: LeRobotDatasetMetadata,
     episode_mapping: dict[int, int],
 ) -> dict[int, dict]:
-    """Copy and filter data files, only modifying files with deleted episodes.
+    """复制并过滤数据文件，仅修改包含被删除 episode 的文件。
 
     Args:
-        src_dataset: Source dataset to copy from
-        dst_meta: Destination metadata object
-        episode_mapping: Mapping from old episode indices to new indices
+        src_dataset: 要复制的源数据集
+        dst_meta: 目标元数据对象
+        episode_mapping: 从旧 episode 索引到新索引的映射
 
     Returns:
-        dict mapping episode index to its data file metadata (chunk_index, file_index, etc.)
+        将 episode 索引映射到其数据文件元数据（chunk_index、file_index 等）的字典
     """
     if src_dataset.meta.episodes is None:
         src_dataset.meta.episodes = load_episodes(src_dataset.meta.root)
@@ -636,19 +635,19 @@ def _keep_episodes_from_video_with_av(
     fps: float,
     video_encoder: VideoEncoderConfig,
 ) -> None:
-    """Keep only specified episodes from a video file using PyAV.
+    """使用 PyAV 仅从视频文件中保留指定的 episode。
 
-    This function decodes frames from specified frame ranges and re-encodes them with
-    properly reset timestamps to ensure monotonic progression.
+    此函数从指定的帧范围解码帧，并使用正确重置的时间戳重新编码它们，
+    以确保单调递增。
 
     Args:
-        input_path: Source video file path.
-        output_path: Destination video file path.
-        episodes_to_keep: List of (start_frame, end_frame) tuples for episodes to keep.
-            Ranges are half-open intervals: [start_frame, end_frame), where start_frame
-            is inclusive and end_frame is exclusive.
-        fps: Frame rate of the video.
-        video_encoder: Video encoder settings used to re-encode the kept frames.
+        input_path: 源视频文件路径。
+        output_path: 目标视频文件路径。
+        episodes_to_keep: 要保留的 episode 的 (start_frame, end_frame) 元组列表。
+            范围是半开区间：[start_frame, end_frame)，其中 start_frame
+            包含，end_frame 不包含。
+        fps: 视频的帧率。
+        video_encoder: 用于重新编码保留帧的视频编码器设置。
     """
     from fractions import Fraction
 
@@ -659,7 +658,7 @@ def _keep_episodes_from_video_with_av(
 
     in_container = av.open(str(input_path))
 
-    # Check if video stream exists.
+    # 检查视频流是否存在。
     if not in_container.streams.video:
         raise ValueError(
             f"No video streams found in {input_path}. "
@@ -671,66 +670,66 @@ def _keep_episodes_from_video_with_av(
 
     out = av.open(str(output_path), mode="w")
 
-    # Convert fps to Fraction for PyAV compatibility.
+    # 将 fps 转换为 Fraction 以兼容 PyAV。
     fps_fraction = Fraction(fps).limit_denominator(1000)
     codec_options = video_encoder.get_codec_options(as_strings=True)
     v_out = out.add_stream(video_encoder.vcodec, rate=fps_fraction, options=codec_options)
 
-    # PyAV type stubs don't distinguish video streams from audio/subtitle streams.
+    # PyAV 类型存根不区分视频流与音频/字幕流。
     v_out.width = v_in.codec_context.width
     v_out.height = v_in.codec_context.height
     v_out.pix_fmt = video_encoder.pix_fmt
 
-    # Set time_base to match the frame rate for proper timestamp handling.
+    # 设置 time_base 以匹配帧率，从而正确处理时间戳。
     v_out.time_base = Fraction(1, int(fps))
 
     out.start_encoding()
 
-    # Create set of (start, end) ranges for fast lookup.
-    # Convert to a sorted list for efficient checking.
+    # 创建 (start, end) 范围集合以便快速查找。
+    # 转换为排序列表以便高效检查。
     frame_ranges = sorted(episodes_to_keep)
 
-    # Track frame index for setting PTS and current range being processed.
+    # 跟踪用于设置 PTS 的帧索引以及当前正在处理的范围。
     src_frame_count = 0
     frame_count = 0
     range_idx = 0
 
-    # Read through entire video once and filter frames.
+    # 一次性读取整个视频并过滤帧。
     for packet in in_container.demux(v_in):
         for frame in packet.decode():
             if frame is None:
                 continue
 
-            # Check if frame is in any of our desired frame ranges.
-            # Skip ranges that have already passed.
+            # 检查帧是否位于我们期望的帧范围内。
+            # 跳过已经经过的范围。
             while range_idx < len(frame_ranges) and src_frame_count >= frame_ranges[range_idx][1]:
                 range_idx += 1
 
-            # If we've passed all ranges, stop processing.
+            # 如果已经经过所有范围，停止处理。
             if range_idx >= len(frame_ranges):
                 break
 
-            # Check if frame is in current range.
+            # 检查帧是否位于当前范围内。
             start_frame = frame_ranges[range_idx][0]
 
             if src_frame_count < start_frame:
                 src_frame_count += 1
                 continue
 
-            # Frame is in range - create a new frame with reset timestamps.
-            # We need to create a copy to avoid modifying the original.
+            # 帧位于范围内——创建一个重置了时间戳的新帧。
+            # 我们需要创建一个副本以避免修改原始帧。
             new_frame = frame.reformat(width=v_out.width, height=v_out.height, format=v_out.pix_fmt)
             new_frame.pts = frame_count
             new_frame.time_base = Fraction(1, int(fps))
 
-            # Encode and mux the frame.
+            # 编码并复用（mux）该帧。
             for pkt in v_out.encode(new_frame):
                 out.mux(pkt)
 
             src_frame_count += 1
             frame_count += 1
 
-    # Flush encoder.
+    # 刷新编码器。
     for pkt in v_out.encode():
         out.mux(pkt)
 
@@ -743,21 +742,20 @@ def _copy_and_reindex_videos(
     dst_meta: LeRobotDatasetMetadata,
     episode_mapping: dict[int, int],
 ) -> dict[int, dict]:
-    """Copy and filter video files, only re-encoding files with deleted episodes.
+    """复制并过滤视频文件，仅重新编码包含被删除 episode 的文件。
 
-    For video files that only contain kept episodes, we copy them directly.
-    For files with mixed kept/deleted episodes, we use PyAV filters to efficiently
-    re-encode only the desired segments. The encoder used for re-encoding is
-    derived per video key from the source dataset's ``meta/info.json`` so the
-    destination metadata keeps describing the videos accurately.
+    对于仅包含保留 episode 的视频文件，我们直接复制。
+    对于混合了保留/删除 episode 的文件，我们使用 PyAV 滤镜高效地
+    仅重新编码所需的片段。用于重新编码的编码器按视频键从源数据集的
+    ``meta/info.json`` 推导而来，从而使目标元数据继续准确地描述视频。
 
     Args:
-        src_dataset: Source dataset to copy from
-        dst_meta: Destination metadata object
-        episode_mapping: Mapping from old episode indices to new indices
+        src_dataset: 要复制的源数据集
+        dst_meta: 目标元数据对象
+        episode_mapping: 从旧 episode 索引到新索引的映射
 
     Returns:
-        dict mapping episode index to its video metadata (chunk_index, file_index, timestamps)
+        将 episode 索引映射到其视频元数据（chunk_index、file_index、时间戳）的字典
     """
     if src_dataset.meta.episodes is None:
         src_dataset.meta.episodes = load_episodes(src_dataset.meta.root)
@@ -819,7 +817,7 @@ def _copy_and_reindex_videos(
                         f"videos/{video_key}/to_timestamp"
                     ]
             else:
-                # Build list of frame ranges to keep, in sorted order.
+                # 按排序顺序构建要保留的帧范围列表。
                 sorted_keep_episodes = sorted(episodes_in_file, key=lambda x: episode_mapping[x])
                 episodes_to_keep_ranges: list[tuple[int, int]] = []
                 for old_idx in sorted_keep_episodes:
@@ -831,7 +829,7 @@ def _copy_and_reindex_videos(
                     )
                     episodes_to_keep_ranges.append((from_frame, to_frame))
 
-                # Use PyAV filters to efficiently re-encode only the desired segments.
+                # 使用 PyAV 滤镜高效地仅重新编码所需的片段。
                 assert src_dataset.meta.video_path is not None
                 src_video_path = src_dataset.root / src_dataset.meta.video_path.format(
                     video_key=video_key, chunk_index=src_chunk_idx, file_index=src_file_idx
@@ -879,14 +877,14 @@ def _copy_and_reindex_episodes_metadata(
     data_metadata: dict[int, dict],
     video_metadata: dict[int, dict] | None = None,
 ) -> None:
-    """Copy and reindex episodes metadata using provided data and video metadata.
+    """使用提供的数据和视频元数据复制并重新索引 episode 元数据。
 
     Args:
-        src_dataset: Source dataset to copy from
-        dst_meta: Destination metadata object
-        episode_mapping: Mapping from old episode indices to new indices
-        data_metadata: Dict mapping new episode index to its data file metadata
-        video_metadata: Optional dict mapping new episode index to its video metadata
+        src_dataset: 要复制的源数据集
+        dst_meta: 目标元数据对象
+        episode_mapping: 从旧 episode 索引到新索引的映射
+        data_metadata: 将新 episode 索引映射到其数据文件元数据的字典
+        video_metadata: 可选字典，将新 episode 索引映射到其视频元数据
     """
     if src_dataset.meta.episodes is None:
         src_dataset.meta.episodes = load_episodes(src_dataset.meta.root)
@@ -906,12 +904,12 @@ def _copy_and_reindex_episodes_metadata(
         if video_metadata and new_idx in video_metadata:
             episode_meta.update(video_metadata[new_idx])
 
-        # Extract episode statistics from parquet metadata.
-        # When pandas/pyarrow serializes numpy arrays with shape (C, 1, 1) to parquet,
-        # they are being deserialized as nested object arrays like:
+        # 从 parquet 元数据中提取 episode 统计信息。
+        # 当 pandas/pyarrow 将形状为 (C, 1, 1) 的 numpy 数组序列化到 parquet 时，
+        # 它们会被反序列化为嵌套的对象数组，例如：
         #   array([array([array([0.])]), array([array([0.])]), array([array([0.])])])
-        # This happens particularly with image/video statistics. We need to detect and flatten
-        # these nested structures back to proper (C, 1, 1) arrays so aggregate_stats can process them.
+        # 这种情况尤其出现在图像/视频统计信息中。我们需要检测这些嵌套结构
+        # 并将其展平回正确的 (C, 1, 1) 数组，以便 aggregate_stats 能处理它们。
         episode_stats = {}
         for key in src_episode_full:
             if key.startswith("stats/"):
@@ -927,7 +925,7 @@ def _copy_and_reindex_episodes_metadata(
                     if feature_name in src_dataset.meta.features:
                         feature_dtype = src_dataset.meta.features[feature_name]["dtype"]
                         if feature_dtype in ["image", "video"] and stat_name != "count":
-                            # Stats are channel-first (C, 1, 1)
+                            # 统计信息是通道优先的 (C, 1, 1)
                             if isinstance(value, np.ndarray) and value.dtype == object:
                                 flat_values = []
                                 for item in value:
@@ -972,9 +970,9 @@ def _copy_and_reindex_episodes_metadata(
 
 
 def _write_parquet(df: pd.DataFrame, path: Path, meta: LeRobotDatasetMetadata) -> None:
-    """Write DataFrame to parquet
+    """将 DataFrame 写入 parquet
 
-    This ensures images are properly embedded and the file can be loaded correctly by HF datasets.
+    这可确保图像被正确嵌入，并且文件能被 HF datasets 正确加载。
     """
     from .feature_utils import get_hf_features_from_features
     from .io_utils import embed_images
@@ -997,11 +995,11 @@ def _save_data_chunk(
     chunk_idx: int = 0,
     file_idx: int = 0,
 ) -> tuple[int, int, dict[int, dict]]:
-    """Save a data chunk and return updated indices and episode metadata.
+    """保存数据块并返回更新后的索引和 episode 元数据。
 
     Returns:
         tuple: (next_chunk_idx, next_file_idx, episode_metadata_dict)
-            where episode_metadata_dict maps episode_index to its data file metadata
+            其中 episode_metadata_dict 将 episode_index 映射到其数据文件元数据
     """
     path = meta.root / DEFAULT_DATA_PATH.format(chunk_index=chunk_idx, file_index=file_idx)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1031,7 +1029,7 @@ def _copy_data_with_feature_changes(
     add_features: dict[str, tuple] | None = None,
     remove_features: list[str] | None = None,
 ) -> None:
-    """Copy data while adding or removing features."""
+    """在添加或移除特征的同时复制数据。"""
     data_dir = dataset.root / DATA_DIR
     parquet_files = sorted(data_dir.glob("*/*.parquet"))
 
@@ -1076,7 +1074,7 @@ def _copy_data_with_feature_changes(
                         df[feature_name] = list(feature_slice)
             frame_idx = end_idx
 
-        # Write using the same chunk/file structure as source
+        # 使用与源相同的块/文件结构写入
         dst_path = new_meta.root / DEFAULT_DATA_PATH.format(chunk_index=chunk_idx, file_index=file_idx)
         dst_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1090,7 +1088,7 @@ def _copy_videos(
     dst_meta: LeRobotDatasetMetadata,
     exclude_keys: list[str] | None = None,
 ) -> None:
-    """Copy video files, optionally excluding certain keys."""
+    """复制视频文件，可选择排除某些键。"""
     if exclude_keys is None:
         exclude_keys = []
 
@@ -1115,7 +1113,7 @@ def _copy_episodes_metadata_and_stats(
     src_dataset: LeRobotDataset,
     dst_meta: LeRobotDatasetMetadata,
 ) -> None:
-    """Copy episodes metadata and recalculate stats."""
+    """复制 episode 元数据并重新计算统计信息。"""
     if src_dataset.meta.tasks is not None:
         write_tasks(src_dataset.meta.tasks, dst_meta.root)
         dst_meta.tasks = src_dataset.meta.tasks.copy()
@@ -1128,7 +1126,7 @@ def _copy_episodes_metadata_and_stats(
     dst_meta.info.total_episodes = src_dataset.meta.total_episodes
     dst_meta.info.total_frames = src_dataset.meta.total_frames
     dst_meta.info.total_tasks = src_dataset.meta.total_tasks
-    # Preserve original splits if available, otherwise create default
+    # 如果可用则保留原始划分，否则创建默认划分
     dst_meta.info.splits = (
         src_dataset.meta.info.splits
         if src_dataset.meta.info.splits
@@ -1164,35 +1162,35 @@ def _save_episode_images_for_video(
     episode_index: int,
     num_workers: int = 4,
 ) -> None:
-    """Save images from a specific episode and camera to disk for video encoding.
+    """将特定 episode 和相机的图像保存到磁盘，用于视频编码。
 
     Args:
-        dataset: The LeRobot dataset to extract images from
-        imgs_dir: Directory to save images to
-        img_key: The image key (camera) to extract
-        episode_index: Index of the episode to save
-        num_workers: Number of threads for parallel image saving
+        dataset: 要从中提取图像的 LeRobot 数据集
+        imgs_dir: 保存图像的目录
+        img_key: 要提取的图像键（相机）
+        episode_index: 要保存的 episode 索引
+        num_workers: 并行保存图像的线程数
     """
-    # Create directory
+    # 创建目录
     imgs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get dataset without torch format for PIL image access
+    # 获取不带 torch 格式的数据集以便访问 PIL 图像
     hf_dataset = dataset.hf_dataset.with_format(None)
 
-    # Select only this camera's images
+    # 仅选择此相机的图像
     imgs_dataset = hf_dataset.select_columns(img_key)
 
-    # Get episode start and end indices
+    # 获取 episode 的起始和结束索引
     from_idx = dataset.meta.episodes["dataset_from_index"][episode_index]
     to_idx = dataset.meta.episodes["dataset_to_index"][episode_index]
 
-    # Get all items for this episode
+    # 获取此 episode 的所有条目
     episode_dataset = imgs_dataset.select(range(from_idx, to_idx))
 
     is_depth = img_key in dataset.meta.depth_keys
     frame_pattern = DEPTH_FILE_PATTERN if is_depth else IMAGE_FILE_PATTERN
 
-    # Define function to save a single image
+    # 定义保存单张图像的函数
     def save_single_image(i_item_tuple):
         i, item = i_item_tuple
         write_image(item[img_key], imgs_dir / frame_pattern.format(frame_index=i))
@@ -1203,7 +1201,7 @@ def _save_episode_images_for_video(
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(save_single_image, item) for item in items]
         for future in as_completed(futures):
-            future.result()  # This will raise any exceptions that occurred
+            future.result()  # 这将抛出已发生的任何异常
 
 
 def _save_batch_episodes_images(
@@ -1213,17 +1211,17 @@ def _save_batch_episodes_images(
     episode_indices: list[int],
     num_workers: int = 4,
 ) -> list[float]:
-    """Save images from multiple episodes to disk for batch video encoding.
+    """将多个 episode 的图像保存到磁盘，用于批量视频编码。
 
     Args:
-        dataset: The LeRobot dataset to extract images from
-        imgs_dir: Directory to save images to
-        img_key: The image key (camera) to extract
-        episode_indices: List of episode indices to save
-        num_workers: Number of threads for parallel image saving
+        dataset: 要从中提取图像的 LeRobot 数据集
+        imgs_dir: 保存图像的目录
+        img_key: 要提取的图像键（相机）
+        episode_indices: 要保存的 episode 索引列表
+        num_workers: 并行保存图像的线程数
 
     Returns:
-        List of episode durations in seconds
+        以秒为单位的 episode 时长列表
     """
     imgs_dir.mkdir(parents=True, exist_ok=True)
     hf_dataset = dataset.hf_dataset.with_format(None)
@@ -1232,8 +1230,8 @@ def _save_batch_episodes_images(
     is_depth = img_key in dataset.meta.depth_keys
     frame_pattern = DEPTH_FILE_PATTERN if is_depth else IMAGE_FILE_PATTERN
 
-    # Define function to save a single image with global frame index
-    # Defined once outside the loop to avoid repeated closure creation
+    # 定义使用全局帧索引保存单张图像的函数
+    # 在循环外只定义一次，避免重复创建闭包
     def save_single_image(i_item_tuple, base_frame_idx, img_key_param):
         i, item = i_item_tuple
         write_image(item[img_key_param], imgs_dir / frame_pattern.format(frame_index=base_frame_idx + i))
@@ -1243,16 +1241,16 @@ def _save_batch_episodes_images(
     frame_idx = 0
 
     for ep_idx in episode_indices:
-        # Get episode range
+        # 获取 episode 范围
         from_idx = dataset.meta.episodes["dataset_from_index"][ep_idx]
         to_idx = dataset.meta.episodes["dataset_to_index"][ep_idx]
         episode_length = to_idx - from_idx
         episode_durations.append(episode_length / dataset.fps)
 
-        # Get episode images
+        # 获取 episode 图像
         episode_dataset = imgs_dataset.select(range(from_idx, to_idx))
 
-        # Save images
+        # 保存图像
         items = list(enumerate(episode_dataset))
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = [executor.submit(save_single_image, item, frame_idx, img_key) for item in items]
@@ -1272,23 +1270,23 @@ def _iter_episode_batches(
     max_episodes: int | None,
     max_frames: int | None,
 ):
-    """Generator that yields batches of episode indices for video encoding.
+    """生成用于视频编码的 episode 索引批次的生成器。
 
-    Groups episodes into batches that respect size and memory constraints:
-    - Stays under video file size limit
-    - Respects maximum episodes per batch (if specified)
-    - Respects maximum frames per batch (if specified)
+    将 episode 分组为满足大小和内存约束的批次：
+    - 保持在视频文件大小限制之下
+    - 遵守每批最大 episode 数（如果指定）
+    - 遵守每批最大帧数（如果指定）
 
     Args:
-        episode_indices: List of episode indices to batch
-        episode_lengths: Dictionary mapping episode index to episode length
-        size_per_frame_mb: Estimated size per frame in MB
-        video_file_size_limit: Maximum video file size in MB
-        max_episodes: Maximum number of episodes per batch (None = no limit)
-        max_frames: Maximum number of frames per batch (None = no limit)
+        episode_indices: 要分批的 episode 索引列表
+        episode_lengths: 将 episode 索引映射到 episode 长度的字典
+        size_per_frame_mb: 每帧的估计大小（MB）
+        video_file_size_limit: 最大视频文件大小（MB）
+        max_episodes: 每批最大 episode 数（None = 无限制）
+        max_frames: 每批最大帧数（None = 无限制）
 
     Yields:
-        List of episode indices for each batch
+        每批的 episode 索引列表
     """
     batch_episodes = []
     estimated_size = 0.0
@@ -1298,25 +1296,25 @@ def _iter_episode_batches(
         ep_length = episode_lengths[ep_idx]
         ep_estimated_size = ep_length * size_per_frame_mb
 
-        # we check if adding this episode would exceed any constraint
+        # 检查添加此 episode 是否会超出任何约束
         would_exceed_size = estimated_size > 0 and estimated_size + ep_estimated_size >= video_file_size_limit
         would_exceed_episodes = max_episodes is not None and len(batch_episodes) >= max_episodes
         would_exceed_frames = max_frames is not None and total_frames + ep_length > max_frames
 
         if batch_episodes and (would_exceed_size or would_exceed_episodes or would_exceed_frames):
-            # yield current batch before adding this episode
+            # 在添加此 episode 之前先产出当前批次
             yield batch_episodes
-            # start a new batch with current episode
+            # 以当前 episode 开始新批次
             batch_episodes = [ep_idx]
             estimated_size = ep_estimated_size
             total_frames = ep_length
         else:
-            # add to current batch
+            # 添加到当前批次
             batch_episodes.append(ep_idx)
             estimated_size += ep_estimated_size
             total_frames += ep_length
 
-    # yield final batch if not empty
+    # 如果最后一个批次非空则产出
     if batch_episodes:
         yield batch_episodes
 
@@ -1330,49 +1328,49 @@ def _estimate_frame_size_via_calibration(
     video_encoder: VideoEncoderConfig,
     num_calibration_frames: int = 30,
 ) -> float:
-    """Estimate MB per frame by encoding a small calibration sample.
+    """通过编码一个小的校准样本来估计每帧的 MB 数。
 
-    Encodes a representative sample of frames using the exact codec parameters
-    to measure actual compression ratio, which is more accurate than heuristics.
+    使用精确的编解码器参数编码具有代表性的帧样本，以测量实际压缩率，
+    这比启发式方法更准确。
 
     Args:
-        dataset: Source dataset with images.
-        img_key: Image key to calibrate (e.g., "observation.images.top").
-        episode_indices: List of episode indices being processed.
-        temp_dir: Temporary directory for calibration files.
-        fps: Frames per second for video encoding.
-        video_encoder: Video encoder settings used for calibration encoding.
-        num_calibration_frames: Number of frames to use for calibration (default: 30).
+        dataset: 包含图像的源数据集。
+        img_key: 要校准的图像键（例如 "observation.images.top"）。
+        episode_indices: 正在处理的 episode 索引列表。
+        temp_dir: 校准文件的临时目录。
+        fps: 视频编码的每秒帧数。
+        video_encoder: 用于校准编码的视频编码器设置。
+        num_calibration_frames: 用于校准的帧数（默认：30）。
 
     Returns:
-        Estimated size in MB per frame based on actual encoding.
+        基于实际编码的每帧估计大小（MB）。
     """
     calibration_dir = temp_dir / "calibration" / img_key
     calibration_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Select a representative episode (prefer middle episode if available)
+        # 选择一个有代表性的 episode（如果可能，优先选择中间的 episode）
         calibration_ep_idx = episode_indices[len(episode_indices) // 2]
 
-        # Get episode range
+        # 获取 episode 范围
         from_idx = dataset.meta.episodes["dataset_from_index"][calibration_ep_idx]
         to_idx = dataset.meta.episodes["dataset_to_index"][calibration_ep_idx]
         episode_length = to_idx - from_idx
 
-        # Use up to num_calibration_frames from this episode
+        # 从此 episode 中最多使用 num_calibration_frames 帧
         num_frames = min(num_calibration_frames, episode_length)
 
-        # Get frames from dataset
+        # 从数据集获取帧
         hf_dataset = dataset.hf_dataset.with_format(None)
         sample_indices = range(from_idx, from_idx + num_frames)
 
-        # Save calibration frames using the suffix/format the encoder expects.
+        # 使用编码器期望的后缀/格式保存校准帧。
         is_depth = img_key in dataset.meta.depth_keys
         frame_pattern = DEPTH_FILE_PATTERN if is_depth else IMAGE_FILE_PATTERN
         for i, idx in enumerate(sample_indices):
             write_image(hf_dataset[idx][img_key], calibration_dir / frame_pattern.format(frame_index=i))
 
-        # Encode calibration video
+        # 编码校准视频
         calibration_video_path = calibration_dir / "calibration.mp4"
         encode_video_frames(
             imgs_dir=calibration_dir,
@@ -1382,7 +1380,7 @@ def _estimate_frame_size_via_calibration(
             overwrite=True,
         )
 
-        # Measure actual compressed size
+        # 测量实际压缩后的大小
         video_size_bytes = calibration_video_path.stat().st_size
         video_size_mb = video_size_bytes / BYTES_PER_MIB
         size_per_frame_mb = video_size_mb / num_frames
@@ -1395,7 +1393,7 @@ def _estimate_frame_size_via_calibration(
         return size_per_frame_mb
 
     finally:
-        # Clean up calibration files
+        # 清理校准文件
         if calibration_dir.exists():
             shutil.rmtree(calibration_dir)
 
@@ -1406,13 +1404,13 @@ def _copy_data_without_images(
     episode_indices: list[int],
     img_keys: list[str],
 ) -> None:
-    """Copy data files without image columns.
+    """复制不含图像列的数据文件。
 
     Args:
-        src_dataset: Source dataset
-        dst_meta: Destination metadata
-        episode_indices: Episodes to include
-        img_keys: Image keys to remove
+        src_dataset: 源数据集
+        dst_meta: 目标元数据
+        episode_indices: 要包含的 episode
+        img_keys: 要移除的图像键
     """
     from .utils import DATA_DIR
 
@@ -1427,31 +1425,31 @@ def _copy_data_without_images(
     for src_path in tqdm(parquet_files, desc="Processing data files"):
         df = pd.read_parquet(src_path).reset_index(drop=True)
 
-        # Filter to only include selected episodes
+        # 过滤以仅包含所选的 episode
         df = df[df["episode_index"].isin(episode_set)].copy()
 
         if len(df) == 0:
             continue
 
-        # Remove image columns
+        # 移除图像列
         columns_to_drop = [col for col in img_keys if col in df.columns]
         if columns_to_drop:
             df = df.drop(columns=columns_to_drop)
 
-        # Get chunk and file indices from path
+        # 从路径获取块和文件索引
         relative_path = src_path.relative_to(src_dataset.root)
         chunk_dir = relative_path.parts[1]
         file_name = relative_path.parts[2]
         chunk_idx = int(chunk_dir.split("-")[1])
         file_idx = int(file_name.split("-")[1].split(".")[0])
 
-        # Write to destination without pandas index
+        # 写入目标，不带 pandas 索引
         dst_path = dst_meta.root / f"data/chunk-{chunk_idx:03d}/file-{file_idx:03d}.parquet"
         dst_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(dst_path, index=False)
 
 
-# Video conversion constants
+# 视频转换常量
 BYTES_PER_KIB = 1024
 BYTES_PER_MIB = BYTES_PER_KIB * BYTES_PER_KIB
 
@@ -1462,52 +1460,52 @@ def modify_tasks(
     episode_tasks: dict[int, str] | None = None,
     task_replacements: dict[str, str] | None = None,
 ) -> LeRobotDataset:
-    """Modify tasks in a LeRobotDataset.
+    """修改 LeRobotDataset 中的任务。
 
-    This function allows you to either:
-    1. Set a single task for the entire dataset (using `new_task`)
-    2. Set specific tasks for specific episodes (using `episode_tasks`)
-    3. Replace existing task strings wherever they appear (using `task_replacements`)
+    此函数允许你：
+    1. 为整个数据集设置单个任务（使用 `new_task`）
+    2. 为特定 episode 设置特定任务（使用 `episode_tasks`）
+    3. 替换现有任务字符串（无论它们出现在哪里）（使用 `task_replacements`）
 
-    Per episode, the task is resolved with precedence:
-    `episode_tasks` > `task_replacements` > `new_task` > original task. An episode that ends
-    up with no task (none of the above apply and it had no original task) raises an error.
+    对每个 episode，任务按以下优先级解析：
+    `episode_tasks` > `task_replacements` > `new_task` > 原始任务。如果某个
+    episode 最终没有任务（以上均不适用且它没有原始任务），则抛出错误。
 
-    The dataset is modified in-place, updating only the task-related files:
+    数据集会被原地修改，仅更新与任务相关的文件：
     - meta/tasks.parquet
-    - data/**/*.parquet (task_index column)
-    - meta/episodes/**/*.parquet (tasks column)
-    - meta/info.json (total_tasks)
+    - data/**/*.parquet（task_index 列）
+    - meta/episodes/**/*.parquet（tasks 列）
+    - meta/info.json（total_tasks）
 
     Args:
-        dataset: The source LeRobotDataset to modify.
-        new_task: Default task applied to any episode not covered by `episode_tasks` or a
-            matching `task_replacements` entry.
-        episode_tasks: Optional dict mapping episode indices to task strings. Takes precedence
-            over both `task_replacements` and `new_task`.
-        task_replacements: Optional dict mapping existing task strings to new ones. Applied to
-            episodes whose current task matches a key. Every key must be an existing task.
+        dataset: 要修改的源 LeRobotDataset。
+        new_task: 应用于任何未被 `episode_tasks` 或匹配的 `task_replacements`
+            条目覆盖的 episode 的默认任务。
+        episode_tasks: 可选字典，将 episode 索引映射到任务字符串。优先级高于
+            `task_replacements` 和 `new_task`。
+        task_replacements: 可选字典，将现有任务字符串映射到新任务。应用于当前
+            任务与键匹配的 episode。每个键都必须是已存在的任务。
 
-    At least one of `new_task`, `episode_tasks`, or `task_replacements` must be provided.
+    必须至少提供 `new_task`、`episode_tasks` 或 `task_replacements` 之一。
 
     Examples:
-        Set a single task for all episodes:
+        为所有 episode 设置单个任务：
             dataset = modify_tasks(dataset, new_task="Pick up the cube")
 
-        Set different tasks for specific episodes:
+        为特定 episode 设置不同任务：
             dataset = modify_tasks(
                 dataset,
                 episode_tasks={0: "Task A", 1: "Task B", 2: "Task A"}
             )
 
-        Set a default task with overrides:
+        设置带覆盖的默认任务：
             dataset = modify_tasks(
                 dataset,
                 new_task="Default task",
                 episode_tasks={5: "Special task for episode 5"}
             )
 
-        Replace existing task strings in-place:
+        原地替换现有任务字符串：
             dataset = modify_tasks(
                 dataset,
                 task_replacements={"Pick up the cube": "Lift the cube"}
@@ -1522,7 +1520,7 @@ def modify_tasks(
         if invalid:
             raise ValueError(f"Invalid episode indices: {invalid}")
 
-    # Ensure episodes metadata is loaded
+    # 确保已加载 episode 元数据
     if dataset.meta.episodes is None:
         dataset.meta.episodes = load_episodes(dataset.root)
 
@@ -1532,7 +1530,7 @@ def modify_tasks(
         if invalid_tasks:
             raise ValueError(f"Task replacements reference unknown tasks: {sorted(invalid_tasks)}")
 
-    # Build the mapping from episode index to task string
+    # 构建从 episode 索引到任务字符串的映射
     episode_to_task: dict[int, str] = {}
     for ep_idx in range(dataset.meta.total_episodes):
         original_tasks = dataset.meta.episodes[ep_idx]["tasks"]
@@ -1545,12 +1543,12 @@ def modify_tasks(
         elif new_task:
             episode_to_task[ep_idx] = new_task
         elif original_task:
-            # Keep original task if not overridden and no default provided
+            # 如果未被覆盖且未提供默认任务，则保留原始任务
             episode_to_task[ep_idx] = original_task
         else:
             raise ValueError(f"Episode {ep_idx} has no task; provide new_task or episode_tasks")
 
-    # Collect all unique tasks and create new task mapping
+    # 收集所有唯一任务并创建新的任务映射
     unique_tasks = sorted(set(episode_to_task.values()))
     new_task_df = pd.DataFrame(
         {"task_index": list(range(len(unique_tasks)))}, index=pd.Index(unique_tasks, name="task")
@@ -1562,42 +1560,42 @@ def modify_tasks(
 
     root = dataset.root
 
-    # Update data files - modify task_index column
+    # 更新数据文件——修改 task_index 列
     logging.info("Updating data files...")
     data_dir = root / DATA_DIR
 
     for parquet_path in tqdm(sorted(data_dir.rglob("*.parquet")), desc="Updating data"):
         df = pd.read_parquet(parquet_path)
 
-        # Build a mapping from episode_index to new task_index for rows in this file
+        # 为此文件中的行构建从 episode_index 到新 task_index 的映射
         episode_indices_in_file = df["episode_index"].unique()
         ep_to_new_task_idx = {
             ep_idx: task_to_index[episode_to_task[ep_idx]] for ep_idx in episode_indices_in_file
         }
 
-        # Update task_index column
+        # 更新 task_index 列
         df["task_index"] = df["episode_index"].map(ep_to_new_task_idx)
         df.to_parquet(parquet_path, index=False)
 
-    # Update episodes metadata - modify tasks column
+    # 更新 episode 元数据——修改 tasks 列
     logging.info("Updating episodes metadata...")
     episodes_dir = root / "meta" / "episodes"
 
     for parquet_path in tqdm(sorted(episodes_dir.rglob("*.parquet")), desc="Updating episodes"):
         df = pd.read_parquet(parquet_path)
 
-        # Update tasks column
+        # 更新 tasks 列
         df["tasks"] = df["episode_index"].apply(lambda ep_idx: [episode_to_task[ep_idx]])
         df.to_parquet(parquet_path, index=False)
 
-    # Write new tasks.parquet
+    # 写入新的 tasks.parquet
     write_tasks(new_task_df, root)
 
-    # Update info.json
+    # 更新 info.json
     dataset.meta.info.total_tasks = len(unique_tasks)
     write_info(dataset.meta.info, root)
 
-    # Reload metadata to reflect changes
+    # 重新加载元数据以反映更改
     dataset.meta.tasks = new_task_df
     dataset.meta.episodes = load_episodes(root)
 
@@ -1614,25 +1612,24 @@ def recompute_stats(
     chunk_size: int = 50,
     num_workers: int = 0,
 ) -> LeRobotDataset:
-    """Recompute stats.json from scratch by iterating all episodes.
+    """通过遍历所有 episode 从头重新计算 stats.json。
 
     Args:
-        dataset: The LeRobotDataset to recompute stats for.
-        skip_image_video: If True (default), only recompute stats for numeric features
-            (action, state, etc.) and keep existing image/video stats unchanged.
-        relative_action: If True, compute action stats in relative space by
-            iterating all valid action chunks and subtracting the current state.
-            This matches the normalization distribution the model sees during
-            training with ``use_relative_actions=True``.
-        relative_exclude_joints: Joint names to exclude from relative conversion when
-            relative_action=True. These dims keep absolute stats.
-        chunk_size: Action chunk size used for relative stats computation. Should match
-            ``policy.chunk_size``. Only used when ``relative_action=True``.
-        num_workers: Number of parallel threads for relative action stats computation.
-            Values ≤1 mean single-threaded. Only used when ``relative_action=True``.
+        dataset: 要重新计算统计信息的 LeRobotDataset。
+        skip_image_video: 如果为 True（默认），仅重新计算数值特征
+            （action、state 等）的统计信息，并保持现有的图像/视频统计信息不变。
+        relative_action: 如果为 True，通过遍历所有有效的动作块并减去
+            当前状态，在相对空间中计算动作统计信息。这与模型在
+            ``use_relative_actions=True`` 训练期间看到的归一化分布一致。
+        relative_exclude_joints: 当 relative_action=True 时，要从相对转换中
+            排除的关节名称。这些维度保留绝对统计信息。
+        chunk_size: 用于相对统计信息计算的动作块大小。应与
+            ``policy.chunk_size`` 匹配。仅在 ``relative_action=True`` 时使用。
+        num_workers: 用于相对动作统计信息计算的并行线程数。
+            值 ≤1 表示单线程。仅在 ``relative_action=True`` 时使用。
 
     Returns:
-        The same dataset with updated stats.
+        统计信息已更新的同一数据集。
     """
     features = dataset.meta.features
     meta_keys = {"index", "episode_index", "task_index", "frame_index", "timestamp"}
@@ -1649,9 +1646,9 @@ def recompute_stats(
             k: v for k, v in features.items() if v["dtype"] != "string" and k not in meta_keys
         }
 
-    # When relative_action is enabled, compute action stats via chunk-based sampling
-    # (matching what the model sees during training) and skip action in the
-    # per-episode pass below.
+    # 当启用 relative_action 时，通过基于块的采样计算动作统计信息
+    # （与模型在训练期间看到的一致），并在下面按 episode 的
+    # 遍历中跳过 action。
     relative_action_stats = None
     if relative_action and ACTION in features and OBS_STATE in features:
         if relative_exclude_joints is None:
@@ -1673,7 +1670,7 @@ def recompute_stats(
         raise ValueError(f"No parquet files found in {data_dir}")
 
     all_episode_stats = []
-    # TODO: enable image and video stats re-computation
+    # TODO: 启用图像和视频统计信息的重新计算
     numeric_keys = [k for k, v in features_to_compute.items() if v["dtype"] not in ["image", "video"]]
 
     for parquet_path in tqdm(parquet_files, desc="Computing stats from data files"):
@@ -1702,7 +1699,7 @@ def recompute_stats(
     if relative_action_stats is not None:
         new_stats[ACTION] = relative_action_stats
 
-    # Merge: keep existing stats for features we didn't recompute
+    # 合并：为未重新计算的特征保留现有统计信息
     if dataset.meta.stats:
         for key, value in dataset.meta.stats.items():
             if key not in new_stats:
@@ -1726,53 +1723,53 @@ def convert_image_to_video_dataset(
     max_episodes_per_batch: int | None = None,
     max_frames_per_batch: int | None = None,
 ) -> LeRobotDataset:
-    """Convert image-to-video dataset.
+    """转换图像到视频数据集。
 
-    Creates a new LeRobotDataset with images encoded as videos, following the proper
-    LeRobot dataset structure with videos stored in chunked MP4 files.
+    创建一个新的 LeRobotDataset，其中图像被编码为视频，遵循正确的
+    LeRobot 数据集结构，视频存储在分块的 MP4 文件中。
 
     Args:
-        dataset: The source LeRobot dataset with images.
-        output_dir: Root directory where the converted dataset will be stored. When
-            ``None``, defaults to ``$HF_LEROBOT_HOME/repo_id``. Equivalent to
-            ``new_root`` in ``EditDatasetConfig``.
-        repo_id: Converted dataset identifier. Equivalent to ``new_repo_id`` in
-            ``EditDatasetConfig``.
-        rgb_encoder: Video encoder settings applied to RGB cameras. When ``None``,
-            :func:`~lerobot.configs.video.rgb_encoder_defaults` is used.
-        depth_encoder: Video encoder settings applied to depth-map cameras, including
-            the quantization parameters persisted to the dataset metadata. When
-            ``None``, :func:`~lerobot.configs.video.depth_encoder_defaults` is used.
-        episode_indices: Episode indices to convert. When ``None``, all episodes are
-            converted.
-        num_workers: Number of threads for parallel processing.
-        max_episodes_per_batch: Maximum episodes per video batch, to bound memory use.
-            ``None`` means no limit.
-        max_frames_per_batch: Maximum frames per video batch, to bound memory use.
-            ``None`` means no limit.
+        dataset: 包含图像的源 LeRobot 数据集。
+        output_dir: 转换后数据集的存储根目录。为 ``None`` 时，默认为
+            ``$HF_LEROBOT_HOME/repo_id``。等同于 ``EditDatasetConfig`` 中的
+            ``new_root``。
+        repo_id: 转换后的数据集标识符。等同于 ``EditDatasetConfig`` 中的
+            ``new_repo_id``。
+        rgb_encoder: 应用于 RGB 相机的视频编码器设置。为 ``None`` 时，
+            使用 :func:`~lerobot.configs.video.rgb_encoder_defaults`。
+        depth_encoder: 应用于深度图相机的视频编码器设置，包括持久化到
+            数据集元数据的量化参数。为 ``None`` 时，使用
+            :func:`~lerobot.configs.video.depth_encoder_defaults`。
+        episode_indices: 要转换的 episode 索引。为 ``None`` 时，转换所有
+            episode。
+        num_workers: 并行处理的线程数。
+        max_episodes_per_batch: 每个视频批次的最大 episode 数，用于限制内存使用。
+            ``None`` 表示无限制。
+        max_frames_per_batch: 每个视频批次的最大帧数，用于限制内存使用。
+            ``None`` 表示无限制。
 
     Returns:
-        A new :class:`LeRobotDataset` with images encoded as videos.
+        图像已编码为视频的新 :class:`LeRobotDataset`。
     """
     if rgb_encoder is None:
         rgb_encoder = rgb_encoder_defaults()
     if depth_encoder is None:
         depth_encoder = depth_encoder_defaults()
 
-    # Check that it's an image dataset
+    # 检查这是一个图像数据集
     if len(dataset.meta.video_keys) > 0:
         raise ValueError(
             f"This operation is for image datasets only. Video dataset provided: {dataset.repo_id}"
         )
 
-    # Get all image keys
+    # 获取所有图像键
     hf_dataset = dataset.hf_dataset.with_format(None)
     img_keys = [key for key in hf_dataset.features if key.startswith(OBS_IMAGE)]
 
     if len(img_keys) == 0:
         raise ValueError(f"No image keys found in dataset {dataset.repo_id}")
 
-    # Determine which episodes to process
+    # 确定要处理哪些 episode
     if episode_indices is None:
         episode_indices = list(range(dataset.meta.total_episodes))
 
@@ -1784,18 +1781,18 @@ def convert_image_to_video_dataset(
     )
     logging.info(f"RGB video encoder: {rgb_encoder}, depth video encoder: {depth_encoder}")
 
-    # Create new features dict, converting image features to video features
+    # 创建新的特征字典，将图像特征转换为视频特征
     new_features = {}
     for key, value in dataset.meta.features.items():
         if key not in img_keys:
             new_features[key] = value
         else:
-            # Convert image key to video format
+            # 将图像键转换为视频格式
             new_features[key] = value.copy()
-            new_features[key]["dtype"] = "video"  # Change dtype from "image" to "video"
-            # Video info will be updated after episodes are encoded
+            new_features[key]["dtype"] = "video"  # 将 dtype 从 "image" 改为 "video"
+            # 视频信息将在 episode 编码完成后更新
 
-    # Create new metadata for video dataset
+    # 为视频数据集创建新的元数据
     output_dir = Path(output_dir) if output_dir is not None else HF_LEROBOT_HOME / repo_id
     new_meta = LeRobotDatasetMetadata.create(
         repo_id=repo_id,
@@ -1809,17 +1806,17 @@ def convert_image_to_video_dataset(
         video_files_size_in_mb=dataset.meta.video_files_size_in_mb,
     )
 
-    # Create temporary directory for image extraction
+    # 创建用于图像提取的临时目录
     temp_dir = output_dir / "temp_images"
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process all episodes and batch encode videos
-    # Use dictionary for O(1) episode metadata lookups instead of O(n) linear search
+    # 处理所有 episode 并批量编码视频
+    # 使用字典实现 O(1) 的 episode 元数据查找，而不是 O(n) 的线性搜索
     all_episode_metadata = {}
     fps = int(dataset.fps)
 
     try:
-        # Build episode metadata entries first
+        # 首先构建 episode 元数据条目
         logging.info("Building episode metadata...")
         cumulative_frame_idx = 0
         for ep_idx in episode_indices:
@@ -1837,17 +1834,17 @@ def convert_image_to_video_dataset(
             all_episode_metadata[ep_idx] = ep_meta
             cumulative_frame_idx += ep_length
 
-        # Process each camera and batch encode multiple episodes together
+        # 处理每个相机，并将多个 episode 一起批量编码
         video_file_size_limit = new_meta.video_files_size_in_mb
 
-        # Pre-compute episode lengths for batching
+        # 预先计算 episode 长度以便分批
         episode_lengths = {ep_idx: dataset.meta.episodes["length"][ep_idx] for ep_idx in episode_indices}
 
         for img_key in tqdm(img_keys, desc="Processing cameras"):
             target_encoder = depth_encoder if img_key in dataset.meta.depth_keys else rgb_encoder
 
-            # Estimate size per frame by encoding a small calibration sample
-            # This provides accurate compression ratio for the specific codec parameters
+            # 通过编码一个小的校准样本来估计每帧大小
+            # 这为特定的编解码器参数提供了准确的压缩率
             size_per_frame_mb = _estimate_frame_size_via_calibration(
                 dataset=dataset,
                 img_key=img_key,
@@ -1861,7 +1858,7 @@ def convert_image_to_video_dataset(
             chunk_idx, file_idx = 0, 0
             cumulative_timestamp = 0.0
 
-            # Process episodes in batches to stay under size limit
+            # 分批处理 episode 以保持在大小限制之下
             for batch_episodes in _iter_episode_batches(
                 episode_indices=episode_indices,
                 episode_lengths=episode_lengths,
@@ -1876,7 +1873,7 @@ def convert_image_to_video_dataset(
                     f"({batch_episodes[0]}-{batch_episodes[-1]}) = {total_frames_in_batch} frames"
                 )
 
-                # Save images for all episodes in this batch
+                # 保存此批次中所有 episode 的图像
                 imgs_dir = temp_dir / f"batch_{chunk_idx}_{file_idx}" / img_key
                 episode_durations = _save_batch_episodes_images(
                     dataset=dataset,
@@ -1886,7 +1883,7 @@ def convert_image_to_video_dataset(
                     num_workers=num_workers,
                 )
 
-                # Encode all batched episodes into single video
+                # 将批次中的所有 episode 编码为单个视频
                 video_path = new_meta.root / new_meta.video_path.format(
                     video_key=img_key, chunk_index=chunk_idx, file_index=file_idx
                 )
@@ -1900,52 +1897,52 @@ def convert_image_to_video_dataset(
                     overwrite=True,
                 )
 
-                # Clean up temporary images
+                # 清理临时图像
                 shutil.rmtree(imgs_dir)
 
-                # Update metadata for each episode in the batch
+                # 更新批次中每个 episode 的元数据
                 for ep_idx, duration in zip(batch_episodes, episode_durations, strict=True):
                     from_timestamp = cumulative_timestamp
                     to_timestamp = cumulative_timestamp + duration
                     cumulative_timestamp = to_timestamp
 
-                    # Find episode metadata entry and add video metadata (O(1) dictionary lookup)
+                    # 查找 episode 元数据条目并添加视频元数据（O(1) 字典查找）
                     ep_meta = all_episode_metadata[ep_idx]
                     ep_meta[f"videos/{img_key}/chunk_index"] = chunk_idx
                     ep_meta[f"videos/{img_key}/file_index"] = file_idx
                     ep_meta[f"videos/{img_key}/from_timestamp"] = from_timestamp
                     ep_meta[f"videos/{img_key}/to_timestamp"] = to_timestamp
 
-                # Move to next video file for next batch
+                # 为下一批次移动到下一个视频文件
                 chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, new_meta.chunks_size)
                 cumulative_timestamp = 0.0
 
-        # Copy and transform data files (removing image columns)
+        # 复制并转换数据文件（移除图像列）
         _copy_data_without_images(dataset, new_meta, episode_indices, img_keys)
 
-        # Save episode metadata
+        # 保存 episode 元数据
         episodes_df = pd.DataFrame(list(all_episode_metadata.values()))
         episodes_path = new_meta.root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
         episodes_df.to_parquet(episodes_path, index=False)
 
-        # Update metadata info
+        # 更新元数据信息
         new_meta.info.total_episodes = len(episode_indices)
         new_meta.info.total_frames = sum(ep["length"] for ep in all_episode_metadata.values())
         new_meta.info.total_tasks = dataset.meta.total_tasks
         new_meta.info.splits = {"train": f"0:{len(episode_indices)}"}
 
-        # Update video info for all image keys (now videos). They are registered as
-        # video features above, so update_video_info populates their (still-empty) info.
+        # 更新所有图像键（现在是视频）的视频信息。它们在上方已注册为
+        # 视频特征，因此 update_video_info 会填充它们（仍为空的）信息。
         for img_key in img_keys:
             target_encoder = depth_encoder if img_key in dataset.meta.depth_keys else rgb_encoder
             new_meta.update_video_info(video_key=img_key, video_encoder=target_encoder)
 
         write_info(new_meta.info, new_meta.root)
 
-        # Copy stats and tasks
+        # 复制统计信息和任务
         if dataset.meta.stats is not None:
-            # Remove image stats
+            # 移除图像统计信息
             new_stats = {k: v for k, v in dataset.meta.stats.items() if k not in img_keys}
             write_stats(new_stats, new_meta.root)
 
@@ -1953,19 +1950,19 @@ def convert_image_to_video_dataset(
             write_tasks(dataset.meta.tasks, new_meta.root)
 
     finally:
-        # Clean up temporary directory
+        # 清理临时目录
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
 
     logging.info(f"Completed converting {dataset.repo_id} to video format")
     logging.info(f"New dataset saved to: {output_dir}")
 
-    # Return new dataset
+    # 返回新数据集
     return LeRobotDataset(repo_id=repo_id, root=output_dir)
 
 
 def _reencode_video_worker(args: tuple) -> Path:
-    """Picklable worker for :func:`reencode_dataset`'s process pool."""
+    """:func:`reencode_dataset` 进程池的可 pickle 工作函数。"""
     video_path, video_encoder, encoder_threads = args
     reencode_video(
         input_video_path=video_path,
@@ -1984,27 +1981,26 @@ def reencode_dataset(
     encoder_threads: int | None = None,
     num_workers: int | None = None,
 ) -> LeRobotDataset:
-    """Re-encode every video in a dataset with a new set of encoding parameters.
+    """使用一组新的编码参数重新编码数据集中的每个视频。
 
-    Videos are re-encoded in-place and the video information in ``info.json`` is refreshed.
+    视频会被原地重新编码，并且 ``info.json`` 中的视频信息会被刷新。
 
     Args:
-        dataset: An existing :class:`LeRobotDataset` whose videos will be
-            re-encoded.
-        rgb_encoder: Target encoder configuration applied to every RGB video
-            file. If ``None``, re-encoding is skipped for RGB videos.
-        depth_encoder: Target encoder configuration applied to every depth video
-            file. If ``None``, re-encoding is skipped for depth videos.
-            Quantization parameters will not override the ones in the current dataset.
-        encoder_threads: Per-encoder thread count forwarded to
-            :func:`reencode_video`. ``None`` lets the codec decide.
-        num_workers: Number of parallel processes. ``None`` or ``0`` means
-            sequential (no multiprocessing); ``1+`` spawns a
-            :class:`~concurrent.futures.ProcessPoolExecutor`.
+        dataset: 一个现有的 :class:`LeRobotDataset`，其视频将被
+            重新编码。
+        rgb_encoder: 应用于每个 RGB 视频文件的目标编码器配置。
+            如果为 ``None``，则跳过 RGB 视频的重新编码。
+        depth_encoder: 应用于每个深度视频文件的目标编码器配置。
+            如果为 ``None``，则跳过深度视频的重新编码。
+            量化参数不会覆盖当前数据集中的参数。
+        encoder_threads: 转发给 :func:`reencode_video` 的每个编码器的
+            线程数。``None`` 表示由编解码器决定。
+        num_workers: 并行进程数。``None`` 或 ``0`` 表示顺序执行
+            （不使用多进程）；``1+`` 会启动一个
+            :class:`~concurrent.futures.ProcessPoolExecutor`。
 
     Returns:
-        The same :class:`LeRobotDataset` instance with its metadata updated
-        on disk.
+        元数据已在磁盘上更新的同一 :class:`LeRobotDataset` 实例。
     """
     meta = dataset.meta
     video_keys_encoders_dict = {}
@@ -2013,7 +2009,7 @@ def reencode_dataset(
     if rgb_encoder is None and depth_encoder is None:
         raise ValueError("Either rgb_encoder or depth_encoder must be provided")
 
-    # Only re-encode if the videos are not already encoded with the given video encoding parameters
+    # 仅当视频尚未使用给定的视频编码参数编码时才重新编码
     for video_key in meta.video_keys:
         current_info = meta.info.features[video_key].get("info", {})
         current_encoder = encoder_config_from_video_info(current_info)
@@ -2049,11 +2045,11 @@ def reencode_dataset(
         for args in tqdm(worker_args, desc="Re-encoding videos"):
             _reencode_video_worker(args)
 
-    # Refresh video info in metadata for every re-encoded key. Re-encoding only
-    # changes codec/container params, so for depth videos we preserve ``is_depth_map``
-    # and the depth quantization params (``video.depth_min`` / ``video.depth_max`` /
-    # ...), which describe the data rather than the codec and must survive a transcode.
-    # RGB videos pass an empty set: still a refresh, but nothing to preserve.
+    # 为每个重新编码的键刷新元数据中的视频信息。重新编码只改变
+    # 编解码器/容器参数，因此对于深度视频，我们保留 ``is_depth_map``
+    # 和深度量化参数（``video.depth_min`` / ``video.depth_max`` / ...），
+    # 它们描述的是数据而非编解码器，必须在转码后继续存在。
+    # RGB 视频传入空集合：仍然会刷新，但没有需要保留的内容。
     depth_preserve_keys = {"is_depth_map", *(f"video.{n}" for n in DEPTH_ENCODER_INFO_FIELD_NAMES)}
     for video_key, encoder in video_keys_encoders_dict.items():
         preserve_keys = depth_preserve_keys if video_key in meta.depth_keys else set()

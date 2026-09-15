@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 class SOFollower(Robot):
     """
-    Generic SO follower base implementing common functionality for SO-100/101/10X.
-    Designed to be subclassed with a per-hardware-model `config_class` and `name`.
+    实现 SO-100/101/10X 通用功能的泛型 SO follower 基类。
+    设计为通过针对每个硬件型号的 `config_class` 和 `name` 来派生子类。
     """
 
     config_class = SOFollowerRobotConfig
@@ -46,7 +46,7 @@ class SOFollower(Robot):
     def __init__(self, config: SOFollowerRobotConfig):
         super().__init__(config)
         self.config = config
-        # choose normalization mode depending on config if available
+        # 根据配置（如果可用）选择归一化模式
         norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
         self.bus = FeetechMotorsBus(
             port=self.config.port,
@@ -91,8 +91,8 @@ class SOFollower(Robot):
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """
-        We assume that at connection time, arm is in a rest position,
-        and torque can be safely disabled to run calibration.
+        我们假设在连接时手臂处于静止位置，
+        可以安全地禁用力矩以运行校准。
         """
 
         self.bus.connect()
@@ -114,7 +114,7 @@ class SOFollower(Robot):
 
     def calibrate(self) -> None:
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用它还是运行新的校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )
@@ -131,7 +131,7 @@ class SOFollower(Robot):
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
-        # Attempt to call record_ranges_of_motion with a reduced motor set when appropriate.
+        # 在适当时尝试使用缩减的电机集合调用 record_ranges_of_motion。
         full_turn_motor = "wrist_roll"
         unknown_range_motors = [motor for motor in self.bus.motors if motor != full_turn_motor]
         print(
@@ -166,9 +166,9 @@ class SOFollower(Robot):
                 self.bus.write("D_Coefficient", motor, self.config.position_d_coefficient)
 
                 if motor == "gripper":
-                    self.bus.write("Max_Torque_Limit", motor, 500)  # 50% of max torque to avoid burnout
-                    self.bus.write("Protection_Current", motor, 250)  # 50% of max current to avoid burnout
-                    self.bus.write("Overload_Torque", motor, 25)  # 25% torque when overloaded
+                    self.bus.write("Max_Torque_Limit", motor, 500)  # 最大扭矩的 50%，避免烧毁
+                    self.bus.write("Protection_Current", motor, 250)  # 最大电流的 50%，避免烧毁
+                    self.bus.write("Overload_Torque", motor, 25)  # 过载时扭矩为 25%
 
     def setup_motors(self) -> None:
         for motor in reversed(self.bus.motors):
@@ -178,14 +178,14 @@ class SOFollower(Robot):
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
-        # Read arm position
+        # 读取手臂位置
         start = time.perf_counter()
         obs_dict = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
@@ -203,29 +203,29 @@ class SOFollower(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Command arm to move to a target joint configuration.
+        """命令手臂移动到目标关节构型。
 
-        The relative action magnitude may be clipped depending on the configuration parameter
-        `max_relative_target`. In this case, the action sent differs from original action.
-        Thus, this function always returns the action actually sent.
+        相对动作的大小可能会根据配置参数 `max_relative_target` 被裁剪。
+        在这种情况下，发送的动作与原始动作不同。
+        因此，该函数始终返回实际发送的动作。
 
         Raises:
-            RobotDeviceNotConnectedError: if robot is not connected.
+            RobotDeviceNotConnectedError: 如果机器人未连接。
 
         Returns:
-            RobotAction: the action sent to the motors, potentially clipped.
+            RobotAction: 发送给电机的动作，可能经过裁剪。
         """
 
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
+        # 当目标位置与当前位置相距太远时对其进行限制。
+        # /!\ 由于需要从 follower 读取，预计帧率会变慢。
         if self.config.max_relative_target is not None:
             present_pos = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
             goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
             goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
 
-        # Send goal position to the arm
+        # 将目标位置发送给手臂
         self.bus.sync_write("Goal_Position", goal_pos)
         return {f"{motor}.pos": val for motor, val in goal_pos.items()}
 

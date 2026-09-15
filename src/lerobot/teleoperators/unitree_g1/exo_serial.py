@@ -45,7 +45,7 @@ def parse_raw16(line: bytes) -> list[int] | None:
 
 
 def read_raw_from_serial(ser) -> list[int] | None:
-    """Read latest sample from serial; if buffer is backed up, keep only the newest."""
+    """从串口读取最新样本；如果缓冲区积压，则只保留最新的一个。"""
     try:
         last = None
         while ser.in_waiting > 0:

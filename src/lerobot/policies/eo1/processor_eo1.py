@@ -46,7 +46,7 @@ if TYPE_CHECKING or _transformers_available:
 else:
     Qwen2_5_VLProcessor = None
 
-# EO-1 special tokens
+# EO-1 特殊 token
 ACTION_START_TOKEN = "<|action_start|>"  # nosec B105
 DEFAULT_ACTION_TOKEN = "<|action_pad|>"  # nosec B105
 ACTION_END_TOKEN = "<|action_end|>"  # nosec B105
@@ -69,7 +69,7 @@ EO1_SPECIAL_TOKENS = [
 @dataclass
 @ProcessorStepRegistry.register(name="eo1_conversation_template_processor")
 class EO1PrepareModelMessagesStep(ComplementaryDataProcessorStep):
-    """Prepare EO1 multimodal messages, state/action tokens, and aligned text targets."""
+    """准备 EO1 的多模态消息、状态/动作 token 以及对齐的文本目标。"""
 
     input_features: dict[str, PolicyFeature] | dict[str, dict[str, Any]]
     chunk_size: int
@@ -77,7 +77,7 @@ class EO1PrepareModelMessagesStep(ComplementaryDataProcessorStep):
     _image_keys: list[str] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self):
-        # Robust JSON deserialization handling (guard empty maps).
+        # 稳健的 JSON 反序列化处理（防御空映射）。
         if self.input_features:
             first_val = next(iter(self.input_features.values()))
             if isinstance(first_val, dict):
@@ -104,8 +104,8 @@ class EO1PrepareModelMessagesStep(ComplementaryDataProcessorStep):
         if OBS_STATE in observation and observation[OBS_STATE].shape[0] != len(tasks):
             raise ValueError("Batch size mismatch between observation.state and task list.")
 
-        # LeRobot visual observations reach in processor as float32 tensors in [0, 1].
-        # Convert to uint8 in [0, 255] to meet the input requirement of Qwen2.5-VL-3B-Instruct.
+        # LeRobot 的视觉观测到达处理器时是 [0, 1] 范围内的 float32 张量。
+        # 转换为 [0, 255] 的 uint8，以满足 Qwen2.5-VL-3B-Instruct 的输入要求。
         images = {
             key: observation[key].clamp(0, 1).mul(255.0).round().to(torch.uint8) for key in self._image_keys
         }
@@ -260,9 +260,9 @@ class EO1PrepareModelMessagesStep(ComplementaryDataProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        This step only materializes EO1-specific message objects in complementary_data.
-        PipelineFeatureType tracks only ACTION and OBSERVATION, so there is no static
-        feature contract change to record here.
+        该步骤仅在 complementary_data 中物化 EO1 特有的消息对象。
+        PipelineFeatureType 只跟踪 ACTION 和 OBSERVATION，因此这里没有
+        需要记录的静态特征契约变更。
         """
         return features
 
@@ -309,8 +309,8 @@ class EO1QwenProcessorStep(ComplementaryDataProcessorStep):
             target_message_indices and any(bool(indices) for indices in target_message_indices)
         )
 
-        # Rollout batches use left padding so action spans stay aligned across samples.
-        # Supervised batches use right padding to match standard training collation.
+        # 推演批次使用左填充，使动作区间在各样本之间保持对齐。
+        # 监督批次使用右填充，以匹配标准的训练拼接方式。
         padding_side = "right" if self.transition.get(TransitionKey.ACTION) is not None else "left"
 
         inputs = self._processor.apply_chat_template(
@@ -364,7 +364,7 @@ class EO1QwenProcessorStep(ComplementaryDataProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        This step only converts the messages to the model input format.
+        该步骤仅将消息转换为模型输入格式。
         """
         return features
 
@@ -376,7 +376,7 @@ def make_eo1_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Build pre/post processor pipelines for EO1."""
+    """为 EO1 构建预/后处理器流水线。"""
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
@@ -432,7 +432,7 @@ def _targeted_assistant_labels(
     state_token_id: int,
     action_token_id: int,
 ) -> torch.Tensor:
-    """Label only targeted assistant payloads and their closing ``<|im_end|>`` tokens."""
+    """仅对被指定为目标的助手消息内容及其结尾的 ``<|im_end|>`` token 打标签。"""
     labels = torch.full_like(input_ids, -100)
     for row, (row_messages, target_indices) in enumerate(zip(messages, target_message_indices, strict=True)):
         rendered = tokenizer.decode(input_ids[row], skip_special_tokens=False)

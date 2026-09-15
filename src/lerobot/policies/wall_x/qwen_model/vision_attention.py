@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wall-X vision attention backends.
+"""Wall-X 视觉注意力后端。
 
-Qwen2.5-VL's native non-Flash vision path splits a packed image sequence into
-Python-level chunks before calling attention. Wall-X batches many camera frames,
-so that path launches thousands of tiny attention operations per training step.
-This module keeps the native SDPA path as a portable fallback and adds a packed
-``torch.nn.attention.varlen`` path that consumes Qwen's existing ``cu_seqlens``
-metadata directly.
+Qwen2.5-VL 原生的非 Flash 视觉路径会在调用注意力之前，把 packed 的图像序列
+切分成 Python 层面的多个块。Wall-X 会批量处理许多相机帧，因此该路径在每个
+训练步都会启动数千个微小的注意力运算。本模块保留原生 SDPA 路径作为可移植的
+回退方案，并新增一条 packed 的 ``torch.nn.attention.varlen`` 路径，直接使用
+Qwen 已有的 ``cu_seqlens`` 元数据。
 """
 
 from __future__ import annotations
@@ -91,7 +90,7 @@ def _supports_varlen_attention(
 
 
 class WallXVisionAttention(Qwen2_5_VLVisionAttention):
-    """Qwen2.5-VL vision attention with packed varlen and native SDPA fallback."""
+    """Qwen2.5-VL 视觉注意力，带有 packed varlen 实现和原生 SDPA 回退。"""
 
     def __init__(self, config, backend: VisionAttentionBackend):
         super().__init__(config)
@@ -163,7 +162,7 @@ class WallXVisionAttention(Qwen2_5_VLVisionAttention):
         varlen_kwargs = {"scale": self.scaling}
         if _VARLEN_USES_WINDOW_SIZE:
             varlen_kwargs["window_size"] = (-1, -1)
-        else:  # Stable PyTorch 2.10 API; pre-release variants used window_size.
+        else:  # 稳定版 PyTorch 2.10 API；预发布版本使用的是 window_size。
             varlen_kwargs["is_causal"] = False
         attn_output = _varlen_attn(
             query_states,
@@ -183,7 +182,7 @@ def configure_wall_x_vision_attention(
     vision_model: nn.Module,
     backend: VisionAttentionBackend,
 ) -> None:
-    """Install Wall-X's scoped packed attention without changing checkpoint keys."""
+    """安装 Wall-X 作用域内的 packed 注意力，且不改变 checkpoint 键名。"""
     if backend == "sdpa":
         _log_resolved_backend(backend, "sdpa")
         return

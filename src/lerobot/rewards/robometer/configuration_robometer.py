@@ -30,12 +30,12 @@ else:
     AutoTokenizer = None  # type: ignore[assignment]
 
 
-# Special tokens Robometer adds to the Qwen-VL tokenizer at construction time.
-# The order is part of the data contract: upstream resized ``embed_tokens``
-# after adding these tokens in this exact order, so changing the set or order
-# would silently misalign the saved embedding rows with their token ids.
-# ``<|reward_token|>`` and ``<|sim_token|>`` are leftover from earlier upstream
-# heads (never read at inference) but still occupy rows the checkpoint expects.
+# Robometer 在构造时添加到 Qwen-VL tokenizer 中的特殊 token。
+# 顺序是数据契约的一部分：上游在按此确切顺序添加这些 token 之后
+# 调整了 ``embed_tokens`` 的大小，因此更改集合或顺序
+# 会导致保存的嵌入行与其 token id 悄然错位。
+# ``<|reward_token|>`` 和 ``<|sim_token|>`` 是早期上游头部的遗留物
+# （推理时从不读取），但仍占据检查点所期望的行。
 ROBOMETER_SPECIAL_TOKENS = (
     "<|split_token|>",
     "<|reward_token|>",
@@ -48,7 +48,7 @@ ROBOMETER_SPECIAL_TOKENS = (
 @RewardModelConfig.register_subclass("robometer")
 @dataclass
 class RobometerConfig(RewardModelConfig):
-    """Configuration for the Robometer reward model."""
+    """Robometer 奖励模型的配置。"""
 
     pretrained_path: str | None = "lerobot/Robometer-4B"
     image_key: str = OBS_IMAGES + ".top"
@@ -56,7 +56,7 @@ class RobometerConfig(RewardModelConfig):
     default_task: str | None = None
 
     max_frames: int | None = 8
-    reward_output: str = "progress"  # "progress" or "success"
+    reward_output: str = "progress"  # "progress" 或 "success"
     success_threshold: float = 0.5
 
     license: str | None = "apache-2.0"
@@ -74,10 +74,10 @@ class RobometerConfig(RewardModelConfig):
     progress_loss_type: str = "discrete"  # "l1" | "l2" | "discrete"
     progress_discrete_bins: int = 10
 
-    # Serialised Qwen backbone config (post-resize). Always populated by
-    # ``__post_init__`` from ``base_model_id`` + ``len(tokenizer) + 5``, so it
-    # is non-empty after construction. Saved into ``config.json`` automatically
-    # by the base ``_save_pretrained``.
+    # 序列化后的 Qwen 骨干配置（调整词表大小之后）。``__post_init__`` 总是
+    # 根据 ``base_model_id`` + ``len(tokenizer) + 5`` 填充此字段，因此
+    # 构造后它不会为空。由基类的 ``_save_pretrained`` 自动保存到
+    # ``config.json`` 中。
     vlm_config: dict[str, Any] = field(default_factory=dict)
 
     input_features: dict[str, PolicyFeature] = field(default_factory=dict)
@@ -109,10 +109,10 @@ class RobometerConfig(RewardModelConfig):
         self.output_features.setdefault("progress", PolicyFeature(shape=(1,), type=FeatureType.REWARD))
         self.output_features.setdefault("success", PolicyFeature(shape=(1,), type=FeatureType.REWARD))
 
-        # Deterministically populate ``vlm_config`` so it is non-empty after
-        # construction. For ``Qwen/Qwen3-VL-4B-Instruct`` this gives
-        # ``len(tokenizer) + 5 = 151,669 + 5 = 151,674`` — the exact post-resize
-        # vocab the published ``Robometer-4B`` checkpoint was saved with.
+        # 确定性地填充 ``vlm_config``，使其在构造后非空。对于
+        # ``Qwen/Qwen3-VL-4B-Instruct``，这给出
+        # ``len(tokenizer) + 5 = 151,669 + 5 = 151,674`` —— 正是已发布的
+        # ``Robometer-4B`` 检查点保存时所用的调整后词表大小。
         if not self.vlm_config:
             require_package("transformers", extra="robometer")
             vlm = AutoConfig.from_pretrained(self.base_model_id).to_dict()
@@ -128,12 +128,12 @@ class RobometerConfig(RewardModelConfig):
 
     @property
     def use_discrete_progress(self) -> bool:
-        """Whether the progress head outputs distribution logits over bins."""
+        """progress 头是否输出各分箱上的分布 logits。"""
         return self.progress_loss_type.lower() == "discrete"
 
     @property
     def vlm_backbone_config(self):
-        """Reconstruct the Qwen backbone config from :attr:`vlm_config`."""
+        """从 :attr:`vlm_config` 重建 Qwen 骨干配置。"""
         require_package("transformers", extra="robometer")
         config_dict = deepcopy(self.vlm_config)
         model_type = config_dict.pop("model_type", None)

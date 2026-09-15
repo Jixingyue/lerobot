@@ -13,21 +13,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""``interjections`` module: interjections + paired speech (EVENT styles + speech atoms).
+"""``interjections`` 模块：插话 + 配对的语音（EVENT 风格 + 语音原子）。
 
-Two sub-passes:
+两个子过程：
 
-1. At ``t=0``, emit ONLY a speech tool-call atom (acknowledgement of the
-   canonical task). No interjection row — the canonical task is already the
-   user utterance from ``meta/tasks.parquet``.
+1. 在 ``t=0`` 时，仅发射一个语音工具调用原子（对规范任务的
+   确认应答）。不发射插话行——规范任务本身已经是来自
+   ``meta/tasks.parquet`` 的用户话语。
 
-2. For mid-episode interruptions, emit a co-timestamped pair:
+2. 对于片段中部的打断，发射一个同时间戳的行对：
        {role:user, style:interjection, content:<text>}
-       speech atom (role:assistant, style:None, tool_calls=[say(...)])
-   Both rows go in ``language_events`` at the same timestamp.
+       语音原子 (role:assistant, style:None, tool_calls=[say(...)])
+   两行都以相同的时间戳放入 ``language_events``。
 
-The ``plan`` module's :meth:`run_plan_updates` reuses this module's
-interjection timestamps to refresh the ``plan`` row at the same instant.
+``plan`` 模块的 :meth:`run_plan_updates` 会复用本模块的
+插话时间戳，在同一时刻刷新 ``plan`` 行。
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ from ..writer import speech_atom
 
 @dataclass
 class InterjectionsAndSpeechModule:
-    """Generate task-start speech and mid-episode interjection/speech pairs."""
+    """生成任务开始时的语音以及片段中部的插话/语音对。"""
 
     vlm: VlmClient
     config: InterjectionsConfig
@@ -66,9 +66,9 @@ class InterjectionsAndSpeechModule:
             initial = self._initial_speech(record)
             if initial:
                 rows.append(speech_atom(t0, initial))
-        # Pull the ``plan`` module's subtask spans for this episode so the
-        # interjection prompt can ground itself in the actual current
-        # subtask at each chosen timestamp. The ``plan`` module ran first.
+        # 拉取 ``plan`` 模块为本片段生成的子任务区间，使插话提示词
+        # 能够在每个选定的时间戳上以实际正在进行的当前子任务为
+        # 依据。``plan`` 模块已先行运行。
         episode_end_t = float(record.frame_timestamps[-1]) if record.frame_timestamps else None
         subtask_spans = reconstruct_subtask_spans(staging.read("plan"), episode_end_t=episode_end_t)
         rows.extend(self._mid_episode_interjections(record, subtask_spans))
@@ -101,29 +101,28 @@ class InterjectionsAndSpeechModule:
         record: EpisodeRecord,
         subtask_spans: Sequence[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Generate interjections aligned with the actual demo trajectory.
+        """生成与实际演示轨迹对齐的插话。
 
-        Teleop data is frozen — the robot already executed every step in
-        the video. A *counterfactual* interjection like "actually skip
-        the wipe" contradicts what then happens in the video, which is
-        what qwen36moe-10/11 surfaced as low-quality interjections.
+        遥操作数据是冻结的——机器人已经在视频中执行了每一个
+        步骤。像"其实跳过擦拭这一步"这样的*反事实*插话与视频
+        中随后发生的事情相矛盾，这正是 qwen36moe-10/11 所暴露出
+        的低质量插话问题。
 
-        Instead, anchor every interjection at a subtask boundary and
-        write it as a natural user request for the *upcoming* subtask.
-        The robot's visible next behavior IS the interjection's effect,
-        so the training signal stays consistent: interjection text →
-        plan refresh → action stream all line up.
+        取而代之的做法是，将每个插话锚定在一个子任务边界上，
+        并将其写成一个针对*即将进行*的子任务的自然人用户请求。
+        机器人可见的下一步行为正是该插话的效果，因此训练信号
+        保持一致：插话文本 → 计划刷新 → 动作流全部对齐。
         """
         if self.config.max_interjections_per_episode <= 0:
             return []
         if len(subtask_spans) < 2:
-            # Need at least one transition (subtask 0 → subtask 1).
+            # 至少需要一次转换（子任务 0 → 子任务 1）。
             return []
-        # Deterministic per-episode RNG so reruns are stable across SLURM jobs.
+        # 每个片段使用确定性的随机数生成器，使重跑在多个 SLURM 作业间保持稳定。
         rng = random.Random(f"{self.seed}:{record.episode_index}:interjection")
 
-        # Boundaries: the start time of every subtask except the first
-        # (which is just t0 and is covered by the initial-task speech atom).
+        # 边界：除第一个子任务外每个子任务的开始时间
+        # （第一个子任务就是 t0，已由初始任务语音原子覆盖）。
         boundaries: list[tuple[float, str, str]] = []
         for i in range(1, len(subtask_spans)):
             ts = float(subtask_spans[i]["start"])
@@ -143,9 +142,9 @@ class InterjectionsAndSpeechModule:
         out: list[dict[str, Any]] = []
         for t, prev_subtask, next_subtask in chosen:
             t_snap = snap_to_frame(t, record.frame_timestamps)
-            # Window straddles the boundary so the VLM sees the end of the
-            # previous subtask and the start of the next one — same
-            # conditioning the policy will see at training time.
+            # 窗口横跨边界，使 VLM 能看到前一个子任务的结尾和
+            # 下一个子任务的开头——与策略在训练时看到的条件
+            # 信息相同。
             window_ts = self._window_timestamps(t_snap, record.frame_timestamps)
             prompt = load_prompt("interjections_interjection").format(
                 episode_task=record.episode_task,
@@ -179,14 +178,13 @@ class InterjectionsAndSpeechModule:
         return out
 
     def _window_timestamps(self, t_anchor: float, frame_timestamps: Sequence[float]) -> list[float]:
-        """Return a small set of frame timestamps centered on ``t_anchor``.
+        """返回以 ``t_anchor`` 为中心的一小组帧时间戳。
 
-        The window straddles the subtask boundary the interjection sits
-        on: roughly half the frames cover the end of the previous
-        subtask, half cover the start of the next one. The VLM therefore
-        sees BOTH what just finished AND what's about to start, which is
-        the conditioning we need to write a natural "now please do X"
-        request that matches the visible upcoming behavior.
+        窗口横跨插话所处的子任务边界：大约一半的帧覆盖前一个
+        子任务的结尾，另一半覆盖下一个子任务的开头。因此 VLM
+        既能看到刚刚完成的内容，也能看到即将开始的内容，而这
+        正是写出一个与可见的后续行为相匹配的自然"现在请做 X"
+        请求所需的条件信息。
         """
         if not frame_timestamps:
             return [t_anchor]
@@ -195,7 +193,7 @@ class InterjectionsAndSpeechModule:
             return [t_anchor]
         window = float(self.config.interjection_window_seconds)
         step = window / max(1, n - 1)
-        # Center the window on the anchor so half lands before, half after.
+        # 将窗口居中于锚点，使一半落在其前，一半落在其后。
         start_offset = -window / 2.0
         targets = [t_anchor + start_offset + step * i for i in range(n)]
         first_ts = float(frame_timestamps[0])

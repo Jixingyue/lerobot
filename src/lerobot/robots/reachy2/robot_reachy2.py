@@ -31,7 +31,7 @@ if TYPE_CHECKING or _reachy2_sdk_available:
 else:
     ReachySDK = None
 
-# {lerobot_keys: reachy2_sdk_keys}
+# {lerobot 键名: reachy2_sdk 键名}
 REACHY2_NECK_JOINTS = {
     "neck_yaw.pos": "head.neck.yaw",
     "neck_pitch.pos": "head.neck.pitch",
@@ -74,7 +74,7 @@ REACHY2_VEL = {
 
 class Reachy2Robot(Robot):
     """
-    [Reachy 2](https://www.pollen-robotics.com/reachy/), by Pollen Robotics.
+    [Reachy 2](https://www.pollen-robotics.com/reachy/)，由 Pollen Robotics 推出。
     """
 
     config_class = Reachy2RobotConfig
@@ -174,12 +174,12 @@ class Reachy2Robot(Robot):
     def get_observation(self) -> RobotObservation:
         obs_dict: RobotObservation = {}
 
-        # Read Reachy 2 state
+        # 读取 Reachy 2 状态
         before_read_t = time.perf_counter()
         obs_dict.update(self._get_state())
         self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             obs_dict[cam_key] = cam.read_latest()
 
@@ -218,7 +218,7 @@ class Reachy2Robot(Robot):
             if self.config.with_mobile_base:
                 self.reachy.mobile_base.set_goal_speed(vel["vx"], vel["vy"], vel["vtheta"])
 
-            # We don't send the goal positions if we control Reachy 2 externally
+            # 如果通过外部方式控制 Reachy 2，则不发送目标位置
             if not self.use_external_commands:
                 self.reachy.send_goal_positions()
                 if self.config.with_mobile_base:

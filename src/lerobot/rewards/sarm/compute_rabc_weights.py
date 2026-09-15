@@ -15,34 +15,34 @@
 # limitations under the License.
 
 """
-Compute SARM progress values for RA-BC (Reward-Aware Behavior Cloning) weighting.
+计算用于 RA-BC（Reward-Aware Behavior Cloning，奖励感知行为克隆）加权的 SARM progress 值。
 
-This script processes all frames in a dataset with SARM to compute progress values [0, 1].
-The results are saved as a parquet file that can be loaded during training for RA-BC weighting.
+本脚本使用 SARM 处理数据集中的所有帧，以计算 progress 值（[0, 1]）。
+结果保存为 parquet 文件，可在训练期间加载以用于 RA-BC 加权。
 
-Uses multi-output extraction: each SARM query returns progress for 9 frames, so we only
-need ~num_frames/30 queries instead of one per frame (~30x speedup).
+采用多输出提取：每次 SARM 查询返回 9 帧的 progress，因此我们只需要
+约 num_frames/30 次查询，而不是每帧一次（约 30 倍加速）。
 
-Usage:
-    # Full RA-BC computation with visualizations
+用法：
+    # 完整的 RA-BC 计算并附带可视化
     python src/lerobot/rewards/sarm/compute_rabc_weights.py \\
         --dataset-repo-id lerobot/aloha_sim_insertion_human \\
         --reward-model-path <USER>/sarm_single_uni4
 
-    # Faster computation with stride (compute every 5 frames, interpolate the rest)
+    # 使用 stride 加速计算（每 5 帧计算一次，其余帧插值）
     python src/lerobot/rewards/sarm/compute_rabc_weights.py \\
         --dataset-repo-id lerobot/aloha_sim_insertion_human \\
         --reward-model-path <USER>/sarm_single_uni4 \\
         --stride 5
 
-    # Visualize predictions only (no RA-BC computation)
+    # 仅可视化预测结果（不执行 RA-BC 计算）
     python src/lerobot/rewards/sarm/compute_rabc_weights.py \\
         --dataset-repo-id lerobot/aloha_sim_insertion_human \\
         --reward-model-path <USER>/sarm_single_uni4 \\
         --visualize-only \\
         --num-visualizations 5
 
-The output is saved to the dataset's local cache directory as 'sarm_progress.parquet'.
+输出将保存到数据集的本地缓存目录中，文件名为 'sarm_progress.parquet'。
 """
 
 import argparse
@@ -65,7 +65,7 @@ from .sarm_utils import normalize_stage_tau
 
 
 def get_reward_model_path_from_parquet(parquet_path: Path) -> str | None:
-    """Read reward_model_path from parquet metadata if available."""
+    """如果可用，从 parquet 元数据中读取 reward_model_path。"""
     if not parquet_path.exists():
         return None
     try:
@@ -83,10 +83,10 @@ def load_sarm_resources(
     device: str = "cuda",
 ) -> tuple[LeRobotDataset, SARMRewardModel, any]:
     """
-    Load SARM model, dataset, and preprocessor.
+    加载 SARM 模型、数据集和预处理器。
 
     Returns:
-        Tuple of (dataset, reward_model, preprocessor)
+        (dataset, reward_model, preprocessor) 元组
     """
     logging.info(f"Loading model: {reward_model_path}")
     reward_model = SARMRewardModel.from_pretrained(reward_model_path)
@@ -118,18 +118,18 @@ def load_sarm_resources(
 
 
 def to_numpy_image(img) -> np.ndarray:
-    """Convert image tensor to numpy uint8 (H, W, C)."""
+    """将图像张量转换为 numpy uint8 格式（H, W, C）。"""
     if isinstance(img, torch.Tensor):
         img = img.cpu().numpy()
     if img.ndim == 4:
-        # Take center frame for bidirectional sampling
+        # 取双向采样的中间帧
         img = img[img.shape[0] // 2]
     if img.shape[0] in [1, 3]:
         img = np.transpose(img, (1, 2, 0))
     if img.dtype != np.uint8:
-        # Handle normalized images (may have negative values or values > 1)
+        # 处理归一化后的图像（可能包含负值或大于 1 的值）
         img = img.astype(np.float32)
-        img = (img - img.min()) / (img.max() - img.min() + 1e-8)  # Normalize to [0, 1]
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8)  # 归一化到 [0, 1]
         img = (img * 255).astype(np.uint8)
     return img
 
@@ -137,9 +137,9 @@ def to_numpy_image(img) -> np.ndarray:
 def visualize_episode(
     frames, progress_preds, stage_preds, title, output_path, stage_labels, gt_progress=None, gt_stages=None
 ):
-    """Create visualization with progress plot, stage probabilities, and sample frames.
+    """创建包含 progress 曲线图、阶段概率图和采样帧的可视化结果。
 
-    Same as sarm_inference_visualization.py
+    与 sarm_inference_visualization.py 中的实现相同
     """
     num_stages = stage_preds.shape[1]
     colors = plt.cm.tab10(np.linspace(0, 1, num_stages))
@@ -149,7 +149,7 @@ def visualize_episode(
     gs = gridspec.GridSpec(3, 1, height_ratios=[2, 1, 1], hspace=0.3)
     ax_progress, ax_stages, ax_frames = fig.add_subplot(gs[0]), fig.add_subplot(gs[1]), fig.add_subplot(gs[2])
 
-    # Progress plot
+    # Progress 曲线图
     ax_progress.plot(frame_indices, progress_preds, linewidth=2, color="#2E86AB", label="Predicted")
     ax_progress.fill_between(frame_indices, 0, progress_preds, alpha=0.3, color="#2E86AB")
     if gt_progress is not None:
@@ -163,7 +163,7 @@ def visualize_episode(
     ax_progress.legend(loc="upper left")
     ax_progress.grid(True, alpha=0.3)
 
-    # Stage predictions
+    # 阶段预测
     ax_stages.stackplot(
         frame_indices,
         *[stage_preds[:, i] for i in range(num_stages)],
@@ -180,7 +180,7 @@ def visualize_episode(
     ax_stages.legend(loc="upper left", ncol=min(num_stages, 5), fontsize=8)
     ax_stages.grid(True, alpha=0.3)
 
-    # Sample frames
+    # 采样帧
     ax_frames.axis("off")
     num_sample = 8
     sample_indices = np.linspace(0, len(frames) - 1, num_sample, dtype=int)
@@ -220,20 +220,20 @@ def visualize_sarm_predictions(
     stride: int = 1,
 ):
     """
-    Visualize SARM predictions for multiple episodes.
+    可视化多个 episode 的 SARM 预测结果。
 
-    Computes predictions for every frame by default. With stride > 1, computes predictions
-    every N frames and interpolates (progress + stage probabilities) for visualization.
+    默认情况下对每一帧计算预测。当 stride > 1 时，每隔 N 帧计算一次预测，
+    并对其余帧进行插值（progress + 阶段概率）以用于可视化。
 
     Args:
-        dataset: LeRobotDataset with delta_timestamps configured
-        reward_model: Loaded SARM model
-        preprocess: Preprocessor from make_sarm_pre_post_processors
-        episode_indices: List of episode indices to visualize
-        head_mode: "sparse", "dense", or "both"
-        output_dir: Directory to save visualizations
-        num_display_frames: Number of frames to display in thumbnail strip (default: 5)
-        stride: Compute predictions every N frames, interpolate the rest (default: 1)
+        dataset: 已配置 delta_timestamps 的 LeRobotDataset
+        reward_model: 已加载的 SARM 模型
+        preprocess: 来自 make_sarm_pre_post_processors 的预处理器
+        episode_indices: 需要可视化的 episode 索引列表
+        head_mode: "sparse"、"dense" 或 "both"
+        output_dir: 保存可视化结果的目录
+        num_display_frames: 缩略图条中显示的帧数（默认：5）
+        stride: 每隔 N 帧计算一次预测，其余帧插值（默认：1）
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -243,17 +243,17 @@ def visualize_sarm_predictions(
     dual_mode = reward_model.config.uses_dual_heads
     device = reward_model.device
 
-    # Center frame index for bidirectional sampling
+    # 双向采样的中间帧索引
     target_idx = reward_model.config.n_obs_steps // 2
 
-    # Determine which heads to visualize
+    # 确定需要可视化的 head
     schemes_to_viz = []
     if head_mode in ("sparse", "both") or not dual_mode:
         schemes_to_viz.append("sparse")
     if head_mode in ("dense", "both") and dual_mode:
         schemes_to_viz.append("dense")
 
-    # Set preprocessor to eval mode to disable augmentations
+    # 将预处理器设置为 eval 模式以禁用数据增强
     if hasattr(preprocess, "eval"):
         preprocess.eval()
     for step in preprocess.steps:
@@ -267,7 +267,7 @@ def visualize_sarm_predictions(
         task = dataset[ep_start].get("task", "perform the task")
         num_frames = ep_end - ep_start
 
-        # Select frames for display thumbnails (evenly sampled from begin to end)
+        # 选择用于显示缩略图的帧（从开始到结束均匀采样）
         display_indices = set(
             [
                 ep_start + int(i * (num_frames - 1) / (num_display_frames - 1))
@@ -278,12 +278,12 @@ def visualize_sarm_predictions(
         )
         viz_frames = {}
 
-        # Load display frames up-front (stride mode might skip them otherwise).
+        # 预先加载显示帧（否则 stride 模式可能会跳过它们）。
         for frame_idx in display_indices:
             sample = dataset[frame_idx]
             viz_frames[frame_idx] = to_numpy_image(sample[image_key])
 
-        # Initialize storage for each scheme
+        # 为每种方案初始化存储空间
         scheme_data = {}
         for scheme in schemes_to_viz:
             num_stages = getattr(reward_model.config, f"num_{scheme}_stages")
@@ -301,7 +301,7 @@ def visualize_sarm_predictions(
         if stride > 1:
             logging.info(f"Visualization stride={stride}: inferring every {stride} frames and interpolating")
 
-        # Process frames one at a time to avoid memory buildup
+        # 逐帧处理以避免内存累积
         frame_indices = list(range(ep_start, ep_end, stride))
         if (ep_end - 1) not in frame_indices:
             frame_indices.append(ep_end - 1)
@@ -332,9 +332,9 @@ def visualize_sarm_predictions(
                 for scheme in schemes_to_viz:
                     sd = scheme_data[scheme]
 
-                    # Ground truth
-                    # In stride visualization mode, ground-truth plots can be misleading
-                    # (only sparse points are available), so we skip GT.
+                    # 真值
+                    # 在 stride 可视化模式下，真值图可能会产生误导
+                    # （只有稀疏点可用），因此我们跳过 GT。
                     if stride == 1 and sd["target_key"] in processed:
                         gt_target = processed[sd["target_key"]][0, target_idx].cpu().item()
                         sd["viz_gt_stages"][local_idx] = int(gt_target)
@@ -345,7 +345,7 @@ def visualize_sarm_predictions(
                             subtask_names=sd["subtask_names"],
                         )
 
-                    # Predictions
+                    # 预测值
                     reward, stage_probs = reward_model.calculate_rewards(
                         text_embeddings=text_features,
                         video_embeddings=video_features,
@@ -356,7 +356,7 @@ def visualize_sarm_predictions(
                         head_mode=scheme,
                     )
 
-                    # Handle both tensor and numpy outputs
+                    # 同时处理 tensor 和 numpy 输出
                     if isinstance(reward, torch.Tensor):
                         reward = reward.cpu().numpy()
                         stage_probs = stage_probs.cpu().numpy()
@@ -368,14 +368,14 @@ def visualize_sarm_predictions(
                         sd["viz_progress"][local_idx] = reward[target_idx]
                         sd["viz_stages"][local_idx] = stage_probs[target_idx, :]
 
-                # Clear GPU memory after each frame
+                # 每帧处理完毕后清理 GPU 内存
                 del processed, video_features, text_features
                 if state_features is not None:
                     del state_features
 
             torch.cuda.empty_cache()
 
-        # Interpolate predictions back to per-frame arrays for smooth visualization.
+        # 将预测值插值回逐帧数组，以获得平滑的可视化效果。
         if stride > 1:
             all_local = np.arange(num_frames)
             for scheme in schemes_to_viz:
@@ -400,10 +400,10 @@ def visualize_sarm_predictions(
                     stage_interp[nz] = stage_interp[nz] / row_sums[nz]
                     sd["viz_stages"] = stage_interp
                 else:
-                    # No valid points: keep NaNs/zeros; visualization will be empty.
+                    # 没有有效点：保留 NaN/零值；可视化将为空。
                     sd["viz_stages"] = np.nan_to_num(sd["viz_stages"], nan=0.0)
 
-        # Generate visualization for each head
+        # 为每个 head 生成可视化
         ordered_viz_frames = [viz_frames[idx] for idx in sorted(display_indices)]
         for scheme in schemes_to_viz:
             sd = scheme_data[scheme]
@@ -421,17 +421,17 @@ def visualize_sarm_predictions(
                 gt_stages=sd["viz_gt_stages"] if not np.all(np.isnan(sd["viz_gt_stages"])) else None,
             )
 
-        # Clear memory between episodes
+        # 在 episode 之间清理内存
         torch.cuda.empty_cache()
 
     logging.info(f"Visualizations saved to: {output_dir.absolute()}")
 
 
 def generate_all_frame_indices(ep_start: int, ep_end: int, frame_gap: int = 30) -> list[int]:
-    """Generate all frame indices, ordered by offset for cache-friendly access.
+    """生成所有帧索引，按偏移量排序以便于缓存友好的访问。
 
-    Orders frames as: [0, 30, 60...], [1, 31, 61...], ..., [29, 59, 89...]
-    This groups frames that share similar temporal windows together.
+    帧的排列顺序为：[0, 30, 60...]、[1, 31, 61...]、...、[29, 59, 89...]
+    这样可以将共享相似时间窗口的帧分组在一起。
     """
     num_frames = ep_end - ep_start
     indices = []
@@ -446,7 +446,7 @@ def interpolate_progress(
     computed_values: np.ndarray,
     all_indices: np.ndarray,
 ) -> np.ndarray:
-    """Linearly interpolate values to fill in gaps (robust to NaNs / edge cases)."""
+    """对值进行线性插值以填充间隙（对 NaN 和边界情况具有鲁棒性）。"""
     computed_indices = np.asarray(computed_indices)
     computed_values = np.asarray(computed_values)
     all_indices = np.asarray(all_indices)
@@ -472,21 +472,21 @@ def compute_sarm_progress(
     stride: int = 1,
 ):
     """
-    Compute SARM progress predictions for all frames in a dataset.
+    计算数据集中所有帧的 SARM progress 预测。
 
     Args:
-        dataset_repo_id: HuggingFace dataset repo ID or local path
-        reward_model_path: Path to pretrained SARM model
-        output_path: Path to save results. If None, saves to dataset's cache directory
-        head_mode: SARM head to use ("sparse", "dense", or "both")
-        device: Device to use for inference
-        num_visualizations: Number of episodes to visualize (0 to skip)
-        output_dir: Directory to save visualizations
-        stride: Compute progress every N frames, interpolate the rest (default: 1 = every frame)
+        dataset_repo_id: HuggingFace 数据集仓库 ID 或本地路径
+        reward_model_path: 预训练 SARM 模型的路径
+        output_path: 保存结果的路径。若为 None，则保存到数据集的缓存目录
+        head_mode: 使用的 SARM head（"sparse"、"dense" 或 "both"）
+        device: 推理所用的设备
+        num_visualizations: 需要可视化的 episode 数量（0 表示跳过）
+        output_dir: 保存可视化结果的目录
+        stride: 每隔 N 帧计算一次 progress，其余帧插值（默认：1 = 每帧都计算）
     """
     dataset, reward_model, preprocess = load_sarm_resources(dataset_repo_id, reward_model_path, device)
 
-    # Set preprocessor to eval mode to disable augmentations
+    # 将预处理器设置为 eval 模式以禁用数据增强
     if hasattr(preprocess, "eval"):
         preprocess.eval()
     for step in preprocess.steps:
@@ -500,12 +500,12 @@ def compute_sarm_progress(
     total_frames = dataset.num_frames
     logging.info(f"Processing {total_frames} frames across {num_episodes} episodes")
 
-    # Determine which heads to compute
+    # 确定需要计算的 head
     dual_mode = reward_model.config.uses_dual_heads
     compute_sparse = head_mode in ("sparse", "both") or not dual_mode
     compute_dense = head_mode in ("dense", "both") and dual_mode
 
-    # Storage arrays
+    # 存储数组
     all_indices = []
     all_episode_indices = []
     all_frame_indices = []
@@ -515,21 +515,21 @@ def compute_sarm_progress(
     if stride > 1:
         logging.info(f"Using stride={stride}: computing every {stride} frames, interpolating the rest")
 
-    # Process all episodes
+    # 处理所有 episode
     for episode_idx in tqdm(range(num_episodes), desc="Episodes"):
         ep = dataset.meta.episodes[episode_idx]
         ep_start = ep["dataset_from_index"]
         ep_end = ep["dataset_to_index"]
 
-        # Get task description
+        # 获取任务描述
         task = dataset[ep_start].get("task", "perform the task")
 
-        # Generate frames to compute (with stride applied)
+        # 生成需要计算的帧（应用 stride）
         all_ep_indices = generate_all_frame_indices(ep_start, ep_end, frame_gap)
         if stride > 1:
-            # Only compute every stride-th frame (relative to episode start)
+            # 只计算每隔 stride 的帧（相对于 episode 起始位置）
             compute_indices = [idx for idx in all_ep_indices if (idx - ep_start) % stride == 0]
-            # Always include last frame for better interpolation at episode end
+            # 始终包含最后一帧，以便在 episode 末尾获得更好的插值效果
             last_frame = ep_end - 1
             if last_frame not in compute_indices:
                 compute_indices.append(last_frame)
@@ -537,9 +537,9 @@ def compute_sarm_progress(
         else:
             compute_indices = all_ep_indices
 
-        center_idx = reward_model.config.n_obs_steps // 2  # Center of bidirectional window
+        center_idx = reward_model.config.n_obs_steps // 2  # 双向窗口的中心
 
-        # Dictionary to collect results
+        # 用于收集结果的字典
         frame_results = {}
 
         for query_idx in tqdm(compute_indices, desc=f"  Ep {episode_idx}", leave=False):
@@ -567,7 +567,7 @@ def compute_sarm_progress(
                     sparse_val = np.nan
                     dense_val = np.nan
 
-                    # Compute sparse prediction for center frame
+                    # 计算中间帧的 sparse 预测
                     if compute_sparse:
                         sparse_progress = reward_model.calculate_rewards(
                             text_embeddings=text_features,
@@ -583,7 +583,7 @@ def compute_sarm_progress(
                             else sparse_progress[center_idx]
                         )
 
-                    # Compute dense prediction for center frame
+                    # 计算中间帧的 dense 预测
                     if compute_dense:
                         dense_progress = reward_model.calculate_rewards(
                             text_embeddings=text_features,
@@ -604,28 +604,28 @@ def compute_sarm_progress(
             except Exception as e:
                 logging.warning(f"Failed to process frame {query_idx}: {e}")
 
-        # Interpolate to get values for all frames
+        # 进行插值以获得所有帧的值
         computed_indices = np.array(sorted(frame_results.keys()))
         computed_sparse = (
             np.array([frame_results[i][0] for i in computed_indices]) if compute_sparse else None
         )
         computed_dense = np.array([frame_results[i][1] for i in computed_indices]) if compute_dense else None
 
-        # All frame indices for this episode
+        # 该 episode 的所有帧索引
         all_frame_idx_array = np.arange(ep_start, ep_end)
 
         if stride > 1 and len(computed_indices) > 1:
-            # Interpolate progress values
+            # 插值 progress 值
             if compute_sparse:
                 interp_sparse = interpolate_progress(computed_indices, computed_sparse, all_frame_idx_array)
             if compute_dense:
                 interp_dense = interpolate_progress(computed_indices, computed_dense, all_frame_idx_array)
         else:
-            # No interpolation needed
+            # 无需插值
             interp_sparse = computed_sparse if compute_sparse else None
             interp_dense = computed_dense if compute_dense else None
 
-        # Store results for all frames
+        # 存储所有帧的结果
         for i, frame_idx in enumerate(all_frame_idx_array):
             local_idx = frame_idx - ep_start
             all_indices.append(frame_idx)
@@ -646,7 +646,7 @@ def compute_sarm_progress(
                 else:
                     all_progress_dense.append(np.nan)
 
-    # Create output table
+    # 创建输出表
     table_data = {
         "index": np.array(all_indices, dtype=np.int64),
         "episode_index": np.array(all_episode_indices, dtype=np.int64),
@@ -657,24 +657,24 @@ def compute_sarm_progress(
     if compute_dense:
         table_data["progress_dense"] = np.array(all_progress_dense, dtype=np.float32)
 
-    # Sort by index
+    # 按 index 排序
     df = pa.table(table_data).to_pandas()
     df = df.sort_values("index").reset_index(drop=True)
     final_table = pa.Table.from_pandas(df, preserve_index=False)
 
-    # Add metadata with reward model path
+    # 添加包含奖励模型路径的元数据
     metadata = {b"reward_model_path": reward_model_path.encode()}
     final_table = final_table.replace_schema_metadata(metadata)
 
-    # Determine output path
+    # 确定输出路径
     output_path = Path(dataset.root) / "sarm_progress.parquet" if output_path is None else Path(output_path)
 
-    # Save
+    # 保存
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(final_table, output_path)
     logging.info(f"Saved {len(final_table)} frame progress values to {output_path}")
 
-    # Print statistics
+    # 打印统计信息
     if "progress_sparse" in df.columns:
         valid = df["progress_sparse"].dropna()
         logging.info(
@@ -689,7 +689,7 @@ def compute_sarm_progress(
             f"min={valid.min():.4f}, max={valid.max():.4f}"
         )
 
-    # Visualize episodes after processing
+    # 处理完毕后可视化 episode
     if num_visualizations > 0:
         viz_episodes = list(range(min(num_visualizations, num_episodes)))
         logging.info(f"Generating {len(viz_episodes)} visualizations...")
@@ -756,7 +756,7 @@ Examples:
         default="cuda",
         help="Device to use (default: cuda)",
     )
-    # Visualization options
+    # 可视化选项
     parser.add_argument(
         "--visualize-only",
         action="store_true",
@@ -791,10 +791,10 @@ Examples:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    # Try to get reward_model_path from parquet metadata if not provided
+    # 如果未提供 reward_model_path，则尝试从 parquet 元数据中获取
     reward_model_path = args.reward_model_path
     if reward_model_path is None:
-        # Load dataset to find parquet path
+        # 加载数据集以查找 parquet 路径
         temp_dataset = LeRobotDataset(args.dataset_repo_id, download_videos=False)
         parquet_path = Path(temp_dataset.root) / "sarm_progress.parquet"
         reward_model_path = get_reward_model_path_from_parquet(parquet_path)
@@ -805,7 +805,7 @@ Examples:
                 "--reward-model-path is required (no existing parquet with model metadata found)"
             )
 
-    # Handle visualize-only mode
+    # 处理仅可视化模式
     if args.visualize_only:
         dataset, reward_model, preprocess = load_sarm_resources(
             args.dataset_repo_id, reward_model_path, args.device
@@ -824,7 +824,7 @@ Examples:
         print(f"\nVisualizations saved to: {Path(args.output_dir).absolute()}")
         return
 
-    # Full RABC computation (compute_sarm_progress loads model/dataset itself)
+    # 完整的 RABC 计算（compute_sarm_progress 会自行加载模型/数据集）
     output_path = compute_sarm_progress(
         dataset_repo_id=args.dataset_repo_id,
         reward_model_path=reward_model_path,
@@ -838,7 +838,7 @@ Examples:
 
     print(f"\nSARM progress values saved to: {output_path}")
 
-    # Upload to Hub if requested
+    # 如果需要，上传到 Hub
     if args.push_to_hub:
         from huggingface_hub import HfApi
 

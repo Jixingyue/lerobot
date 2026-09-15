@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Helpers for the Lance dataset reader.
+"""Lance 数据集读取器的辅助函数。
 
-Everything the ``"lance"`` storage format needs outside the reader class:
-table naming, connection and remote-root resolution, ``meta/`` materialization,
-and the mp4 byte-range machinery (byte-index construction, sparse in-memory
-sources over prefetched ranges, a bounded decoder cache). The mp4 helpers only
-depend on ``av``/``io``/``bisect`` and are reusable outside Lance.
+``"lance"`` 存储格式在读取器类之外所需的一切：
+表命名、连接和远程根路径解析、``meta/`` 物化，
+以及 mp4 字节范围机制（字节索引构建、基于预取范围的
+稀疏内存源、有界解码器缓存）。mp4 辅助函数仅
+依赖 ``av``/``io``/``bisect``，可在 Lance 之外复用。
 """
 
 from __future__ import annotations
@@ -46,17 +46,17 @@ if TYPE_CHECKING or _lancedb_available:
 
 from .storage import is_remote_uri
 
-# Byte-index columns on the videos table: map a frame window to its byte ranges so a
-# batch's video fetch can be batched. Assume constant frame rate; mp4-only.
+# videos 表上的字节索引列：将帧窗口映射到其字节范围，
+# 以便一个批次的视频获取可以批量进行。假设帧率恒定；仅支持 mp4。
 VIDEO_INDEX_COLUMNS = ("file_size", "moov_offset", "moov_size", "kf_indices", "kf_positions")
-# ffmpeg reads more bytes than the frames requested. Padding each prefetched range
-# to cover those known reads keeps them off the slow fallback path.
+# ffmpeg 读取的字节数多于所请求的帧。为每个预取范围
+# 添加填充以覆盖这些已知读取，可避免走缓慢的回退路径。
 _OPEN_PROBE_BYTES = 256 * 1024
 _RANGE_SLACK = 64 * 1024
 
 
 def _merge_spans(spans: list[tuple[int, int]], gap: int = _RANGE_SLACK) -> list[tuple[int, int]]:
-    """Coalesce overlapping or nearby byte ranges into fewer, larger requests."""
+    """将重叠或相邻的字节范围合并为更少、更大的请求。"""
     merged: list[tuple[int, int]] = []
     for start, end in sorted(spans):
         if merged and start <= merged[-1][1] + gap:
@@ -67,7 +67,7 @@ def _merge_spans(spans: list[tuple[int, int]], gap: int = _RANGE_SLACK) -> list[
 
 
 def _find_moov(read_at, file_size: int) -> tuple[int, int]:
-    """Locate the mp4 ``moov`` box by walking top-level box headers."""
+    """通过遍历顶层 box 头部来定位 mp4 的 ``moov`` box。"""
     offset = 0
     while offset < file_size:
         header = read_at(offset, 16)
@@ -84,7 +84,7 @@ def _find_moov(read_at, file_size: int) -> tuple[int, int]:
 
 
 def build_video_byte_index(path: str | Path) -> dict:
-    """Compute the byte-index columns for one video file. mp4-only"""
+    """计算单个视频文件的字节索引列。仅支持 mp4"""
     path = Path(path)
     file_size = path.stat().st_size
     kf_entries = []
@@ -113,7 +113,7 @@ def build_video_byte_index(path: str | Path) -> dict:
 
 
 class _SparseBlobSource(io.RawIOBase):
-    """Adapter between range fetches and the decoders' file API."""
+    """范围获取与解码器文件 API 之间的适配器。"""
 
     def __init__(self, size: int, fallback):
         super().__init__()
@@ -183,8 +183,8 @@ class _SparseBlobSource(io.RawIOBase):
                 buffer[: len(data)] = data
                 self._pos += len(data)
                 return len(data)
-        # Cap the miss at the next buffered range so we never re-fetch bytes
-        # we already hold.
+        # 将未命中限制在下一个已缓冲范围内，这样我们绝不会
+        # 重新获取已持有的字节。
         next_index = bisect.bisect_right(self._starts, self._pos)
         if next_index < len(self._starts):
             want = min(want, self._starts[next_index] - self._pos)
@@ -196,8 +196,8 @@ class _SparseBlobSource(io.RawIOBase):
 
 
 class _VideoDecoderLRU:
-    """Per-worker LRU of torchcodec decoders keyed by (video_key, chunk, file).
-    eviction is bounded by ``byte_budget`` too, not just count.
+    """每个 worker 的 torchcodec 解码器 LRU，以 (video_key, chunk, file) 为键。
+    驱逐不仅受数量限制，还受 ``byte_budget`` 限制。
     """
 
     def __init__(self, capacity: int, byte_budget: int | None = None):
@@ -260,7 +260,7 @@ def _connect(
     revision: str | None = None,
     token: str | bool | None = None,
 ):
-    require_package("lancedb", extra="lancedb")  # earliest common site: also reached via localize_root()
+    require_package("lancedb", extra="lancedb")  # 最早的公共调用点：也会经由 localize_root() 到达
     if is_remote_uri(db_uri):
         os.environ.setdefault("LANCE_IO_THREADS", "256")
     options = _storage_options(db_uri, storage_options, revision, token)
@@ -268,7 +268,7 @@ def _connect(
 
 
 def _materialize_meta(db, local_root: Path) -> None:
-    """Write ``meta/`` from the meta table to a local cache, once."""
+    """将 meta 表中的 ``meta/`` 一次性写入本地缓存。"""
     meta_dir = local_root / "meta"
     if meta_dir.exists():
         return
@@ -312,10 +312,10 @@ def localize_root(
     token: str | bool | None = None,
     force_cache_sync: bool = False,
 ) -> Path:
-    """Materialize ``meta/`` for a remote Lance dataset and return the local dir holding it.
+    """将远程 Lance 数据集的 ``meta/`` 物化到本地，并返回保存它的本地目录。
 
-    Hook used by :mod:`lerobot.datasets.storage` for object-store roots; data
-    tables are never downloaded.
+    :mod:`lerobot.datasets.storage` 用于对象存储根路径的钩子；
+    数据表永远不会被下载。
     """
     _, local_root = resolve_lance_root(
         repo_id, root, revision=revision, token=token, force_cache_sync=force_cache_sync
@@ -331,11 +331,11 @@ def resolve_lance_root(
     token: str | bool | None = None,
     force_cache_sync: bool = False,
 ) -> tuple[str, Path]:
-    """Resolve a Lance dataset to its connect URI and the local root holding ``meta/``"""
+    """将 Lance 数据集解析为其连接 URI 以及保存 ``meta/`` 的本地根路径"""
     if root is not None and is_remote_uri(root):
         db_uri = str(root).rstrip("/")
-        # Key the cache by revision too: an hf:// root at a non-default revision must not
-        # reuse (or overwrite) another revision's materialized meta.
+        # 缓存键也要包含 revision：非默认 revision 下的 hf:// 根路径
+        # 绝不能复用（或覆盖）其他 revision 已物化的 meta。
         cache_key = f"{db_uri}@{revision}" if revision else db_uri
         local_root = HF_LEROBOT_HOME / "remote" / re.sub(r"[^A-Za-z0-9._-]+", "_", cache_key)
         if force_cache_sync:

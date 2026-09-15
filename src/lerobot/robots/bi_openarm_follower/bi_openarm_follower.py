@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class BiOpenArmFollower(BimanualMixin, Robot):
     """
-    Bimanual OpenArm Follower Arms
+    双臂 OpenArm 从动机械臂
     """
 
     config_class = BiOpenArmFollowerConfig
@@ -40,8 +40,8 @@ class BiOpenArmFollower(BimanualMixin, Robot):
         super().__init__(config)
         self.config = config
 
-        # Top-level cameras are opened by `left_arm` for convenience, but their
-        # keys stay unprefixed in observations (tracked via `_top_level_cam_keys`).
+        # 顶层相机由 `left_arm` 打开以方便使用，但它们的键在观测中
+        # 保持无前缀（通过 `_top_level_cam_keys` 跟踪）。
         self._top_level_cam_keys = set(config.cameras)
         _collisions = self._top_level_cam_keys & set(
             config.left_arm_config.cameras
@@ -93,7 +93,7 @@ class BiOpenArmFollower(BimanualMixin, Robot):
         self.left_arm = OpenArmFollower(left_arm_config)
         self.right_arm = OpenArmFollower(right_arm_config)
 
-        # Only for compatibility with other parts of the codebase that expect a `robot.cameras` attribute
+        # 仅用于兼容代码库中其他期望存在 `robot.cameras` 属性的部分
         self.cameras = {**self.left_arm.cameras, **self.right_arm.cameras}
 
     @property
@@ -129,11 +129,11 @@ class BiOpenArmFollower(BimanualMixin, Robot):
     def get_observation(self) -> RobotObservation:
         obs_dict: RobotObservation = {}
 
-        # Add "left_" prefix to per-arm keys; keep top-level camera keys unprefixed.
+        # 为每个手臂的键添加 "left_" 前缀；顶层相机键保持无前缀。
         for key, value in self.left_arm.get_observation().items():
             obs_dict[key if key in self._top_level_cam_keys else f"left_{key}"] = value
 
-        # Add "right_" prefix
+        # 添加 "right_" 前缀
         for key, value in self.right_arm.get_observation().items():
             obs_dict[f"right_{key}"] = value
 
@@ -146,11 +146,11 @@ class BiOpenArmFollower(BimanualMixin, Robot):
         custom_kp: dict[str, float] | None = None,
         custom_kd: dict[str, float] | None = None,
     ) -> RobotAction:
-        # Remove "left_" prefix
+        # 移除 "left_" 前缀
         left_action = {
             key.removeprefix("left_"): value for key, value in action.items() if key.startswith("left_")
         }
-        # Remove "right_" prefix
+        # 移除 "right_" 前缀
         right_action = {
             key.removeprefix("right_"): value for key, value in action.items() if key.startswith("right_")
         }
@@ -158,7 +158,7 @@ class BiOpenArmFollower(BimanualMixin, Robot):
         sent_action_left = self.left_arm.send_action(left_action, custom_kp, custom_kd)
         sent_action_right = self.right_arm.send_action(right_action, custom_kp, custom_kd)
 
-        # Add prefixes back
+        # 重新添加前缀
         prefixed_sent_action_left = {f"left_{key}": value for key, value in sent_action_left.items()}
         prefixed_sent_action_right = {f"right_{key}": value for key, value in sent_action_right.items()}
 

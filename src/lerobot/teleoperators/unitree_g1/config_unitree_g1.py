@@ -21,7 +21,7 @@ from ..config import TeleoperatorConfig
 
 @dataclass
 class ExoskeletonArmPortConfig:
-    """Serial port configuration for individual exoskeleton arm."""
+    """单个外骨骼手臂的串口配置。"""
 
     port: str = ""
     baud_rate: int = 115200
@@ -33,5 +33,5 @@ class UnitreeG1TeleoperatorConfig(TeleoperatorConfig):
     left_arm_config: ExoskeletonArmPortConfig = field(default_factory=ExoskeletonArmPortConfig)
     right_arm_config: ExoskeletonArmPortConfig = field(default_factory=ExoskeletonArmPortConfig)
 
-    # Frozen joints (comma-separated joint names that won't be moved by IK)
+    # 冻结关节（逗号分隔的关节名称，IK 不会移动这些关节）
     frozen_joints: str = ""

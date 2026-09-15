@@ -13,15 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Evaluate a policy on an environment by running rollouts and computing metrics.
+"""通过运行 rollout 并计算指标来在环境上评估策略。
 
-Requires: pip install 'lerobot[evaluation]' plus the policy extra (e.g. lerobot[pi])
-          and the environment extra (e.g. lerobot[pusht]) if evaluating in simulation.
+需要：pip install 'lerobot[evaluation]'，以及策略附加依赖（例如 lerobot[pi]）
+          和环境附加依赖（例如 lerobot[pusht]），如果在仿真中评估的话。
 
-Usage examples:
+用法示例：
 
-You want to evaluate a model from the hub (eg: https://huggingface.co/lerobot/diffusion_pusht)
-for 10 episodes.
+你想要评估一个来自 hub 的模型（例如：https://huggingface.co/lerobot/diffusion_pusht），
+评估 10 个 episode。
 
 ```
 lerobot-eval \
@@ -33,7 +33,7 @@ lerobot-eval \
     --policy.device=cuda
 ```
 
-OR, you want to evaluate a model checkpoint from the LeRobot training script for 10 episodes.
+或者，你想要评估一个来自 LeRobot 训练脚本的模型检查点，评估 10 个 episode。
 ```
 lerobot-eval \
     --policy.path=outputs/train/diffusion_pusht/checkpoints/005000/pretrained_model \
@@ -44,9 +44,9 @@ lerobot-eval \
     --policy.device=cuda
 ```
 
-Note that in both examples, the repo/folder should contain at least `config.json` and `model.safetensors` files.
+请注意，在这两个示例中，仓库/文件夹应至少包含 `config.json` 和 `model.safetensors` 文件。
 
-You can learn about the CLI options for this script in the `EvalPipelineConfig` in lerobot/configs/eval.py
+你可以在 lerobot/configs/eval.py 的 `EvalPipelineConfig` 中了解此脚本的 CLI 选项。
 """
 
 import concurrent.futures as cf
@@ -106,7 +106,7 @@ logger = logging.getLogger(__name__)
 
 
 def _env_features_to_dataset_features(env_features: dict) -> dict:
-    """Convert EnvConfig.features to the dict format expected by LeRobotDataset.create()."""
+    """将 EnvConfig.features 转换为 LeRobotDataset.create() 所期望的字典格式。"""
     features = {}
     for key, ft in env_features.items():
         shape = tuple(ft.shape)
@@ -130,10 +130,10 @@ def _build_raw_frame(
     task: str,
     env_features: dict,
 ) -> dict:
-    """Build a dataset frame from raw env observations for one env index.
+    """基于某个环境索引的原始环境观测构建一个数据集帧。
 
-    Keys in the frame match the keys in env_features so they align with the
-    dataset schema created by _env_features_to_dataset_features().
+    帧中的键与 env_features 中的键一致，从而与
+    _env_features_to_dataset_features() 创建的数据集模式对齐。
     """
     frame: dict[str, Any] = {}
     for key in env_features:
@@ -180,46 +180,44 @@ def rollout(
     recording_private: bool = False,
     predicted_latents_callback: Callable[[PreTrainedPolicy], None] | None = None,
 ) -> dict:
-    """Run a batched policy rollout once through a batch of environments.
+    """在一批环境上运行一次批量策略 rollout。
 
-    Note that all environments in the batch are run until the last environment is done. This means some
-    data will probably need to be discarded (for environments that aren't the first one to be done).
+    请注意，批次中的所有环境会一直运行，直到最后一个环境结束。这意味着
+    可能需要丢弃部分数据（对于那些不是最先结束的环境）。
 
-    The return dictionary contains:
-        (optional) "observation": A dictionary of (batch, sequence + 1, *) tensors mapped to observation
-            keys. NOTE that this has an extra sequence element relative to the other keys in the
-            dictionary. This is because an extra observation is included for after the environment is
-            terminated or truncated.
-        "action": A (batch, sequence, action_dim) tensor of actions applied based on the observations (not
-            including the last observations).
-        "reward": A (batch, sequence) tensor of rewards received for applying the actions.
-        "success": A (batch, sequence) tensor of success conditions (the only time this can be True is upon
-            environment termination/truncation).
-        "done": A (batch, sequence) tensor of **cumulative** done conditions. For any given batch element,
-            the first True is followed by True's all the way till the end. This can be used for masking
-            extraneous elements from the sequences above.
+    返回的字典包含：
+        （可选）"observation"：一个字典，包含映射到各观测键的
+            (batch, sequence + 1, *) 张量。请注意，相对于字典中的其他键，
+            它多出一个序列元素。这是因为在环境被终止（terminated）或截断（truncated）
+            之后还包含了一个额外的观测。
+        "action"：一个 (batch, sequence, action_dim) 张量，表示根据观测执行的动作
+            （不包含最后的观测）。
+        "reward"：一个 (batch, sequence) 张量，表示执行这些动作所获得的奖励。
+        "success"：一个 (batch, sequence) 张量，表示成功条件（它唯一可能为 True 的时刻
+            是环境被终止/截断时）。
+        "done"：一个 (batch, sequence) 张量，表示**累积的**结束条件。对于任意给定的批次元素，
+            第一个 True 之后一直到末尾全是 True。这可以用于掩蔽上述序列中多余的元素。
 
-    Args:
-        env: The batch of environments.
-        policy: The policy. Must be a PyTorch nn module.
-        seeds: The environments are seeded once at the start of the rollout. If provided, this argument
-            specifies the seeds for each of the environments.
-        return_observations: Whether to include all observations in the returned rollout data. Observations
-            are returned optionally because they typically take more memory to cache. Defaults to False.
-        render_callback: Optional rendering callback to be used after the environments are reset, and after
-            every step.
-        predicted_latents_callback: Optional callback invoked after every ``select_action`` with the policy
-            itself. World-model policies (e.g. LingBot-VA) stash predicted video latents on
-            ``policy.last_predicted_latents``; this lets the caller concatenate chunks and decode once.
-    Returns:
-        The dictionary described above.
+    参数:
+        env: 环境批次。
+        policy: 策略。必须是一个 PyTorch nn 模块。
+        seeds: 环境会在 rollout 开始时设置一次随机种子。如果提供，此参数
+            为每个环境指定种子。
+        return_observations: 是否在返回的 rollout 数据中包含所有观测。观测
+            作为可选项返回，因为缓存它们通常会占用更多内存。默认为 False。
+        render_callback: 可选的渲染回调，在环境重置之后以及每一步之后使用。
+        predicted_latents_callback: 可选回调，在每次 ``select_action`` 之后以策略
+            本身为参数调用。世界模型策略（例如 LingBot-VA）会将预测的视频潜变量
+            存放在 ``policy.last_predicted_latents`` 上；这让调用方可以拼接各个分块并只解码一次。
+    返回:
+        上述字典。
     """
     assert isinstance(policy, nn.Module), "Policy must be a PyTorch nn module."
 
-    # Reset the policy and environments.
+    # 重置策略和环境。
     policy.reset()
-    # NEW_ROLLOUT_OPTION tells FreezeAfterEpisodeEnd this is a genuine new episode, as
-    # opposed to Gymnasium's argument-less autoreset of a sub-env that already finished.
+    # NEW_ROLLOUT_OPTION 告知 FreezeAfterEpisodeEnd 这是一个真正的新 episode，
+    # 而不是 Gymnasium 对已结束的子环境进行的无参数自动重置（autoreset）。
     observation, info = env.reset(seed=seeds, options={NEW_ROLLOUT_OPTION: True})
     if render_callback is not None:
         render_callback(env)
@@ -258,25 +256,25 @@ def rollout(
     all_dones = []
 
     step = 0
-    # Keep track of which environments are done.
+    # 记录哪些环境已经结束。
     done = np.array([False] * env.num_envs)
     max_steps = env.call("_max_episode_steps")[0]
     progbar = trange(
         max_steps,
         desc=f"Running rollout with at most {max_steps} steps",
-        disable=inside_slurm(),  # we dont want progress bar when we use slurm, since it clutters the logs
+        disable=inside_slurm(),  # 使用 slurm 时不希望显示进度条，因为它会使日志变得杂乱
         leave=False,
     )
     check_env_attributes_and_types(env)
     try:
         while not np.all(done) and step < max_steps:
-            # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
+            # 将 numpy 数组转换为张量，并把字典键改为 LeRobot 策略格式。
             observation = preprocess_observation(observation)
             if return_observations:
                 all_observations.append(deepcopy(observation))
 
-            # Infer "task" from sub-environments (prefer natural language description).
-            # env.call() works with both SyncVectorEnv and AsyncVectorEnv.
+            # 从子环境推断 "task"（优先使用自然语言描述）。
+            # env.call() 对 SyncVectorEnv 和 AsyncVectorEnv 都适用。
             try:
                 observation["task"] = list(env.call("task_description"))
             except (AttributeError, NotImplementedError):
@@ -285,7 +283,7 @@ def rollout(
                 except (AttributeError, NotImplementedError):
                     observation["task"] = [""] * env.num_envs
 
-            # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
+            # 应用环境专属的预处理（例如用于 LIBERO 的 LiberoProcessorStep）
             observation = env_preprocessor(observation)
 
             observation = preprocessor(observation)
@@ -299,17 +297,17 @@ def rollout(
             action_transition = env_postprocessor(action_transition)
             action = action_transition[ACTION]
 
-            # Convert to CPU / numpy.
+            # 转换为 CPU / numpy。
             action_numpy: np.ndarray = action.to("cpu").numpy()
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
-            # Apply the next action.
+            # 执行下一个动作。
             observation, reward, terminated, truncated, info = env.step(action_numpy)
             if render_callback is not None:
                 render_callback(env)
 
-            # VectorEnv stores is_success in `info["final_info"][env_index]["is_success"]`. "final_info" isn't
-            # available if none of the envs finished.
+            # VectorEnv 将 is_success 存储在 `info["final_info"][env_index]["is_success"]` 中。
+            # 如果没有任何环境结束，则不存在 "final_info"。
             if "final_info" in info:
                 final_info = info["final_info"]
                 if isinstance(final_info, dict):
@@ -320,8 +318,8 @@ def rollout(
                         else [bool(is_success)] * env.num_envs
                     )
                 else:
-                    # Gymnasium < 1.0 returns final_info as a per-env sequence/object array,
-                    # with entries set to a dict only for envs that just finished.
+                    # Gymnasium < 1.0 会将 final_info 返回为按环境排列的序列/对象数组，
+                    # 只有刚刚结束的环境所对应的条目才会被设置为字典。
                     successes = []
                     for item in final_info:
                         if isinstance(item, dict) and "is_success" in item:
@@ -358,10 +356,10 @@ def rollout(
                         recording_datasets[env_idx].save_episode()
                 raw_observation = deepcopy(observation)
 
-            # Keep track of which environments are done so far.
-            # Mark the episode as done if we reach the maximum step limit.
-            # This ensures that the rollout always terminates cleanly at `max_steps`,
-            # and allows logging/saving (e.g., videos) to be triggered consistently.
+            # 记录到目前为止哪些环境已经结束。
+            # 如果达到最大步数限制，则将该 episode 标记为结束。
+            # 这确保 rollout 总是在 `max_steps` 处干净地终止，
+            # 并允许一致地触发日志记录/保存（例如视频）。
             done = terminated | truncated | done
             if step + 1 == max_steps:
                 done = np.ones_like(done, dtype=bool)
@@ -387,12 +385,12 @@ def rollout(
                     else:
                         logging.warning("No episodes recorded for %s — skipping push to hub.", ds.repo_id)
 
-    # Track the final observation.
+    # 记录最后的观测。
     if return_observations:
         observation = preprocess_observation(observation)
         all_observations.append(deepcopy(observation))
 
-    # Stack the sequence along the first dimension so that we have (batch, sequence, *) tensors.
+    # 沿第一维堆叠序列，从而得到 (batch, sequence, *) 张量。
     ret = {
         ACTION: torch.stack(all_actions, dim=1),
         "reward": torch.stack(all_rewards, dim=1),
@@ -430,23 +428,23 @@ def eval_policy(
     save_predicted_video: bool = False,
 ) -> dict:
     """
-    Args:
-        env: The batch of environments.
-        policy: The policy.
-        n_episodes: The number of episodes to evaluate.
-        max_episodes_rendered: Maximum number of episodes to render into videos.
-        videos_dir: Where to save rendered videos.
-        return_episode_data: Whether to return episode data for online training. Incorporates the data into
-            the "episodes" key of the returned dictionary.
-        start_seed: The first seed to use for the first individual rollout. For all subsequent rollouts the
-            seed is incremented by 1. If not provided, the environments are not manually seeded.
-    Returns:
-        Dictionary with metrics and data regarding the rollouts.
+    参数:
+        env: 环境批次。
+        policy: 策略。
+        n_episodes: 要评估的 episode 数量。
+        max_episodes_rendered: 要渲染成视频的最大 episode 数量。
+        videos_dir: 渲染出的视频的保存位置。
+        return_episode_data: 是否返回用于在线训练的 episode 数据。该数据会被并入
+            返回字典的 "episodes" 键中。
+        start_seed: 第一次单独 rollout 使用的首个种子。后续每次 rollout 的
+            种子递增 1。如果未提供，则不手动为环境设置种子。
+    返回:
+        包含与 rollout 相关的指标和数据的字典。
     """
     if max_episodes_rendered > 0 and not videos_dir:
         raise ValueError("If max_episodes_rendered > 0, videos_dir must be provided.")
 
-    # World-model policies (e.g. LingBot-VA) opt into predicted-video saving via their config.
+    # 世界模型策略（例如 LingBot-VA）通过其配置选择启用预测视频保存。
     save_predicted_video = save_predicted_video or bool(
         getattr(getattr(policy, "config", None), "save_predicted_video", False)
     )
@@ -462,24 +460,24 @@ def eval_policy(
             raise exc
 
     start = time.time()
-    # Preserve the mode for direct callers. eval_policy_all scopes the mode
-    # around all tasks so parallel evaluations cannot race with each other.
+    # 为直接调用者保留模式状态。eval_policy_all 会在所有任务外围
+    # 统一设置模式，从而避免并行评估之间相互竞争。
     was_training = policy.training
     policy.eval()
 
-    # Determine how many batched rollouts we need to get n_episodes. Note that if n_episodes is not evenly
-    # divisible by env.num_envs we end up discarding some data in the last batch.
+    # 计算要获得 n_episodes 个 episode 需要多少个批量 rollout。请注意，如果 n_episodes
+    # 不能被 env.num_envs 整除，最后一个批次中的部分数据最终会被丢弃。
     n_batches = n_episodes // env.num_envs + int((n_episodes % env.num_envs) != 0)
 
-    # Keep track of some metrics.
+    # 记录一些指标。
     sum_rewards = []
     max_rewards = []
     all_successes = []
     all_seeds = []
-    threads = []  # for video saving threads
-    n_episodes_rendered = 0  # for saving the correct number of videos
+    threads = []  # 用于保存视频的线程
+    n_episodes_rendered = 0  # 用于控制保存视频的正确数量
 
-    # Callback for visualization.
+    # 用于可视化的回调。
     def render_frame(env: gym.vector.VectorEnv):
         # noqa: B023
         if n_episodes_rendered >= max_episodes_rendered:
@@ -488,8 +486,8 @@ def eval_policy(
         if isinstance(env, gym.vector.SyncVectorEnv):
             ep_frames.append(np.stack([env.envs[i].render() for i in range(n_to_render_now)]))  # noqa: B023
         elif hasattr(env, "call"):
-            # Here we must render all frames and discard any we don't need.
-            # Covers AsyncVectorEnv and _LazyAsyncVectorEnv (which wraps one).
+            # 这里必须渲染所有帧，然后丢弃不需要的帧。
+            # 涵盖 AsyncVectorEnv 和 _LazyAsyncVectorEnv（后者包装了前者）。
             ep_frames.append(np.stack(env.call("render")[:n_to_render_now]))
 
     if max_episodes_rendered > 0:
@@ -501,8 +499,8 @@ def eval_policy(
         predicted_video_paths: list[str] = []
         n_predicted_rendered = 0
 
-    # Collect predicted-video latents across a rollout (world-model policies only). The latents are
-    # concatenated and decoded once after the rollout, matching upstream LingBot-VA's visualization path.
+    # 在整个 rollout 过程中收集预测视频潜变量（仅限世界模型策略）。这些潜变量会在
+    # rollout 结束后拼接并只解码一次，与上游 LingBot-VA 的可视化路径保持一致。
     def collect_predicted_latents(policy: PreTrainedPolicy):
         latents = getattr(policy, "last_predicted_latents", None)
         if latents is not None:
@@ -514,11 +512,11 @@ def eval_policy(
     if return_episode_data:
         episode_data: dict | None = None
 
-    # we dont want progress bar when we use slurm, since it clutters the logs
+    # 使用 slurm 时不希望显示进度条，因为它会使日志变得杂乱
     progbar = trange(n_batches, desc="Stepping through eval batches", disable=inside_slurm())
     for batch_ix in progbar:
-        # Cache frames for rendering videos. Each item will be (b, h, w, c), and the list indexes the rollout
-        # step.
+        # 缓存用于渲染视频的帧。每个元素的形状为 (b, h, w, c)，列表的索引对应
+        # rollout 的步数。
         if max_episodes_rendered > 0:
             ep_frames: list[np.ndarray] = []
 
@@ -548,16 +546,17 @@ def eval_policy(
             predicted_latents_callback=collect_predicted_latents if save_predicted_video else None,
         )
 
-        # Figure out where in each rollout sequence the first done condition was encountered (results after
-        # this won't be included).
+        # 找出每个 rollout 序列中第一次遇到结束条件的位置（此位置之后的结果
+        # 不会被纳入）。
         n_steps = rollout_data["done"].shape[1]
-        # Note: this relies on a property of argmax: that it returns the first occurrence as a tiebreaker.
+        # 注意：这里依赖 argmax 的一个特性：在出现平局时，它会返回第一次出现的位置。
         done_indices = torch.argmax(rollout_data["done"].to(int), dim=1)
 
-        # Make a mask with shape (batch, n_steps) to mask out rollout data after the first done
-        # (batch-element-wise). Note the `done_indices + 1` to make sure to keep the data from the done step.
+        # 构造一个形状为 (batch, n_steps) 的掩码，用于掩蔽第一次结束之后
+        # （按批次元素分别判断）的 rollout 数据。注意这里的 `done_indices + 1`，
+        # 以确保保留结束那一步的数据。
         mask = (torch.arange(n_steps) <= einops.repeat(done_indices + 1, "b -> b s", s=n_steps)).int()
-        # Extend metrics.
+        # 扩充指标。
         batch_sum_rewards = einops.reduce((rollout_data["reward"] * mask), "b n -> b", "sum")
         sum_rewards.extend(batch_sum_rewards.tolist())
         batch_max_rewards = einops.reduce((rollout_data["reward"] * mask), "b n -> b", "max")
@@ -569,7 +568,7 @@ def eval_policy(
         else:
             all_seeds.extend([None] * env.num_envs)
 
-        # FIXME: episode_data is either None or it doesn't exist
+        # FIXME：episode_data 要么为 None，要么尚不存在
         if return_episode_data:
             this_episode_data = _compile_episode_data(
                 rollout_data,
@@ -581,13 +580,13 @@ def eval_policy(
             if episode_data is None:
                 episode_data = this_episode_data
             else:
-                # Some sanity checks to make sure we are correctly compiling the data.
+                # 一些健全性检查，以确保我们正确地汇编数据。
                 assert episode_data["episode_index"][-1] + 1 == this_episode_data["episode_index"][0]
                 assert episode_data["index"][-1] + 1 == this_episode_data["index"][0]
-                # Concatenate the episode data.
+                # 拼接 episode 数据。
                 episode_data = {k: torch.cat([episode_data[k], this_episode_data[k]]) for k in episode_data}
 
-        # Maybe render video for visualization.
+        # 可能需要渲染视频用于可视化。
         if max_episodes_rendered > 0 and len(ep_frames) > 0:
             batch_stacked_frames = np.stack(ep_frames, axis=1)  # (b, t, *)
             for stacked_frames, done_index in zip(
@@ -603,7 +602,7 @@ def eval_policy(
                     target=write_video,
                     args=(
                         str(video_path),
-                        stacked_frames[: done_index + 1],  # + 1 to capture the last observation
+                        stacked_frames[: done_index + 1],  # +1 以捕获最后一个观测
                         env.unwrapped.metadata["render_fps"],
                     ),
                 )
@@ -611,7 +610,7 @@ def eval_policy(
                 threads.append(thread)
                 n_episodes_rendered += 1
 
-        # Maybe save the policy's predicted (imagined) video for this batch's rollout.
+        # 可能需要保存策略对该批次 rollout 的预测（想象）视频。
         if save_predicted_video and len(pred_latents) > 0:
             predicted_latent = torch.cat(pred_latents, dim=2)
             decoder = getattr(policy, "decode_predicted_latents", None) or getattr(
@@ -644,11 +643,11 @@ def eval_policy(
             {"running_success_rate": f"{np.mean(all_successes[:n_episodes]).item() * 100:.1f}%"}
         )
 
-    # Wait till all video rendering threads are done.
+    # 等待所有视频渲染线程结束。
     for thread in threads:
         thread.join()
 
-    # Compile eval info.
+    # 汇编评估信息。
     info = {
         "per_episode": [
             {
@@ -694,20 +693,20 @@ def eval_policy(
 def _compile_episode_data(
     rollout_data: dict, done_indices: Tensor, start_episode_index: int, start_data_index: int, fps: float
 ) -> dict:
-    """Convenience function for `eval_policy(return_episode_data=True)`
+    """供 `eval_policy(return_episode_data=True)` 使用的便捷函数。
 
-    Compiles all the rollout data into a Hugging Face dataset.
+    将所有 rollout 数据汇编为一个 Hugging Face 数据集。
 
-    Similar logic is implemented when datasets are pushed to hub (see: `push_to_hub`).
+    数据集推送到 hub 时实现了类似的逻辑（参见：`push_to_hub`）。
     """
     ep_dicts = []
     total_frames = 0
     for ep_ix in range(rollout_data[ACTION].shape[0]):
-        # + 2 to include the first done frame and the last observation frame.
+        # +2 以包含第一个结束帧和最后一个观测帧。
         num_frames = done_indices[ep_ix].item() + 2
         total_frames += num_frames
 
-        # Here we do `num_frames - 1` as we don't want to include the last observation frame just yet.
+        # 这里使用 `num_frames - 1`，因为我们暂时还不想包含最后一个观测帧。
         ep_dict = {
             ACTION: rollout_data[ACTION][ep_ix, : num_frames - 1],
             "episode_index": torch.tensor([start_episode_index + ep_ix] * (num_frames - 1)),
@@ -718,7 +717,7 @@ def _compile_episode_data(
             REWARD: rollout_data["reward"][ep_ix, : num_frames - 1].type(torch.float32),
         }
 
-        # For the last observation frame, all other keys will just be copy padded.
+        # 对于最后一个观测帧，其他所有键都直接通过复制最后一个值来填充。
         for k in ep_dict:
             ep_dict[k] = torch.cat([ep_dict[k], ep_dict[k][-1:]])
 
@@ -740,7 +739,7 @@ def _compile_episode_data(
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
 
-    # Check device is available
+    # 检查设备是否可用
     device = get_safe_torch_device(cfg.policy.device, log=True)
 
     torch.backends.cudnn.benchmark = True
@@ -767,7 +766,7 @@ def eval_main(cfg: EvalPipelineConfig):
 
     policy.eval()
 
-    # The inference device is automatically set to match the detected hardware, overriding any previous device settings from training to ensure compatibility.
+    # 推理设备会自动设置为与检测到的硬件一致，覆盖训练时先前的任何设备设置以确保兼容性。
     preprocessor_overrides = {
         "device_processor": {"device": str(policy.config.device)},
         "rename_observations_processor": {"rename_map": cfg.rename_map},
@@ -779,7 +778,7 @@ def eval_main(cfg: EvalPipelineConfig):
         preprocessor_overrides=preprocessor_overrides,
     )
 
-    # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
+    # 创建环境专属的预处理器和后处理器（例如用于 LIBERO 环境）
     env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
 
     recording_dir = Path(cfg.output_dir) / "recordings" if cfg.eval.recording else None
@@ -808,21 +807,21 @@ def eval_main(cfg: EvalPipelineConfig):
         logger.info("Overall Aggregated Metrics:")
         logger.info(info["overall"])
 
-        # Print per-suite stats
+        # 打印每个测试套件（suite）的统计信息
         for task_group, task_group_info in info.items():
             logger.info(f"\nAggregated Metrics for {task_group}:")
             logger.info(task_group_info)
-    # Close all vec envs
+    # 关闭所有向量环境
     close_envs(envs)
 
-    # Save info
+    # 保存信息
     with open(Path(cfg.output_dir) / "eval_info.json", "w") as f:
         json.dump(info, f, indent=2)
 
     logging.info("End of eval")
 
 
-# ---- typed payload returned by one task eval ----
+# ---- 单个任务评估返回的类型化负载 ----
 class TaskMetrics(TypedDict):
     sum_rewards: list[float]
     max_rewards: list[float]
@@ -852,7 +851,7 @@ def eval_one(
     recording_repo_id: str | None = None,
     recording_private: bool = False,
 ) -> TaskMetrics:
-    """Evaluates one task_id of one suite using the provided vec env."""
+    """使用提供的向量环境评估某个套件中的一个 task_id。"""
 
     task_videos_dir = videos_dir
 
@@ -905,9 +904,9 @@ def run_one(
     recording_private: bool = False,
 ):
     """
-    Run eval_one for a single (task_group, task_id, env).
-    Returns (task_group, task_id, task_metrics_dict).
-    This function is intentionally module-level to make it easy to test.
+    针对单个 (task_group, task_id, env) 运行 eval_one。
+    返回 (task_group, task_id, task_metrics_dict)。
+    此函数特意定义在模块级别，以便于测试。
     """
     task_videos_dir = None
     if videos_dir is not None:
@@ -965,27 +964,26 @@ def eval_policy_all(
     max_parallel_tasks: int = 1,
 ) -> dict:
     """
-    Evaluate a nested `envs` dict: {task_group: {task_id: vec_env}}.
-    This implementation flattens tasks, runs them sequentially or via ThreadPoolExecutor,
-    accumulates per-group and overall statistics, and returns the same aggregate metrics
-    schema as the single-env evaluator (avg_sum_reward / avg_max_reward / pc_success / timings)
-    plus per-task infos.
+    评估一个嵌套的 `envs` 字典：{task_group: {task_id: vec_env}}。
+    此实现会将任务展平，顺序执行或通过 ThreadPoolExecutor 执行，
+    累积各组以及总体的统计信息，并返回与单环境评估器相同的聚合指标
+    模式（avg_sum_reward / avg_max_reward / pc_success / 计时信息），
+    此外还包括每个任务的信息。
     """
     start_t = time.time()
 
-    # Flatten envs into list of (task_group, task_id, env)
+    # 将 envs 展平为 (task_group, task_id, env) 列表
     tasks = [(tg, tid, vec) for tg, group in envs.items() for tid, vec in group.items()]
 
-    # accumulators: track metrics at both per-group level and across all groups
+    # 累加器：在每个组的层级以及所有组的整体层级分别跟踪指标
     group_acc: dict[str, dict[str, list]] = defaultdict(lambda: {k: [] for k in ACC_KEYS})
     overall: dict[str, list] = {k: [] for k in ACC_KEYS}
     per_task_infos: list[dict] = []
 
-    # small inline helper to accumulate one task's metrics into accumulators
+    # 小型内联辅助函数，用于将单个任务的指标累积到累加器中
     def _accumulate_to(group: str, metrics: dict):
-        # metrics expected to contain 'sum_rewards', 'max_rewards', 'successes', optionally 'video_paths'
-        # but eval_one may store per-episode lists; we assume metrics uses scalars averaged per task as before.
-        # To be robust, accept scalars or lists.
+        # metrics 预期包含 'sum_rewards'、'max_rewards'、'successes'，以及可选的 'video_paths'，
+        # 但 eval_one 可能存储的是按 episode 的列表；为保持稳健，标量或列表都接受。
         def _append(key, value):
             if value is None:
                 return
@@ -1005,7 +1003,7 @@ def eval_policy_all(
                 group_acc[group][key].extend(paths)
                 overall[key].extend(paths)
 
-    # Choose runner (sequential vs threaded)
+    # 选择运行方式（顺序还是多线程）
     task_runner = partial(
         run_one,
         policy=policy,
@@ -1024,9 +1022,9 @@ def eval_policy_all(
         recording_private=recording_private,
     )
 
-    # Set the shared policy's mode before launching any workers. Restoring it
-    # inside individual tasks would let one task enable training mode while
-    # another task is still evaluating.
+    # 在启动任何工作进程之前设置共享策略的模式。如果在各个任务
+    # 内部恢复模式，可能会出现一个任务启用训练模式、而另一个任务
+    # 仍在评估中的情况。
     was_training = policy.training
     policy.eval()
     try:
@@ -1043,8 +1041,8 @@ def eval_policy_all(
                     per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
                 finally:
                     env.close()
-                    # Prefetch next task's workers *after* closing current env to prevent
-                    # GPU memory overlap between consecutive tasks.
+                    # 在关闭当前环境*之后*再预取下一个任务的工作进程，以防止
+                    # 相邻任务之间的 GPU 显存重叠。
                     if i + 1 < len(tasks):
                         next_env = tasks[i + 1][2]
                         if hasattr(next_env, "_ensure"):
@@ -1067,14 +1065,14 @@ def eval_policy_all(
     finally:
         policy.train(was_training)
 
-    # compute aggregated metrics helper (robust to lists/scalars)
+    # 计算聚合指标的辅助函数（对列表/标量都稳健）
     def _agg_from_list(xs):
         if not xs:
             return float("nan")
         arr = np.array(xs, dtype=float)
         return float(np.nanmean(arr))
 
-    # compute per-group aggregates
+    # 计算各组的聚合结果
     groups_aggregated = {}
     for group, acc in group_acc.items():
         groups_aggregated[group] = {
@@ -1086,7 +1084,7 @@ def eval_policy_all(
             "predicted_video_paths": list(acc["predicted_video_paths"]),
         }
 
-    # overall aggregates
+    # 总体聚合结果
     overall_agg = {
         "avg_sum_reward": _agg_from_list(overall["sum_rewards"]),
         "avg_max_reward": _agg_from_list(overall["max_rewards"]),

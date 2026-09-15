@@ -23,84 +23,79 @@ from lerobot.optim import AdamConfig, DiffuserSchedulerConfig
 @PreTrainedConfig.register_subclass("diffusion")
 @dataclass
 class DiffusionConfig(PreTrainedConfig):
-    """Configuration class for DiffusionPolicy.
+    """DiffusionPolicy 的配置类。
 
-    Defaults are configured for training with PushT providing proprioceptive and single camera observations.
+    默认值针对使用 PushT 进行训练而配置，提供本体感知和单摄像头观测。
 
-    The parameters you will most likely need to change are the ones which depend on the environment / sensors.
-    Those are: `input_features` and `output_features`.
+    你最可能需要修改的参数是那些依赖于环境/传感器的参数，
+    即 `input_features` 和 `output_features`。
 
-    Notes on the inputs and outputs:
-        - "observation.state" is required as an input key.
-        - Either:
-            - At least one key starting with "observation.image is required as an input.
-              AND/OR
-            - The key "observation.environment_state" is required as input.
-        - If there are multiple keys beginning with "observation.image" they are treated as multiple camera
-          views. Right now we only support all images having the same shape.
-        - "action" is required as an output key.
+    关于输入和输出的说明：
+        - "observation.state" 是必需的输入键。
+        - 满足以下任一条件即可：
+            - 至少有一个以 "observation.image" 开头的键作为输入。
+              并且/或者
+            - 键 "observation.environment_state" 作为输入。
+        - 如果有多个以 "observation.image" 开头的键，它们将被视为多个摄像头视图。
+          目前我们仅支持所有图像具有相同形状。
+        - "action" 是必需的输出键。
 
     Args:
-        n_obs_steps: Number of environment steps worth of observations to pass to the policy (takes the
-            current step and additional steps going back).
-        horizon: Diffusion model action prediction size as detailed in `DiffusionPolicy.select_action`.
-        n_action_steps: The number of action steps to run in the environment for one invocation of the policy.
-            See `DiffusionPolicy.select_action` for more details.
-        input_features: A dictionary defining the PolicyFeature of the input data for the policy. The key represents
-            the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        output_features: A dictionary defining the PolicyFeature of the output data for the policy. The key represents
-            the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        normalization_mapping: A dictionary that maps from a str value of FeatureType (e.g., "STATE", "VISUAL") to
-            a corresponding NormalizationMode (e.g., NormalizationMode.MIN_MAX)
-        vision_backbone: Name of the torchvision resnet backbone to use for encoding images.
-        resize_shape: (H, W) shape to resize images to as a preprocessing step for the vision
-            backbone. If None, no resizing is done and the original image resolution is used.
-        crop_ratio: Ratio in (0, 1] used to derive the crop size from resize_shape
-            (crop_h = int(resize_shape[0] * crop_ratio), likewise for width).
-            Set to 1.0 to disable cropping. Only takes effect when resize_shape is not None.
-        crop_shape: (H, W) shape to crop images to. When resize_shape is set and crop_ratio < 1.0,
-            this is computed automatically. Can also be set directly for legacy configs that use
-            crop-only (without resize). If None and no derivation applies, no cropping is done.
-        crop_is_random: Whether the crop should be random at training time (it's always a center
-            crop in eval mode).
-        pretrained_backbone_weights: Pretrained weights from torchvision to initialize the backbone.
-            `None` means no pretrained weights.
-        use_group_norm: Whether to replace batch normalization with group normalization in the backbone.
-            The group sizes are set to be about 16 (to be precise, feature_dim // 16).
-        spatial_softmax_num_keypoints: Number of keypoints for SpatialSoftmax.
-        use_separate_rgb_encoder_per_camera: Whether to use a separate RGB encoder for each camera view.
-        down_dims: Feature dimension for each stage of temporal downsampling in the diffusion modeling Unet.
-            You may provide a variable number of dimensions, therefore also controlling the degree of
-            downsampling.
-        kernel_size: The convolutional kernel size of the diffusion modeling Unet.
-        n_groups: Number of groups used in the group norm of the Unet's convolutional blocks.
-        diffusion_step_embed_dim: The Unet is conditioned on the diffusion timestep via a small non-linear
-            network. This is the output dimension of that network, i.e., the embedding dimension.
-        use_film_scale_modulation: FiLM (https://huggingface.co/papers/1709.07871) is used for the Unet conditioning.
-            Bias modulation is used be default, while this parameter indicates whether to also use scale
-            modulation.
-        gradient_checkpointing: Whether to checkpoint the Unet residual blocks during training. This reduces
-            activation memory at the cost of recomputing those blocks during the backward pass.
-        noise_scheduler_type: Name of the noise scheduler to use. Supported options: ["DDPM", "DDIM"].
-        num_train_timesteps: Number of diffusion steps for the forward diffusion schedule.
-        beta_schedule: Name of the diffusion beta schedule as per DDPMScheduler from Hugging Face diffusers.
-        beta_start: Beta value for the first forward-diffusion step.
-        beta_end: Beta value for the last forward-diffusion step.
-        prediction_type: The type of prediction that the diffusion modeling Unet makes. Choose from "epsilon"
-            or "sample". These have equivalent outcomes from a latent variable modeling perspective, but
-            "epsilon" has been shown to work better in many deep neural network settings.
-        clip_sample: Whether to clip the sample to [-`clip_sample_range`, +`clip_sample_range`] for each
-            denoising step at inference time. WARNING: you will need to make sure your action-space is
-            normalized to fit within this range.
-        clip_sample_range: The magnitude of the clipping range as described above.
-        num_inference_steps: Number of reverse diffusion steps to use at inference time (steps are evenly
-            spaced). If not provided, this defaults to be the same as `num_train_timesteps`.
-        do_mask_loss_for_padding: Whether to mask the loss when there are copy-padded actions. See
-            `LeRobotDataset` and `load_previous_and_future_frames` for more information. Note, this defaults
-            to False as the original Diffusion Policy implementation does the same.
+        n_obs_steps: 传递给策略的环境步数观测数量（取当前步及之前的若干步）。
+        horizon: 扩散模型动作预测的大小，详见 `DiffusionPolicy.select_action`。
+        n_action_steps: 单次调用策略时在环境中运行的动作步数。
+            详见 `DiffusionPolicy.select_action`。
+        input_features: 定义策略输入数据 PolicyFeature 的字典。键表示输入数据名称，
+            值为 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        output_features: 定义策略输出数据 PolicyFeature 的字典。键表示输出数据名称，
+            值为 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        normalization_mapping: 从 FeatureType 的字符串值（例如 "STATE"、"VISUAL"）
+            映射到对应 NormalizationMode（例如 NormalizationMode.MIN_MAX）的字典。
+        vision_backbone: 用于编码图像的 torchvision resnet 骨干网络名称。
+        resize_shape: 作为视觉骨干网络预处理步骤，将图像调整为 (H, W) 形状。
+            若为 None，则不进行调整大小，使用原始图像分辨率。
+        crop_ratio: (0, 1] 区间内的比率，用于从 resize_shape 推导裁剪尺寸
+            （crop_h = int(resize_shape[0] * crop_ratio)，宽度同理）。
+            设为 1.0 可禁用裁剪。仅在 resize_shape 不为 None 时生效。
+        crop_shape: 将图像裁剪为 (H, W) 形状。当设置了 resize_shape 且 crop_ratio < 1.0 时，
+            会自动计算该值。也可以直接设置，用于使用仅裁剪（不调整大小）的旧配置。
+            若为 None 且无推导适用，则不进行裁剪。
+        crop_is_random: 训练时裁剪是否随机（评估模式下始终为中心裁剪）。
+        pretrained_backbone_weights: 用于初始化骨干网络的 torchvision 预训练权重。
+            `None` 表示不使用预训练权重。
+        use_group_norm: 是否在骨干网络中用组归一化替换批归一化。
+            组大小设为约 16（精确地说，feature_dim // 16）。
+        spatial_softmax_num_keypoints: SpatialSoftmax 的关键点数量。
+        use_separate_rgb_encoder_per_camera: 是否为每个摄像头视图使用单独的 RGB 编码器。
+        down_dims: 扩散建模 Unet 中每个时间下采样阶段的特征维度。
+            你可以提供任意数量的维度，从而控制下采样的程度。
+        kernel_size: 扩散建模 Unet 的卷积核大小。
+        n_groups: Unet 卷积块中组归一化使用的组数。
+        diffusion_step_embed_dim: Unet 通过一个小型非线性网络以扩散时间步为条件。
+            这是该网络的输出维度，即嵌入维度。
+        use_film_scale_modulation: Unet 条件化使用 FiLM（https://huggingface.co/papers/1709.07871）。
+            默认使用偏置调制，该参数表示是否也使用缩放调制。
+        gradient_checkpointing: 训练时是否对 Unet 残差块进行检查点保存。
+            这会以反向传播时重新计算这些块为代价，减少激活内存。
+        noise_scheduler_type: 使用的噪声调度器名称。支持的选项：["DDPM", "DDIM"]。
+        num_train_timesteps: 前向扩散调度的扩散步数。
+        beta_schedule: 扩散 beta 调度名称，参照 Hugging Face diffusers 的 DDPMScheduler。
+        beta_start: 第一个前向扩散步的 beta 值。
+        beta_end: 最后一个前向扩散步的 beta 值。
+        prediction_type: 扩散建模 Unet 做出的预测类型。从 "epsilon" 或 "sample" 中选择。
+            从潜变量建模的角度来看，两者结果等价，但 "epsilon" 在许多深度神经网络
+            设置中表现更好。
+        clip_sample: 推理时每个去噪步是否将样本裁剪到 [-`clip_sample_range`, +`clip_sample_range`]。
+            警告：你需要确保动作空间已归一化以适应此范围。
+        clip_sample_range: 如上所述的裁剪范围幅度。
+        num_inference_steps: 推理时使用的反向扩散步数（步长均匀分布）。
+            若未提供，默认为与 `num_train_timesteps` 相同。
+        do_mask_loss_for_padding: 当存在复制填充的动作时是否对损失进行掩码。
+            详见 `LeRobotDataset` 和 `load_previous_and_future_frames`。注意，此参数默认为 False，
+            因为原始 Diffusion Policy 实现也是如此。
     """
 
-    # Inputs / output structure.
+    # 输入/输出结构。
     n_obs_steps: int = 2
     horizon: int = 64
     n_action_steps: int = 32
@@ -113,12 +108,12 @@ class DiffusionConfig(PreTrainedConfig):
         }
     )
 
-    # The original implementation doesn't sample frames for the last 7 steps,
-    # which avoids excessive padding and leads to improved training results.
+    # 原始实现不对最后 7 帧采样，
+    # 这样可以避免过度填充并提升训练效果。
     drop_n_last_frames: int = 7  # horizon - n_action_steps - n_obs_steps + 1
 
-    # Architecture / modeling.
-    # Vision backbone.
+    # 架构/建模。
+    # 视觉骨干网络。
     vision_backbone: str = "resnet18"
     resize_shape: tuple[int, int] | None = None
     crop_ratio: float = 1.0
@@ -128,14 +123,14 @@ class DiffusionConfig(PreTrainedConfig):
     use_group_norm: bool = False
     spatial_softmax_num_keypoints: int = 32
     use_separate_rgb_encoder_per_camera: bool = True
-    # Unet.
+    # Unet。
     down_dims: tuple[int, ...] = (512, 1024, 2048)
     kernel_size: int = 5
     n_groups: int = 8
     diffusion_step_embed_dim: int = 128
     use_film_scale_modulation: bool = True
     gradient_checkpointing: bool = False
-    # Noise scheduler.
+    # 噪声调度器。
     noise_scheduler_type: str = "DDPM"
     num_train_timesteps: int = 100
     beta_schedule: str = "squaredcos_cap_v2"
@@ -145,17 +140,17 @@ class DiffusionConfig(PreTrainedConfig):
     clip_sample: bool = True
     clip_sample_range: float = 1.0
 
-    # Inference
+    # 推理
     num_inference_steps: int | None = None
 
-    # Optimization
+    # 优化
     compile_model: bool = False
     compile_mode: str = "reduce-overhead"
 
-    # Loss computation
+    # 损失计算
     do_mask_loss_for_padding: bool = False
 
-    # Training presets
+    # 训练预设
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple = (0.95, 0.999)
     optimizer_eps: float = 1e-8
@@ -166,7 +161,7 @@ class DiffusionConfig(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        """Input validation (not exhaustive)."""
+        """输入验证（非详尽）。"""
         if not self.vision_backbone.startswith("resnet"):
             raise ValueError(
                 f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
@@ -198,13 +193,13 @@ class DiffusionConfig(PreTrainedConfig):
                     int(self.resize_shape[1] * self.crop_ratio),
                 )
             else:
-                # Explicitly disable cropping for resize+ratio path when crop_ratio == 1.0.
+                # 当 crop_ratio == 1.0 时，在 resize+ratio 路径下显式禁用裁剪。
                 self.crop_shape = None
         if self.crop_shape is not None and (self.crop_shape[0] <= 0 or self.crop_shape[1] <= 0):
             raise ValueError(f"`crop_shape` must have positive dimensions. Got {self.crop_shape}.")
 
-        # Check that the horizon size and U-Net downsampling is compatible.
-        # U-Net downsamples by 2 with each stage.
+        # 检查 horizon 大小与 U-Net 下采样是否兼容。
+        # U-Net 每阶段下采样 2 倍。
         downsampling_factor = 2 ** len(self.down_dims)
         if self.horizon % downsampling_factor != 0:
             raise ValueError(
@@ -238,7 +233,7 @@ class DiffusionConfig(PreTrainedConfig):
                         f"for `crop_shape` and {image_ft.shape} for `{key}`."
                     )
 
-        # Check that all input images have the same shape.
+        # 检查所有输入图像是否具有相同形状。
         if len(self.image_features) > 0:
             first_image_key, first_image_ft = next(iter(self.image_features.items()))
             for key, image_ft in self.image_features.items():

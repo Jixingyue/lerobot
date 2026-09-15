@@ -37,12 +37,12 @@ from .vqbet.configuration_vqbet import VQBeTConfig as VQBeTConfig
 from .wall_x.configuration_wall_x import WallXConfig as WallXConfig
 from .xvla.configuration_xvla import XVLAConfig as XVLAConfig
 
-# NOTE: Policy modeling classes (e.g., GaussianActorPolicy) are intentionally NOT re-exported here.
-# They have heavy optional dependencies and are loaded lazily via get_policy_class().
-# Import directly: ``from lerobot.policies.gaussian_actor.modeling_gaussian_actor import GaussianActorPolicy``
+# 注意：策略建模类（例如 GaussianActorPolicy）有意不在这里重新导出。
+# 它们有沉重的可选依赖，通过 get_policy_class() 延迟加载。
+# 直接导入：``from lerobot.policies.gaussian_actor.modeling_gaussian_actor import GaussianActorPolicy``
 
 __all__ = [
-    # Configuration classes
+    # 配置类
     "ACTConfig",
     "DiffusionConfig",
     "EO1Config",
@@ -62,14 +62,14 @@ __all__ = [
     "VQBeTConfig",
     "WallXConfig",
     "XVLAConfig",
-    # Base class
+    # 基类
     "PreTrainedPolicy",
-    # RTC utilities
+    # RTC 工具
     "ActionInterpolator",
-    # Utility functions
+    # 工具函数
     "make_robot_action",
     "prepare_observation_for_inference",
-    # Factory functions
+    # 工厂函数
     "get_policy_class",
     "make_policy",
     "make_policy_config",

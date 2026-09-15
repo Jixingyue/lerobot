@@ -14,29 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compute per-frame Robometer progress and success curves for a LeRobot dataset.
+"""为 LeRobot 数据集计算逐帧的 Robometer progress 和 success 曲线。
 
-For each episode, builds per-frame sub-samples using the frame-steps
-strategy from the Robometer eval server: for each original frame ``t``,
-linspace-subsample ``[0, t]`` into ``K`` frames (default 4, matching
-``NUM_SUBSAMPLED_FRAMES`` in the eval server), run one forward through
-the Robometer processor + model, and keep the last-frame progress value.
-All sub-samples are the same size ``K`` so they batch cleanly.
+对每个 episode，使用 Robometer 评估服务器中的 frame-steps 策略
+构建逐帧子样本：对每个原始帧 ``t``，用 linspace 将 ``[0, t]``
+子采样为 ``K`` 帧（默认 4，与评估服务器中的
+``NUM_SUBSAMPLED_FRAMES`` 一致），通过 Robometer 处理器 + 模型
+执行一次前向传播，并保留最后一帧的 progress 值。
+所有子样本的大小都为 ``K``，因此可以整齐地批处理。
 
-The parquet uses the same schema as SARM's
-:mod:`lerobot.rewards.sarm.compute_rabc_weights` so existing consumers —
-:class:`lerobot.rewards.sarm.rabc.RABCWeights` (which reads
-``progress_sparse``) and the progress-overlay script in
-``examples/dataset/create_progress_videos.py`` — work without modification.
+parquet 使用与 SARM 的
+:mod:`lerobot.rewards.sarm.compute_rabc_weights` 相同的 schema，
+因此现有的使用方 —— :class:`lerobot.rewards.sarm.rabc.RABCWeights`
+（读取 ``progress_sparse``）以及
+``examples/dataset/create_progress_videos.py`` 中的进度叠加脚本 ——
+无需修改即可使用。
 
-Usage:
-    # Dense per-frame progress for one episode
+用法：
+    # 为单个 episode 计算稠密的逐帧 progress
     python -m lerobot.rewards.robometer.compute_rabc_weights \\
         --dataset-repo-id lerobot/libero_10_image \\
         --reward-model-path lerobot/Robometer-4B \\
         --episodes 0
 
-    # All episodes with batching
+    # 带批处理地计算所有 episode
     python -m lerobot.rewards.robometer.compute_rabc_weights \\
         --dataset-repo-id lerobot/libero_10_image \\
         --reward-model-path lerobot/Robometer-4B \\
@@ -64,12 +65,12 @@ from lerobot.rewards.robometer.processor_robometer import RobometerEncoderProces
 
 DEFAULT_OUTPUT_FILENAME = "robometer_progress.parquet"
 
-# Upstream Robometer eval server uses K=4 for frame-steps sub-samples.
+# 上游 Robometer 评估服务器对 frame-steps 子样本使用 K=4。
 DEFAULT_NUM_SUBSAMPLED_FRAMES = 4
 
 
 def get_reward_model_path_from_parquet(parquet_path: Path) -> str | None:
-    """Read ``reward_model_path`` from parquet metadata if available."""
+    """如果可用，从 parquet 元数据中读取 ``reward_model_path``。"""
     if not parquet_path.exists():
         return None
     try:
@@ -82,7 +83,7 @@ def get_reward_model_path_from_parquet(parquet_path: Path) -> str | None:
 
 
 def _resolve_task(sample: dict[str, Any], default: str) -> str:
-    """Best-effort task extraction from a dataset sample."""
+    """尽力从数据集样本中提取任务描述。"""
     task = sample.get("task")
     if isinstance(task, str) and task:
         return task
@@ -90,12 +91,12 @@ def _resolve_task(sample: dict[str, Any], default: str) -> str:
 
 
 def _build_subsample_indices(num_frames: int, num_subsampled_frames: int) -> list[np.ndarray]:
-    """Frame-steps linspace expansion.
+    """Frame-steps linspace 扩展。
 
-    For each ``t in [0, num_frames - 1]`` returns ``num_subsampled_frames``
-    indices from ``np.linspace(0, t, num_subsampled_frames)`` — the first
-    and last frames are always included. Each entry is a fixed-size array
-    so the model can batch them.
+    对每个 ``t in [0, num_frames - 1]``，返回来自
+    ``np.linspace(0, t, num_subsampled_frames)`` 的 ``num_subsampled_frames``
+    个索引 —— 首帧和末帧总是被包含。每个条目都是固定大小的数组，
+    以便模型可以对它们进行批处理。
     """
     return [np.linspace(0, t, num_subsampled_frames).round().astype(np.int64) for t in range(num_frames)]
 
@@ -110,7 +111,7 @@ def compute_robometer_progress(
     episodes: list[int] | None = None,
     image_key: str | None = None,
 ) -> Path:
-    """Run Robometer over a dataset and write per-frame progress + success."""
+    """在数据集上运行 Robometer，并写入逐帧的 progress + success。"""
     logging.info(f"Loading Robometer: {reward_model_path}")
     config = RobometerConfig(pretrained_path=reward_model_path, device=device)
     if image_key is not None:

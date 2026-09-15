@@ -14,7 +14,7 @@
 
 
 class DeviceNotConnectedError(ConnectionError):
-    """Exception raised when the device is not connected."""
+    """当设备未连接时抛出的异常。"""
 
     def __init__(self, message="This device is not connected. Try calling `connect()` first."):
         self.message = message
@@ -22,7 +22,7 @@ class DeviceNotConnectedError(ConnectionError):
 
 
 class DeviceAlreadyConnectedError(ConnectionError):
-    """Exception raised when the device is already connected."""
+    """当设备已经连接时抛出的异常。"""
 
     def __init__(
         self,

@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Evo1Config(PreTrainedConfig):
     training_stage: str = "stage1"
-    # When True and the policy runs on CUDA, EVO1 wraps its own forward passes (training and
-    # inference) in a bfloat16 autocast block, so its numerics do not depend on the dtype of any
-    # outer autocast context opened by lerobot-train/lerobot-eval.
+    # 当为 True 且策略在 CUDA 上运行时，EVO1 会将其自身的前向传播（训练和
+    # 推理）包裹在 bfloat16 autocast 块中，使其数值行为不依赖于
+    # lerobot-train/lerobot-eval 打开的任何外层 autocast 上下文的 dtype。
     use_amp: bool = True
 
     n_obs_steps: int = 1
@@ -64,8 +64,8 @@ class Evo1Config(PreTrainedConfig):
     vlm_model_name: str = "OpenGVLab/InternVL3-1B-hf"
     vlm_num_layers: int | None = 14
     vlm_dtype: str = "bfloat16"
-    # Max token length for tokenizing the (image placeholders + instruction) prompt. Prompts longer
-    # than this are right-truncated, so raise it for tasks with long language instructions or many views.
+    # 对（图像占位符 + 指令）提示词进行分词时的最大 token 长度。超过该长度的
+    # 提示词会被右截断，因此对于语言指令较长或视图较多的任务，请调大该值。
     max_text_length: int = 1024
     use_flash_attn: bool = True
     action_head: str = "flowmatching"
@@ -77,8 +77,8 @@ class Evo1Config(PreTrainedConfig):
     dropout: float = 0.0
     num_inference_timesteps: int = 32
     num_categories: int = 1
-    # When True, the action head is conditioned on a single pooled VL token (the last non-padding
-    # token of the causal decoder) instead of the full fused token sequence.
+    # 当为 True 时，动作头以单个池化的 VL token（因果解码器的最后一个非填充
+    # token）为条件，而不是以完整的融合 token 序列为条件。
     return_cls_only: bool = False
     enable_gradient_checkpointing: bool = True
     gradient_checkpointing_use_reentrant: bool = False
@@ -87,16 +87,16 @@ class Evo1Config(PreTrainedConfig):
     finetune_language_model: bool | None = None
     finetune_vision_model: bool | None = None
     finetune_action_head: bool | None = None
-    # Reapply stage defaults after loading checkpoint configs so stage2 cannot
-    # accidentally inherit the frozen VLM flags stored by a stage1 checkpoint.
+    # 在加载检查点配置后重新应用阶段默认值，以免 stage2 意外继承
+    # stage1 检查点所存储的冻结 VLM 标志。
     apply_training_stage_defaults: bool = True
 
     task_field: str = "task"
     embodiment_id_field: str | None = None
     default_embodiment_id: int = 0
 
-    # Real-Time Chunking guidance for asynchronous inference (lerobot-rollout --inference.type=rtc
-    # sets this and calls init_rtc_processor()); None disables RTC.
+    # 用于异步推理的实时分块（Real-Time Chunking）引导（lerobot-rollout --inference.type=rtc
+    # 会设置该项并调用 init_rtc_processor()）；为 None 则禁用 RTC。
     rtc_config: RTCConfig | None = None
 
     optimizer_lr: float = 1e-5
@@ -155,8 +155,8 @@ class Evo1Config(PreTrainedConfig):
                 flag is not None for flag in (self.finetune_language_model, self.finetune_vision_model)
             )
             if not has_explicit_branch_flags:
-                # An explicit finetune_vlm decides both branches; otherwise stage2 defaults to a
-                # full-VLM finetune.
+                # 显式的 finetune_vlm 决定两个分支；否则 stage2 默认进行
+                # 完整 VLM 微调。
                 vlm_finetune = self.finetune_vlm if self.finetune_vlm is not None else True
                 self.finetune_vlm = vlm_finetune
                 self.finetune_language_model = vlm_finetune

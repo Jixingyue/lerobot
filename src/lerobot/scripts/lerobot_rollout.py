@@ -14,31 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Policy deployment engine with pluggable rollout strategies.
+"""支持可插拔 rollout 策略的策略部署引擎。
 
-``lerobot-rollout`` is the single CLI for running trained policies on
-real robots.
+``lerobot-rollout`` 是在真实机器人上运行已训练策略的
+唯一 CLI。
 
-Strategies
+策略
 ----------
-    --strategy.type=base       Autonomous rollout, no recording
-    --strategy.type=sentry     Continuous recording with auto-upload
-    --strategy.type=highlight  Ring buffer + keystroke save
-    --strategy.type=dagger     Human-in-the-loop (DAgger / RaC)
-    --strategy.type=episodic   Episode-oriented recording with reset phases
-    --strategy.type=<name>     Any strategy from an installed ``lerobot_strategy_*``
-                               package (see "Bring your own strategy" in the docs)
+    --strategy.type=base       自主 rollout，不录制
+    --strategy.type=sentry     持续录制并自动上传
+    --strategy.type=highlight  环形缓冲区 + 按键保存
+    --strategy.type=dagger     人在回路（DAgger / RaC）
+    --strategy.type=episodic   面向 episode 的录制，带重置阶段
+    --strategy.type=<name>     来自已安装的 ``lerobot_strategy_*``
+                               包的任意策略（参见文档中的 "Bring your own strategy"）
 
-Inference backends
+推理后端
 ------------------
-    --inference.type=sync      One policy call per control tick (default)
-    --inference.type=rtc       Real-Time Chunking for slow VLA models
+    --inference.type=sync      每个控制周期调用一次策略（默认）
+    --inference.type=rtc       面向慢速 VLA 模型的实时分块（Real-Time Chunking）
 
-Usage examples
+使用示例
 --------------
 ::
 
-    # Base mode — quick evaluation with sync inference
+    # Base 模式 — 使用同步推理进行快速评估
     lerobot-rollout \\
         --strategy.type=base \\
         --policy.path=lerobot/act_koch_real \\
@@ -46,9 +46,9 @@ Usage examples
         --robot.port=/dev/ttyACM0 \\
         --task="pick up cube" --duration=30
 
-    # Interactive session: the robot stays idle until /start is typed, then /subtask,
-    # /vqa, /autosteer, /reset and /stop drive the run from stdin. With
-    # --strategy.type=sentry it also records, labeling frames with their task.
+    # 交互式会话：在输入 /start 之前机器人保持空闲，之后可通过
+    # stdin 中的 /subtask、/vqa、/autosteer、/reset 和 /stop 控制运行。
+    # 使用 --strategy.type=sentry 时还会录制，并为帧标注其任务。
     lerobot-rollout \\
         --strategy.type=base \\
         --policy.path=lerobot/act_koch_real \\
@@ -57,7 +57,7 @@ Usage examples
         --task="pick up cube" \\
         --interactive=true
 
-    # Base mode — RTC inference for slow VLAs (Pi0, Pi0.5, SmolVLA)
+    # Base 模式 — 为慢速 VLA（Pi0、Pi0.5、SmolVLA）使用 RTC 推理
     lerobot-rollout \\
         --strategy.type=base \\
         --policy.path=lerobot/pi0_base \\
@@ -69,7 +69,7 @@ Usage examples
         --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \\
         --task="pick up cube" --duration=60
 
-    # Sentry mode — continuous recording with periodic upload
+    # Sentry 模式 — 持续录制并周期性上传
     lerobot-rollout \\
         --strategy.type=sentry \\
         --strategy.upload_every_n_episodes=5 \\
@@ -80,7 +80,7 @@ Usage examples
         --dataset.repo_id=user/rollout_sentry_data \\
         --dataset.single_task="patrol" --duration=3600
 
-    # Highlight mode — ring buffer, press 's' to save, 'h' to push
+    # Highlight 模式 — 环形缓冲区，按 's' 保存，按 'h' 推送
     lerobot-rollout \\
         --strategy.type=highlight \\
         --strategy.ring_buffer_seconds=30 \\
@@ -90,7 +90,7 @@ Usage examples
         --dataset.repo_id=user/rollout_highlight_data \\
         --dataset.single_task="pick up cube"
 
-    # DAgger mode — human-in-the-loop corrections only
+    # DAgger 模式 — 仅人在回路修正
     lerobot-rollout \\
         --strategy.type=dagger \\
         --strategy.num_episodes=20 \\
@@ -100,7 +100,7 @@ Usage examples
         --dataset.repo_id=user/rollout_hil_data \\
         --dataset.single_task="Fold the T-shirt"
 
-    # DAgger mode — continuous recording with RTC inference
+    # DAgger 模式 — 使用 RTC 推理持续录制
     lerobot-rollout \\
         --strategy.type=dagger \\
         --strategy.record_autonomous=true \\
@@ -115,7 +115,7 @@ Usage examples
         --dataset.repo_id=user/rollout_dagger_rtc_data \\
         --dataset.single_task="Grasp the block"
 
-    # With Rerun visualization and torch.compile
+    # 使用 Rerun 可视化和 torch.compile
     lerobot-rollout \\
         --strategy.type=base \\
         --policy.path=lerobot/act_koch_real \\
@@ -125,7 +125,7 @@ Usage examples
         --display_data=true \\
         --use_torch_compile=true
 
-    # Episodic mode — episode-oriented recording with reset phases
+    # Episodic 模式 — 面向 episode 的录制，带重置阶段
     lerobot-rollout \\
         --strategy.type=episodic \\
         --policy.path=user/my_policy \\
@@ -137,7 +137,7 @@ Usage examples
         --dataset.num_episodes=20 \\
         --dataset.single_task="Grab the cube"
 
-    # Resume a previous sentry recording session
+    # 恢复之前的 sentry 录制会话
     lerobot-rollout \\
         --strategy.type=sentry \\
         --policy.path=user/my_policy \\
@@ -147,7 +147,7 @@ Usage examples
         --dataset.single_task="patrol" \\
         --resume=true
 
-    # Rollout with custom video encoding parameters
+    # 使用自定义视频编码参数进行 rollout
     lerobot-rollout \\
         --strategy.type=base \\
         --policy.path=lerobot/act_koch_real \\
@@ -159,8 +159,8 @@ Usage examples
         --dataset.rgb_encoder.preset=fast \\
         --dataset.rgb_encoder.extra_options={"tune": "film", "profile:v": "high", "bf": 2}
 
-    # Stream to Foxglove instead of Rerun:
-    # add --display_mode=foxglove, then connect the Foxglove app to ws://127.0.0.1:8765.
+    # 流式传输到 Foxglove 而不是 Rerun：
+    # 添加 --display_mode=foxglove，然后将 Foxglove 应用连接到 ws://127.0.0.1:8765。
 """
 
 import logging
@@ -220,7 +220,7 @@ logger = logging.getLogger(__name__)
 
 @parser.wrap()
 def rollout(cfg: RolloutConfig):
-    """Main entry point for policy deployment."""
+    """策略部署的主入口点。"""
     init_logging()
 
     if cfg.display_data:
@@ -235,8 +235,8 @@ def rollout(cfg: RolloutConfig):
     signal_handler = ProcessSignalHandler(use_threads=True, display_pid=False)
     shutdown_event = signal_handler.shutdown_event
     if cfg.interactive:
-        # /reset and /stop end the control loop via the local flag; process signals still
-        # propagate through the parent event.
+        # /reset 和 /stop 通过本地标志结束控制循环；进程信号仍然
+        # 通过父事件传播。
         shutdown_event = LinkedEvent(shutdown_event)
 
     logger.info("Building rollout context...")
@@ -270,7 +270,7 @@ def rollout(cfg: RolloutConfig):
 
 
 def main():
-    """CLI entry point for ``lerobot-rollout``."""
+    """``lerobot-rollout`` 的 CLI 入口。"""
     register_third_party_plugins()
     rollout()
 

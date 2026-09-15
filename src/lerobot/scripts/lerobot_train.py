@@ -13,13 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Train a policy.
+"""训练一个策略。
 
-Requires: pip install 'lerobot[training]'  (includes dataset + accelerate + wandb extras)
+需要：pip install 'lerobot[training]'  （包含 dataset、accelerate 和 wandb 附加依赖）
 
-Launch with torchrun for distributed runs; every parallelism/acceleration knob lives on the
-config (`--parallelism.*`, `--accelerator.*`) so a run is reproducible from its
-train_config.json alone:
+分布式运行请使用 torchrun 启动；所有并行/加速选项都位于配置中
+（`--parallelism.*`、`--accelerator.*`），因此仅凭
+train_config.json 即可复现一次运行：
 
 ```bash
 torchrun --nproc-per-node=8 $(which lerobot-train) \
@@ -101,7 +101,7 @@ EMA_STATE_FILENAME = "ema_state.pt"
 
 @contextmanager
 def _ema_weights(ema: Any, policy: PreTrainedPolicy) -> Iterator[None]:
-    """Temporarily swap the EMA shadow weights into `policy`, restoring the live ones on exit."""
+    """临时将 EMA 影子权重换入 `policy`，退出时恢复实时权重。"""
     params = list(policy.parameters())
     ema.store(params)
     ema.copy_to(params)
@@ -113,7 +113,7 @@ def _ema_weights(ema: Any, policy: PreTrainedPolicy) -> Iterator[None]:
 
 @contextmanager
 def _make_eval_envs(cfg: TrainPipelineConfig) -> Iterator[dict[str, dict[int, Any]]]:
-    """Create evaluation environments for one run and always dispose of them."""
+    """为一次运行创建评估环境，并确保始终释放它们。"""
     envs = make_env(
         cfg.env,
         n_envs=cfg.eval.batch_size,
@@ -131,7 +131,7 @@ def _preprocess_dataset_batch(
     rename_map: dict[str, str],
     preprocessor: Any,
 ) -> Any:
-    """Prepare a raw dataset batch identically for training and held-out evaluation."""
+    """以完全相同的方式为训练和留出评估准备原始数据集批次。"""
     for cam_key in camera_keys:
         if cam_key in batch and batch[cam_key].dtype == torch.uint8:
             batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
@@ -151,29 +151,29 @@ def update_policy(
     sample_weighter=None,
 ) -> tuple[MetricsTracker, dict | None]:
     """
-    Performs a single training step to update the policy's weights.
+    执行单个训练步以更新策略权重。
 
-    This function executes the forward and backward passes, clips gradients, and steps the optimizer and
-    learning rate scheduler. Accelerator handles mixed-precision training automatically, and — under
-    gradient accumulation — suppresses gradient sync on non-final micro-batches and rescales the loss.
+    此函数执行前向和反向传播、裁剪梯度，并步进优化器和学习率调度器。
+    Accelerator 会自动处理混合精度训练，并且——在梯度累积下——
+    会在非末尾微批次上抑制梯度同步，并对损失进行缩放。
 
-    Args:
-        train_metrics (MetricsTracker): A MetricsTracker instance to record training statistics.
-        policy (PreTrainedPolicy): The policy model to be trained (as returned by `accelerator.prepare`).
-        batch (Any): A batch of training data.
-        optimizer (Optimizer): The optimizer used to update the policy's parameters.
-        grad_clip_norm (float): The maximum norm for gradient clipping (no clipping when <= 0).
-        accelerator (Accelerator): The Accelerator instance for distributed training and mixed precision.
-        lr_scheduler (LRScheduler | None, optional): An optional learning rate scheduler, stepped once
-            per micro-batch. Defaults to None.
-        lock (Lock | None, optional): An optional lock for thread-safe optimizer updates.
-            Defaults to None.
-        sample_weighter (SampleWeighter | None, optional): Optional SampleWeighter instance for
-            per-sample loss weighting. Defaults to None.
+    参数:
+        train_metrics (MetricsTracker)：用于记录训练统计信息的 MetricsTracker 实例。
+        policy (PreTrainedPolicy)：待训练的策略模型（即 `accelerator.prepare` 返回的模型）。
+        batch (Any)：一个训练数据批次。
+        optimizer (Optimizer)：用于更新策略参数的优化器。
+        grad_clip_norm (float)：梯度裁剪的最大范数（<= 0 时不裁剪）。
+        accelerator (Accelerator)：用于分布式训练和混合精度的 Accelerator 实例。
+        lr_scheduler (LRScheduler | None，可选)：可选的学习率调度器，每个微批次
+            步进一次。默认为 None。
+        lock (Lock | None，可选)：可选的锁，用于线程安全的优化器更新。
+            默认为 None。
+        sample_weighter (SampleWeighter | None，可选)：可选的 SampleWeighter 实例，
+            用于按样本加权损失。默认为 None。
 
-    Returns:
-        tuple[MetricsTracker, dict | None]: The updated MetricsTracker with new statistics for this
-        step, and the dictionary of outputs from the policy's forward pass, for logging purposes.
+    返回:
+        tuple[MetricsTracker, dict | None]：更新后的 MetricsTracker（包含本步的新统计
+        信息），以及策略前向传播输出的字典（用于日志记录）。
     """
     start_time = time.perf_counter()
     policy.train()
@@ -181,33 +181,33 @@ def update_policy(
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
-    # Compute sample weights if a weighter is provided
+    # 如果提供了加权器，则计算样本权重
     sample_weights = None
     weight_stats = None
     if sample_weighter is not None:
         sample_weights, weight_stats = sample_weighter.compute_batch_weights(batch)
 
-    # Under gradient accumulation this context suppresses gradient sync (FSDP2:
-    # set_requires_gradient_sync) on non-final micro-batches and divides the loss;
-    # with gradient_accumulation_steps == 1 it is a transparent no-op.
+    # 在梯度累积下，此上下文会在非末尾微批次上抑制梯度同步（FSDP2：
+    # set_requires_gradient_sync）并对损失做除法；
+    # 当 gradient_accumulation_steps == 1 时，它是一个透明的空操作。
     with accelerator.accumulate(policy):
-        # Let accelerator handle mixed precision
+        # 让 accelerator 处理混合精度
         with accelerator.autocast():
-            # `policy(...)`, never `policy.forward(...)`: FSDP2 all-gathers parameters through
-            # nn.Module forward hooks, which only run via __call__.
+            # 使用 `policy(...)`，绝不要用 `policy.forward(...)`：FSDP2 通过
+            # nn.Module 的 forward 钩子来 all-gather 参数，而钩子只会经由 __call__ 触发。
             if sample_weights is not None:
-                # Use per-sample loss for weighted training
-                # Note: Policies supporting sample weighting must implement forward(batch, reduction="none")
+                # 使用逐样本损失进行加权训练
+                # 注意：支持样本加权的策略必须实现 forward(batch, reduction="none")
                 per_sample_loss, output_dict = policy(batch, reduction="none")
 
-                # Weighted loss: each sample's contribution is scaled by its weight.
-                # We divide by weight sum (not batch size) so that if some weights are zero,
-                # the remaining samples contribute proportionally more, preserving gradient scale.
-                # Weights are pre-normalized to sum to batch_size for stable training dynamics.
+                # 加权损失：每个样本的贡献按其权重缩放。
+                # 我们除以权重之和（而不是批次大小），这样当某些权重为零时，
+                # 其余样本会按比例贡献更多，从而保持梯度尺度。
+                # 权重会被预先归一化为总和等于 batch_size，以获得稳定的训练动态。
                 epsilon = 1e-6
                 loss = (per_sample_loss * sample_weights).sum() / (sample_weights.sum() + epsilon)
 
-                # Log weighting statistics
+                # 记录加权统计信息
                 if output_dict is None:
                     output_dict = {}
                 for key, value in weight_stats.items():
@@ -215,29 +215,29 @@ def update_policy(
             else:
                 loss, output_dict = policy(batch)
 
-            # TODO(rcadene): policy.unnormalize_outputs(out_dict)
+            # TODO(rcadene)：policy.unnormalize_outputs(out_dict)
 
-        # Use accelerator's backward method
+        # 使用 accelerator 的 backward 方法
         accelerator.backward(loss)
 
-        # Gradients are complete only on sync micro-batches; clipping partial gradients would
-        # be meaningless. Always pass the full parameter list: accelerate's FSDP2 path requires
-        # an exact match with the prepared model's parameters for a globally correct norm.
+        # 梯度只有在同步微批次上才是完整的；裁剪不完整的梯度毫无意义。
+        # 始终传入完整的参数列表：accelerate 的 FSDP2 路径要求其与 prepare 后
+        # 模型的参数精确匹配，才能得到全局正确的范数。
         grad_norm = None
         if accelerator.sync_gradients and grad_clip_norm > 0:
             grad_norm = accelerator.clip_grad_norm_(policy.parameters(), grad_clip_norm)
 
-        # Optimizer step (a no-op on non-final micro-batches under gradient accumulation)
+        # 优化器步进（在梯度累积下，非末尾微批次上为空操作）
         with lock if lock is not None else nullcontext():
             optimizer.step()
         optimizer.zero_grad()
 
-        # Step through pytorch scheduler at every batch instead of epoch
+        # 每个批次（而不是每个 epoch）步进一次 PyTorch 调度器
         if lr_scheduler is not None:
             lr_scheduler.step()
 
-    # Update internal buffers if policy has update method. These track optimizer updates
-    # (EMA, target networks), not micro-batches: gate on the sync step under accumulation.
+    # 如果策略有 update 方法，则更新内部缓冲区。这些缓冲区跟踪的是优化器更新
+    # （EMA、目标网络），而不是微批次：在梯度累积下以同步步为门控。
     if accelerator.sync_gradients and has_method(
         accelerator.unwrap_model(policy, keep_fp32_wrapper=True), "update"
     ):
@@ -250,7 +250,7 @@ def update_policy(
     train_metrics.update_s = time.perf_counter() - start_time
     if torch.cuda.is_available():
         train_metrics.gpu_mem_gb = torch.cuda.max_memory_allocated() / (1024**3)
-    # Aggregate the policy's scalar outputs for logging and rank-reduction across the log window.
+    # 聚合策略的标量输出，以便在日志窗口内记录并在各 rank 间归约。
     if output_dict:
         train_metrics.update_metrics(output_dict)
     return train_metrics, output_dict
@@ -263,32 +263,32 @@ def make_dataloaders(
     step: int,
     parallel_dims: ParallelDims,
 ) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader | None]:
-    """Build the train (and optional eval) dataloader, including the sampler resume offset.
+    """构建训练（以及可选的评估）dataloader，包括采样器的恢复偏移量。
 
-    The sampler offset is *derived* from `step` (`resume_before_prepare` loads step + RNG only):
-    each loop step consumes `batch_size` samples on each of the `dp_world_size` distinct
-    data-parallel workers — no grad-accumulation factor, since `step` counts micro-batches.
+    采样器偏移量是从 `step` *派生*出来的（`resume_before_prepare` 只加载步数 + RNG）：
+    每个循环步在 `dp_world_size` 个相互独立的数据并行工作进程上各消耗
+    `batch_size` 个样本——不含梯度累积因子，因为 `step` 计数的是微批次。
 
-    Args:
-        cfg (TrainPipelineConfig): The training config (batch size, workers, streaming, resume, seed).
-        dataset (LeRobotDataset | MultiLeRobotDataset): The training dataset.
-        eval_dataset (LeRobotDataset | None): Optional held-out split; when provided, an eval
-            dataloader is built (subsampled per task when `cfg.max_eval_samples > 0`).
-        step (int): The loop step to resume the sampler from (0 for a fresh run).
-        parallel_dims (ParallelDims): The resolved parallelism topology; provides the device type
-            and the fallback dp world size for the resume offset.
+    参数:
+        cfg (TrainPipelineConfig)：训练配置（批次大小、工作进程数、流式加载、恢复、种子）。
+        dataset (LeRobotDataset | MultiLeRobotDataset)：训练数据集。
+        eval_dataset (LeRobotDataset | None)：可选的留出分片；提供时会构建一个评估
+            dataloader（当 `cfg.max_eval_samples > 0` 时按任务子采样）。
+        step (int)：采样器恢复所对应的循环步（全新运行为 0）。
+        parallel_dims (ParallelDims)：解析后的并行拓扑；提供设备类型以及
+            恢复偏移量回退使用的数据并行世界大小。
 
-    Returns:
-        tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader | None]: The train
-        dataloader and the eval dataloader (None when no eval split exists).
+    返回:
+        tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader | None]：训练
+        dataloader 和评估 dataloader（不存在评估分片时为 None）。
     """
     active_cfg = cfg.trainable_config
     if not cfg.dataset.streaming:
-        # All non-streaming (map-style) datasets use EpisodeAwareSampler.
-        # The order is a pure function of (seed, epoch), so every rank independently produces the
-        # same permutation. accelerate then shards it disjointly across data-parallel ranks via
-        # BatchSamplerShard without needing a `generator` attribute to synchronize an RNG, and
-        # resume is sample-exact.
+        # 所有非流式（map 风格）数据集都使用 EpisodeAwareSampler。
+        # 顺序是 (seed, epoch) 的纯函数，因此每个 rank 都会独立产生
+        # 相同的排列。随后 accelerate 通过 BatchSamplerShard 将其不相交地
+        # 分片到各个数据并行 rank 上，无需借助 `generator` 属性来同步 RNG，
+        # 并且恢复可以做到样本级精确。
         shuffle = False
         sampler = EpisodeAwareSampler(
             dataset.meta.episodes["dataset_from_index"],
@@ -300,9 +300,9 @@ def make_dataloaders(
             absolute_to_relative_idx=dataset.absolute_to_relative_idx,
         )
         if cfg.resume and step > 0:
-            # The resume offset depends on the (dp_world_size, batch_size) that produced `step`,
-            # so use the values recorded in the checkpoint (falling back to the current ones for
-            # older checkpoints that did not store them).
+            # 恢复偏移量取决于产生 `step` 时所用的 (dp_world_size, batch_size)，
+            # 因此使用检查点中记录的值（对于未存储这些值的旧检查点，
+            # 回退到当前值）。
             metadata = load_training_metadata(cfg.checkpoint_path / TRAINING_STATE_DIR)
             saved_dp_world = metadata["dp_world_size"]
             saved_batch_size = metadata["batch_size"]
@@ -333,9 +333,9 @@ def make_dataloaders(
         sampler = None
 
     device_type = parallel_dims.device_type
-    # Only swap in the language-aware collate when the dataset actually
-    # declares language columns; otherwise stay on PyTorch's default
-    # collate so non-language training runs are unaffected.
+    # 仅当数据集确实声明了语言列时，才换用感知语言的 collate；
+    # 否则保持使用 PyTorch 的默认 collate，以免影响
+    # 不含语言的训练运行。
     collate_fn = lerobot_collate_fn if dataset.meta.has_language_columns else None
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -351,7 +351,7 @@ def make_dataloaders(
         multiprocessing_context=cfg.dataloader_multiprocessing_context if cfg.num_workers > 0 else None,
     )
 
-    # Build eval dataloader if a held-out split exists
+    # 如果存在留出分片，则构建评估 dataloader
     eval_dataloader = None
     if eval_dataset is not None:
         eval_ds = eval_dataset
@@ -384,33 +384,33 @@ def make_dataloaders(
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     """
-    Main function to train a policy.
+    训练策略的主函数。
 
-    This function orchestrates the entire training pipeline, including:
-    - Setting up logging, seeding, and the distributed engine.
-    - Creating the dataset, evaluation environment (if applicable), policy, and optimizer.
-    - Handling resumption from a checkpoint (two-phase, around `accelerator.prepare`).
-    - Running the main training loop, which involves fetching data batches and calling `update_policy`.
-    - Periodically logging metrics, saving model checkpoints, and evaluating the policy.
-    - Publishing the trained model to the Hugging Face Hub if configured.
+    此函数统筹整个训练流水线，包括：
+    - 设置日志、随机种子和分布式引擎。
+    - 创建数据集、评估环境（如适用）、策略和优化器。
+    - 处理从检查点恢复（围绕 `accelerator.prepare` 分两阶段进行）。
+    - 运行主训练循环，包括获取数据批次并调用 `update_policy`。
+    - 定期记录指标、保存模型检查点并评估策略。
+    - 如果已配置，将训练好的模型发布到 Hugging Face Hub。
 
-    Args:
-        cfg (TrainPipelineConfig): A `TrainPipelineConfig` object containing all training
-            configurations, parsed from the CLI by `parser.wrap()`. On `--resume`, it is the config
-            recorded in the checkpoint's `train_config.json`; when `cfg.job.is_remote`, the run is
-            dispatched to HF Jobs instead of executing locally.
+    参数:
+        cfg (TrainPipelineConfig)：包含所有训练配置的 `TrainPipelineConfig`
+            对象，由 `parser.wrap()` 从 CLI 解析。使用 `--resume` 时，它是检查点
+            的 `train_config.json` 中记录的配置；当 `cfg.job.is_remote` 时，运行
+            会被派发到 HF Jobs，而不是在本地执行。
     """
     if cfg.job.is_remote:
         return submit_to_hf(cfg)
 
     require_package("accelerate", extra="training")
 
-    cfg.validate()  # all fail-fasts fire here, before any distributed init
+    cfg.validate()  # 所有快速失败检查都在此处触发，先于任何分布式初始化
 
-    # --- engine & topology --------------------------------------------------------------------
-    # The factory is the ONLY accelerate configuration site: it guards against env-var
-    # interference, resolves the declared parallelism degrees against the launched world, and
-    # builds the Accelerator from the config mirrors.
+    # --- 引擎与拓扑 --------------------------------------------------------------------
+    # 该工厂是唯一的 accelerate 配置点：它会防范环境变量
+    # 干扰，根据启动的 world 解析声明的并行度，并
+    # 基于配置镜像构建 Accelerator。
     accelerator = make_accelerator(cfg)
     parallel_dims = ParallelDims.from_config(
         cfg.parallelism, accelerator.num_processes, accelerator.device.type
@@ -438,7 +438,7 @@ def train(cfg: TrainPipelineConfig):
         torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
 
-    # --- data (the main process downloads once; peers read the populated cache) ----------------
+    # --- 数据（主进程下载一次；其他 peer 读取已填充的缓存）----------------
     if is_main_process():
         logging.info("Creating dataset")
         dataset, eval_dataset = make_train_eval_datasets(cfg)
@@ -446,10 +446,11 @@ def train(cfg: TrainPipelineConfig):
     if not is_main_process():
         dataset, eval_dataset = make_train_eval_datasets(cfg)
 
-    # --- policy (weight source decided by the resume rule) -------------------------------------
-    # On resume, cfg was parsed FROM the checkpoint's train_config.json, so cfg.checkpoint_format
-    # IS the recorded value: DCP-bearing formats skip the safetensors load here and stream the
-    # sharded weights in after prepare (resume_after_prepare).
+    # --- 策略（权重来源由恢复规则决定）-------------------------------------
+    # 恢复时，cfg 是从检查点的 train_config.json 解析而来的，因此
+    # cfg.checkpoint_format 就是记录下来的值：携带 DCP 的格式会在此跳过
+    # safetensors 加载，而在 prepare 之后流式载入分片权重
+    # （resume_after_prepare）。
     defer_weight_load = cfg.resume and cfg.checkpoint_format.wants_dcp
     if cfg.is_reward_model_training:
         if is_main_process():
@@ -492,7 +493,7 @@ def train(cfg: TrainPipelineConfig):
 
     accelerator.wait_for_everyone()
 
-    # --- processors (overrides built once, as one typed mapping) -------------------------------
+    # --- 处理器（覆盖项只构建一次，作为一个带类型的映射）-------------------------------
     active_cfg = cfg.trainable_config
     processor_pretrained_path = active_cfg.pretrained_path
     if not cfg.resume and getattr(active_cfg, "recipe", None) is not None:
@@ -502,7 +503,7 @@ def train(cfg: TrainPipelineConfig):
                 "saved processors from %s will not be loaded.",
                 processor_pretrained_path,
             )
-        # Language fine-tuning must use the active recipe, not the saved processor recipe.
+        # 语言微调必须使用当前生效的 recipe，而不是已保存的处理器 recipe。
         processor_pretrained_path = None
 
     processor_kwargs = ProcessorConfigKwargs()
@@ -526,10 +527,10 @@ def train(cfg: TrainPipelineConfig):
                 "norm_map": policy.config.normalization_mapping,
             },
         }
-        # On resume, the checkpoint's saved processor stats are authoritative: they may have
-        # been adapted by the policy (e.g. EVO1 pads state/action stats to max_state_dim),
-        # and force-feeding raw dataset stats over them crashes normalization (#4006).
-        # This mirrors the `dataset_stats` kwarg above, which is also skipped on resume.
+        # 恢复时，以检查点中保存的处理器统计信息为准：它们可能已被
+        # 策略调整过（例如 EVO1 会将 state/action 统计填充到 max_state_dim），
+        # 强行灌入原始数据集统计会导致归一化崩溃（#4006）。
+        # 这与上面的 `dataset_stats` 参数一致，该参数在恢复时同样会被跳过。
         if not cfg.resume:
             preprocessor_overrides["normalizer_processor"]["stats"] = processor_dataset_stats
             postprocessor_overrides["unnormalizer_processor"]["stats"] = processor_dataset_stats
@@ -556,22 +557,22 @@ def train(cfg: TrainPipelineConfig):
             **processor_kwargs,
         )
 
-    # Created BEFORE prepare on the unsharded parameters — accelerate's FSDP2 path requires the
-    # model and optimizer in one prepare() call and rebinds the param groups itself.
+    # 在 prepare 之前、针对未分片的参数创建——accelerate 的 FSDP2 路径要求
+    # 模型和优化器放在同一个 prepare() 调用中，并由它自己重新绑定参数组。
     if is_main_process():
         logging.info("Creating optimizer and scheduler")
     optimizer, lr_scheduler = make_optimizer_and_scheduler(cfg, policy)
 
-    # --- resume phase 1 + dataloaders ----------------------------------------------------------
-    step = 0  # number of loop steps (= micro-batches consumed per data-parallel worker)
+    # --- 恢复阶段 1 + dataloader ----------------------------------------------------------
+    step = 0  # 循环步数（= 每个数据并行工作进程消耗的微批次数）
     if cfg.resume:
-        step = resume_before_prepare(cfg)  # step + RNG only; sharded state loads after prepare
+        step = resume_before_prepare(cfg)  # 仅恢复步数 + RNG；分片状态在 prepare 之后加载
 
     dataloader, eval_dataloader = make_dataloaders(cfg, dataset, eval_dataset, step, parallel_dims)
 
-    # --- prepare & resume phase 2 ---------------------------------------------------------------
-    # The FSDP wrap-unit class names resolve right before prepare: user override, else the
-    # policy's _fsdp_wrap_modules declaration — root-only wrapping is never silently accepted.
+    # --- prepare 与恢复阶段 2 ---------------------------------------------------------------
+    # FSDP 包装单元的类名在 prepare 之前即时解析：优先使用用户覆盖，
+    # 否则使用策略的 _fsdp_wrap_modules 声明——绝不静默接受仅包装根节点。
     set_fsdp_wrap_modules(accelerator, accelerator.unwrap_model(policy) if peft_model else policy)
     accelerator.wait_for_everyone()
     if eval_dataloader is not None:
@@ -586,7 +587,7 @@ def train(cfg: TrainPipelineConfig):
     if cfg.resume:
         resume_after_prepare(cfg, accelerator, policy, optimizer, lr_scheduler)
 
-    # --- auxiliaries (after the core assembly, per the construction-order contract) -------------
+    # --- 辅助组件（在核心装配之后，遵循构造顺序约定）-------------
     sample_weighter = None
     if cfg.sample_weighting is not None:
         from lerobot.utils.sample_weighting import make_sample_weighter
@@ -601,10 +602,10 @@ def train(cfg: TrainPipelineConfig):
             dataset_repo_id=cfg.dataset.repo_id,
         )
 
-    # --- banner (main process only; numel() reads metadata — on DTensors it is the GLOBAL shape,
-    # so the totals are correct even after sharding) ---------------------------------------------
-    # One loop step consumes one micro-batch on every dp worker; the optimizer sees
-    # `samples_per_step x gradient_accumulation_steps` samples per update.
+    # --- 信息横幅（仅主进程；numel() 读取的是元数据——在 DTensor 上它是
+    # 全局形状，因此即使分片后总数也是正确的）---------------------------------------------
+    # 一个循环步在每个 dp 工作进程上消耗一个微批次；优化器每次更新看到
+    # `samples_per_step x gradient_accumulation_steps` 个样本。
     samples_per_step = cfg.batch_size * parallel_dims.dp_world_size
     effective_batch_size = samples_per_step * cfg.accelerator.gradient_accumulation.steps
     if is_main_process():
@@ -631,10 +632,10 @@ def train(cfg: TrainPipelineConfig):
     dl_iter = cycle(dataloader)
     policy.train()
 
-    # EMA shadow of the policy weights (Chi et al. 2023, Diffusion Policy, section V.D). The shadow
-    # lives on the main process only, which is safe under DDP where every rank holds identical
-    # weights after each gradient sync. diffusers is imported lazily so the base training path does
-    # not depend on it.
+    # 策略权重的 EMA 影子副本（Chi 等人 2023，Diffusion Policy，第 V.D 节）。该影子
+    # 副本仅存在于主进程上，这在 DDP 下是安全的，因为每次梯度同步后每个 rank
+    # 都持有相同的权重。diffusers 采用懒导入，因此基础训练路径
+    # 不依赖它。
     ema = None
     if cfg.ema.enable:
         if parallel_dims.is_sharded:
@@ -648,8 +649,8 @@ def train(cfg: TrainPipelineConfig):
         if is_main_process():
             from diffusers.training_utils import EMAModel  # noqa: PLC0415
 
-            # A constant --ema.decay is expressed through the schedule clamp: with
-            # min_decay == max_decay, the warmup curve is pinned to that value at every step.
+            # 恒定的 --ema.decay 通过调度的钳制来表达：当
+            # min_decay == max_decay 时，预热曲线在每一步都被钉在该值上。
             min_decay = cfg.ema.min_decay if cfg.ema.decay is None else cfg.ema.decay
             max_decay = cfg.ema.max_decay if cfg.ema.decay is None else cfg.ema.decay
             ema = EMAModel(
@@ -691,15 +692,15 @@ def train(cfg: TrainPipelineConfig):
                     )
 
     train_metrics = {
-        # Per-rank loss reflects only one shard of the global batch; mean recovers the loss the
-        # data-parallel group is actually optimizing. grad_norm and lr are already identical on
-        # every rank (post gradient sync / deterministic scheduler) so reducing them would be a
-        # no-op collective.
+        # 每个 rank 的 loss 只反映全局批次的一个分片；取均值即可还原出
+        # 数据并行组实际优化的 loss。grad_norm 和 lr 在每个 rank 上
+        # 已经相同（梯度同步之后 / 确定性调度器），因此对它们做归约
+        # 只会是一次空操作的集合通信。
         "loss": AverageMeter("loss", ":.3f", reduction="mean"),
         "grad_norm": AverageMeter("grdn", ":.3f"),
         "lr": AverageMeter("lr", ":0.1e"),
-        # Report the slowest rank for bottleneck-style timings so multi-GPU runs surface the
-        # true straggler instead of rank 0's view.
+        # 对瓶颈类计时报告最慢的 rank，这样多 GPU 运行能暴露出
+        # 真正的落后者，而不是只呈现 rank 0 的视角。
         "dataloading_s": AverageMeter("data_s", ":.3f", reduction="max"),
         "preprocessing_s": AverageMeter("prep_s", ":.3f", reduction="max"),
         "update_s": AverageMeter("updt_s", ":.3f", reduction="max"),
@@ -707,7 +708,7 @@ def train(cfg: TrainPipelineConfig):
         "samples_per_s": AverageMeter("smp/s", ":.0f"),
     }
     if torch.cuda.is_available():
-        # max() because headroom is gated by the worst-case rank.
+        # 取 max()，因为可用余量取决于最坏情况下的 rank。
         train_metrics["gpu_mem_gb"] = AverageMeter("mem_gb", ":.2f", reduction="max")
 
     train_tracker = MetricsTracker(
@@ -752,14 +753,14 @@ def train(cfg: TrainPipelineConfig):
         )
         train_tracker.step_s = time.perf_counter() - step_start
 
-        # Pull one optimizer step of the live weights into the EMA shadow (main process only).
-        # The shadow tracks optimizer updates, not micro-batches: gate on the sync step under
-        # gradient accumulation.
+        # 将实时权重的一个优化器步更新拉入 EMA 影子副本（仅主进程）。
+        # 影子副本跟踪的是优化器更新，而不是微批次：在梯度累积下
+        # 以同步步为门控。
         if ema is not None and accelerator.sync_gradients:
             ema.step(accelerator.unwrap_model(policy).parameters())
 
-        # Note: eval and checkpoint happens *after* the `step`th training update has completed, so we
-        # increment `step` here.
+        # 注意：评估和检查点发生在第 `step` 次训练更新完成*之后*，因此
+        # 我们在此处递增 `step`。
         step += 1
         if is_main_process():
             progbar.update(1)
@@ -770,18 +771,18 @@ def train(cfg: TrainPipelineConfig):
         is_eval_step = cfg.eval_steps > 0 and eval_dataloader is not None and step % cfg.eval_steps == 0
 
         if is_log_step:
-            # Collective reduce must run on every rank, before the main-process gate below.
+            # 集合归约必须在每个 rank 上运行，且位于下面的主进程门控之前。
             train_tracker.reduce_across_ranks()
             if is_main_process():
                 if train_tracker.step_s.avg > 0:
                     train_tracker.samples_per_s = samples_per_step / train_tracker.step_s.avg
                 logging.info(train_tracker)
                 if wandb_logger:
-                    # Policy sub-losses (latent_loss, action_loss, ...) are aggregated into the
-                    # tracker by update_policy, so to_dict() already carries their windowed,
-                    # rank-reduced averages — no per-step output_dict passthrough needed.
+                    # 策略的各个子损失（latent_loss、action_loss……）已由
+                    # update_policy 聚合到跟踪器中，因此 to_dict() 已经携带了它们
+                    # 加窗且跨 rank 归约后的平均值——无需逐步透传 output_dict。
                     wandb_log_dict = train_tracker.to_dict()
-                    # Log sample weighting statistics if enabled
+                    # 如果启用了样本加权，则记录其统计信息
                     if sample_weighter is not None:
                         weighter_stats = sample_weighter.get_stats()
                         wandb_log_dict.update({f"sample_weighting/{k}": v for k, v in weighter_stats.items()})
@@ -800,7 +801,7 @@ def train(cfg: TrainPipelineConfig):
                     eval_batch = _preprocess_dataset_batch(
                         eval_batch, dataset.meta.camera_keys, cfg.rename_map, preprocessor
                     )
-                    loss, _ = policy(eval_batch)  # __call__, so FSDP2 forward hooks run
+                    loss, _ = policy(eval_batch)  # 使用 __call__，这样 FSDP2 的 forward 钩子才会运行
                     eval_loss_sum += loss.item()
                     n_eval_batches += 1
             eval_loss = eval_loss_sum / max(n_eval_batches, 1)
@@ -814,8 +815,8 @@ def train(cfg: TrainPipelineConfig):
                     wandb_logger.log_dict({"eval_loss": eval_loss}, step=step, mode="eval")
 
         if cfg.save_checkpoint and is_saving_step:
-            # Collective: every rank participates (gathers / DCP shard writes); rank-0-only file
-            # writes are gated inside save_checkpoint — no rank branches at the call site.
+            # 集合操作：每个 rank 都参与（gather / DCP 分片写入）；仅限 rank 0 的
+            # 文件写入在 save_checkpoint 内部进行门控——调用处没有 rank 分支。
             if is_main_process():
                 logging.info(f"Checkpoint policy after step {step}")
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
@@ -832,8 +833,8 @@ def train(cfg: TrainPipelineConfig):
             )
             if is_main_process():
                 if ema is not None:
-                    # Save the shadow for exact resume, plus a directly loadable copy of the EMA
-                    # weights (lerobot-eval --policy.path=<checkpoint>/pretrained_model_ema).
+                    # 保存影子副本以实现精确恢复，同时保存一份可直接加载的 EMA
+                    # 权重副本（lerobot-eval --policy.path=<checkpoint>/pretrained_model_ema）。
                     torch.save(ema.state_dict(), checkpoint_dir / TRAINING_STATE_DIR / EMA_STATE_FILENAME)
                     unwrapped_policy = accelerator.unwrap_model(policy)
                     ema_dir = checkpoint_dir / f"{PRETRAINED_MODEL_DIR}_ema"
@@ -858,16 +859,16 @@ def train(cfg: TrainPipelineConfig):
                 step_id = get_step_identifier(step, cfg.steps)
                 logging.info(f"Eval policy at step {step}")
                 eval_policy_model = accelerator.unwrap_model(policy)
-                # Evaluate the EMA weights when enabled: the swap happens only on the main
-                # process (the other ranks wait at the barrier below) and is exactly undone
-                # afterwards, so the live weights stay in sync across ranks.
+                # 启用时评估 EMA 权重：换入操作只发生在主
+                # 进程上（其他 rank 在下面的屏障处等待），之后会被
+                # 精确撤销，因此实时权重在各 rank 间保持同步。
                 use_ema_for_eval = ema is not None and cfg.ema.use_for_eval
                 if use_ema_for_eval:
                     logging.info("Evaluating the EMA weights")
                 weights_cm = _ema_weights(ema, eval_policy_model) if use_ema_for_eval else nullcontext()
                 with weights_cm, _make_eval_envs(cfg) as eval_env, torch.no_grad(), accelerator.autocast():
                     eval_info = eval_policy_all(
-                        envs=eval_env,  # dict[suite][task_id] -> vec_env
+                        envs=eval_env,  # dict[suite][task_id] -> vec_env（字典结构保持英文记号）
                         policy=eval_policy_model,
                         env_preprocessor=env_preprocessor,
                         env_postprocessor=env_postprocessor,
@@ -879,14 +880,14 @@ def train(cfg: TrainPipelineConfig):
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
                     )
-                # overall metrics (suite-agnostic)
+                # 总体指标（与具体套件无关）
                 aggregated = eval_info["overall"]
 
-                # optional: per-suite logging
+                # 可选：按套件记录日志
                 for suite, suite_info in eval_info.items():
                     logging.info("Suite %s aggregated: %s", suite, suite_info)
 
-                # meters/tracker
+                # meter/跟踪器
                 eval_metrics = {
                     "avg_sum_reward": AverageMeter("∑rwrd", ":.3f"),
                     "pc_success": AverageMeter("success", ":.1f"),
@@ -914,7 +915,7 @@ def train(cfg: TrainPipelineConfig):
         progbar.close()
         logging.info("End of training")
 
-    # --- publish (collective-safe: all ranks; the model commit gathers sharded weights) ---------
+    # --- 发布（集合安全：所有 rank；模型提交时会 gather 分片权重）---------
     if getattr(active_cfg, "push_to_hub", False):
         unwrapped = accelerator.unwrap_model(policy)
         model_to_publish = unwrapped.get_base_model() if peft_model is not None else unwrapped
@@ -927,10 +928,10 @@ def train(cfg: TrainPipelineConfig):
             peft_model=unwrapped if peft_model is not None else None,
         )
 
-        # The push above ships the live weights; when EMA is on, the weights that were
-        # evaluated are the shadow, so push those too under a sibling `<repo_id>-ema` repo.
-        # The shadow lives on the main process only, so this is rank-0-only by construction.
-        # Non-fatal: the live model is already up if this fails.
+        # 上面的推送发送的是实时权重；当启用 EMA 时，被评估的权重
+        # 是影子副本，因此也要把它们推送到同级的 `<repo_id>-ema` 仓库下。
+        # 影子副本仅存在于主进程上，因此就构造而言这是仅限 rank 0 的操作。
+        # 非致命：即使此处失败，实时模型也已经上传。
         if ema is not None:
             ema_repo_id = f"{active_cfg.repo_id}-ema"
             orig_repo_id = unwrapped.config.repo_id
@@ -946,16 +947,16 @@ def train(cfg: TrainPipelineConfig):
             finally:
                 unwrapped.config.repo_id = orig_repo_id
 
-    # Properly clean up the distributed process group
+    # 妥善清理分布式进程组
     accelerator.wait_for_everyone()
     accelerator.end_training()
 
 
 def _remote_target_in_argv() -> bool:
-    """Detect a remote HF Jobs run request on the raw CLI, before draccus parsing.
+    """在 draccus 解析之前，从原始 CLI 中检测远程 HF Jobs 运行请求。
 
-    Returns:
-        bool: True when the CLI requests a remote HF Jobs run (`--job.target=<non-local>`).
+    返回:
+        bool：当 CLI 请求远程 HF Jobs 运行（`--job.target=<非本地目标>`）时为 True。
     """
     target = None
     args = sys.argv[1:]
@@ -970,9 +971,9 @@ def _remote_target_in_argv() -> bool:
 def main():
     register_third_party_plugins()
     if _remote_target_in_argv():
-        # The policy device is resolved on the remote pod, not here, so silence the
-        # client-side "Device '...' is not available" warning PreTrainedConfig emits
-        # while parsing the config (it fires before train() can dispatch remotely).
+        # 策略设备是在远程 pod 上解析的，而不是在这里，因此静音
+        # PreTrainedConfig 在解析配置时发出的客户端
+        # “Device '...' is not available” 警告（它会在 train() 远程派发之前触发）。
         logging.getLogger("lerobot.configs.policies").setLevel(logging.ERROR)
     train()
 

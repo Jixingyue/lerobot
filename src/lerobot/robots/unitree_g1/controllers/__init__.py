@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unitree G1 robot controllers: locomotion (GR00T, Holosoma) and whole-body (SONIC)."""
+"""Unitree G1 机器人控制器：行走（GR00T、Holosoma）与全身控制（SONIC）。"""
 
 from .gr00t_locomotion import GrootLocomotionController
 from .holosoma_locomotion import HolosomaLocomotionController

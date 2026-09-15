@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Top-level pipeline config for distributed RL training (actor / learner)."""
+"""分布式 RL 训练（actor / learner）的顶层流水线配置。"""
 
 from __future__ import annotations
 
@@ -28,16 +28,16 @@ from .algorithms.sac import SACAlgorithmConfig  # noqa: F401
 
 @dataclass(kw_only=True)
 class TrainRLServerPipelineConfig(TrainPipelineConfig):
-    # NOTE: In RL, we don't need an offline dataset
-    # TODO: Make `TrainPipelineConfig.dataset` optional
-    dataset: DatasetConfig | None = None  # type: ignore[assignment] # because the parent class has made it's type non-optional
+    # 注意：在 RL 中，我们不需要离线数据集
+    # TODO: 将 `TrainPipelineConfig.dataset` 设为可选
+    dataset: DatasetConfig | None = None  # type: ignore[assignment] # 因为父类已将其类型设为非可选
 
-    # Algorithm config.
+    # 算法配置。
     algorithm: RLAlgorithmConfig | None = None
 
-    # Data mixer strategy name. Currently supports "online_offline".
+    # 数据混合器策略名称。目前支持 "online_offline"。
     mixer: str = "online_offline"
-    # Fraction sampled from online replay when using OnlineOfflineMixer.
+    # 使用 OnlineOfflineMixer 时，从在线回放中采样的比例。
     online_ratio: float = 0.5
 
     def validate(self) -> None:

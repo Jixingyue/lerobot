@@ -77,13 +77,13 @@ type VideoIndexState = dict[str, VideoIndex]
 
 
 def merge_video_feature_info_for_aggregate(all_metadata: list[LeRobotDatasetMetadata]) -> FeatureDict:
-    """Create a merged video feature info dictionary for aggregation. The video encoder info is merged field-by-field: each key is kept only when every source agrees; otherwise that key is set to ``null`` (or ``{}`` for ``video.extra_options``) and a warning is logged.
+    """为聚合创建合并后的视频特征信息字典。视频编码器信息按字段合并：仅当所有来源一致时才保留每个键；否则该键被设为 ``null``（``video.extra_options`` 则为 ``{}``）并记录警告。
 
     Args:
-        all_metadata: List of LeRobotDatasetMetadata objects to merge.
+        all_metadata: 要合并的 LeRobotDatasetMetadata 对象列表。
 
     Returns:
-        dict: A dictionary of merged video feature info.
+        dict: 合并后的视频特征信息字典。
     """
     merged_info: FeatureDict = copy.deepcopy(all_metadata[0].features)
     video_keys = [k for k in merged_info if merged_info[k].get("dtype") == "video"]
@@ -112,30 +112,30 @@ def merge_video_feature_info_for_aggregate(all_metadata: list[LeRobotDatasetMeta
             )
 
         merged_info[vk]["info"] = {**base_video_info, **merged_encoder_info}
-        # TODO(CarolinePascal): make this variable once we have support for other video backends.
+        # TODO(CarolinePascal): 一旦我们支持其他视频后端，就把这里改为变量。
         merged_info[vk]["info"]["video.video_backend"] = "pyav"
-        # Persist the canonical depth marker even when a source used a legacy key.
+        # 即使某个来源使用了旧版键，也要持久化规范的深度标记。
         canonicalize_depth_marker(merged_info[vk])
 
     return merged_info
 
 
 def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]) -> tuple[int, str | None, FeatureDict]:
-    """Validates that all dataset metadata have consistent properties.
+    """验证所有数据集元数据具有一致的属性。
 
-    Ensures all datasets have the same fps, robot_type, and features to guarantee
-    compatibility when aggregating them into a single dataset.
-    Video encoder info is not considered for validation but is merged during aggregation in ``merge_video_feature_info_for_aggregate``.
+    确保所有数据集具有相同的 fps、robot_type 和 features，以保证
+    将它们聚合为单个数据集时的兼容性。
+    验证时不考虑视频编码器信息，但会在聚合过程中通过 ``merge_video_feature_info_for_aggregate`` 进行合并。
 
     Args:
-        all_metadata: List of LeRobotDatasetMetadata objects to validate.
+        all_metadata: 要验证的 LeRobotDatasetMetadata 对象列表。
 
     Returns:
-        tuple: A tuple containing (fps, robot_type, features) from the first metadata.
+        tuple: 包含来自第一个元数据的 (fps, robot_type, features) 的元组。
 
     Raises:
-        ValueError: If any metadata has different fps, robot_type, or features
-                   than the first metadata in the list.
+        ValueError: 如果任何元数据的 fps、robot_type 或 features
+                   与列表中第一个元数据不同。
     """
 
     fps = all_metadata[0].fps
@@ -160,18 +160,18 @@ def validate_all_metadata(all_metadata: list[LeRobotDatasetMetadata]) -> tuple[i
 def update_data_df(
     df: pd.DataFrame, src_meta: LeRobotDatasetMetadata, dst_meta: LeRobotDatasetMetadata
 ) -> pd.DataFrame:
-    """Updates a data DataFrame with new indices and task mappings for aggregation.
+    """为聚合更新数据 DataFrame 的索引和任务映射。
 
-    Adjusts episode indices, frame indices, and task indices to account for
-    previously aggregated data in the destination dataset.
+    调整 episode 索引、帧索引和任务索引，以考虑
+    目标数据集中先前已聚合的数据。
 
     Args:
-        df: DataFrame containing the data to be updated.
-        src_meta: Source dataset metadata.
-        dst_meta: Destination dataset metadata.
+        df: 包含要更新数据的 DataFrame。
+        src_meta: 源数据集元数据。
+        dst_meta: 目标数据集元数据。
 
     Returns:
-        pd.DataFrame: Updated DataFrame with adjusted indices.
+        pd.DataFrame: 索引已调整的更新后 DataFrame。
     """
 
     df["episode_index"] = df["episode_index"] + dst_meta.info.total_episodes
@@ -190,38 +190,38 @@ def update_meta_data(
     data_idx: IndexState,
     videos_idx: VideoIndexState,
 ) -> pd.DataFrame:
-    """Updates metadata DataFrame with new chunk, file, and timestamp indices.
+    """使用新的 chunk、file 和时间戳索引更新元数据 DataFrame。
 
-    Adjusts all indices and timestamps to account for previously aggregated
-    data and videos in the destination dataset.
+    调整所有索引和时间戳，以考虑目标数据集中先前已聚合的
+    数据和视频。
 
-    For data file indices, uses the 'src_to_dst' mapping from aggregate_data()
-    to correctly map source file indices to their destination locations.
+    对于数据文件索引，使用来自 aggregate_data() 的 'src_to_dst' 映射，
+    以正确地将源文件索引映射到其目标位置。
 
     Args:
-        df: DataFrame containing the metadata to be updated.
-        dst_meta: Destination dataset metadata.
-        meta_idx: Dictionary containing current metadata chunk and file indices.
-        data_idx: Dictionary containing current data chunk and file indices.
-        videos_idx: Dictionary containing current video indices and timestamps.
+        df: 包含要更新元数据的 DataFrame。
+        dst_meta: 目标数据集元数据。
+        meta_idx: 包含当前元数据 chunk 和 file 索引的字典。
+        data_idx: 包含当前数据 chunk 和 file 索引的字典。
+        videos_idx: 包含当前视频索引和时间戳的字典。
 
     Returns:
-        pd.DataFrame: Updated DataFrame with adjusted indices and timestamps.
+        pd.DataFrame: 索引和时间戳已调整的更新后 DataFrame。
     """
 
     df["meta/episodes/chunk_index"] = df["meta/episodes/chunk_index"] + meta_idx["chunk"]
     df["meta/episodes/file_index"] = df["meta/episodes/file_index"] + meta_idx["file"]
 
-    # Update data file indices using source-to-destination mapping
-    # This is critical for handling datasets that are already results of a merge
+    # 使用源到目标的映射更新数据文件索引
+    # 这对于处理已经是合并结果的数据集至关重要
     data_src_to_dst = data_idx.get("src_to_dst", {})
     if data_src_to_dst:
-        # Store original indices for lookup
+        # 保存原始索引以供查找
         df["_orig_data_chunk"] = df["data/chunk_index"].copy()
         df["_orig_data_file"] = df["data/file_index"].copy()
 
-        # Vectorized mapping from (src_chunk, src_file) to (dst_chunk, dst_file)
-        # This is much faster than per-row iteration for large metadata tables
+        # 从 (src_chunk, src_file) 到 (dst_chunk, dst_file) 的向量化映射
+        # 对于大型元数据表，这比逐行迭代快得多
         mapping_index = pd.MultiIndex.from_tuples(
             list(data_src_to_dst.keys()),
             names=["chunk_index", "file_index"],
@@ -233,56 +233,56 @@ def update_meta_data(
             columns=["dst_chunk", "dst_file"],
         )
 
-        # Construct a MultiIndex for each row based on original data indices
+        # 基于原始数据索引为每一行构造 MultiIndex
         row_index = pd.MultiIndex.from_arrays(
             [df["_orig_data_chunk"], df["_orig_data_file"]],
             names=["chunk_index", "file_index"],
         )
 
-        # Align mapping to rows; missing keys fall back to the default destination
+        # 将映射与行对齐；缺失的键回退到默认目标
         reindexed = mapping_df.reindex(row_index)
         reindexed[["dst_chunk", "dst_file"]] = reindexed[["dst_chunk", "dst_file"]].fillna(
             {"dst_chunk": data_idx["chunk"], "dst_file": data_idx["file"]}
         )
 
-        # Assign mapped destination indices back to the DataFrame
+        # 将映射后的目标索引赋值回 DataFrame
         df["data/chunk_index"] = reindexed["dst_chunk"].to_numpy()
         df["data/file_index"] = reindexed["dst_file"].to_numpy()
 
-        # Clean up temporary columns
+        # 清理临时列
         df = df.drop(columns=["_orig_data_chunk", "_orig_data_file"])
     else:
-        # Fallback to simple offset (backward compatibility for single-file sources)
+        # 回退到简单偏移（对单文件来源的向后兼容）
         df["data/chunk_index"] = df["data/chunk_index"] + data_idx["chunk"]
         df["data/file_index"] = df["data/file_index"] + data_idx["file"]
     for key, video_idx in videos_idx.items():
-        # Store original video file indices before updating
+        # 在更新之前保存原始视频文件索引
         orig_chunk_col = f"videos/{key}/chunk_index"
         orig_file_col = f"videos/{key}/file_index"
         df["_orig_chunk"] = df[orig_chunk_col].copy()
         df["_orig_file"] = df[orig_file_col].copy()
 
-        # Get mappings for this video key
+        # 获取此视频键的映射
         src_to_offset = video_idx.get("src_to_offset", {})
         src_to_dst = video_idx.get("src_to_dst", {})
 
-        # Apply per-source-file mappings
+        # 应用按源文件的映射
         if src_to_dst:
-            # Map each episode to its correct destination file and apply offset
+            # 将每个 episode 映射到其正确的目标文件并应用偏移
             for idx in df.index:
                 src_key = (df.at[idx, "_orig_chunk"], df.at[idx, "_orig_file"])
 
-                # Get destination chunk/file for this source file
+                # 获取此源文件的目标 chunk/file
                 dst_chunk, dst_file = src_to_dst.get(src_key, (video_idx["chunk"], video_idx["file"]))
                 df.at[idx, orig_chunk_col] = dst_chunk
                 df.at[idx, orig_file_col] = dst_file
 
-                # Apply timestamp offset
+                # 应用时间戳偏移
                 offset = src_to_offset.get(src_key, 0)
                 df.at[idx, f"videos/{key}/from_timestamp"] += offset
                 df.at[idx, f"videos/{key}/to_timestamp"] += offset
         elif src_to_offset:
-            # Fallback: use same destination for all, but apply per-file offsets
+            # 回退：对所有文件使用相同的目标，但应用按文件的偏移
             df[orig_chunk_col] = video_idx["chunk"]
             df[orig_file_col] = video_idx["file"]
             for idx in df.index:
@@ -291,7 +291,7 @@ def update_meta_data(
                 df.at[idx, f"videos/{key}/from_timestamp"] += offset
                 df.at[idx, f"videos/{key}/to_timestamp"] += offset
         else:
-            # Fallback to simple offset (for backward compatibility)
+            # 回退到简单偏移（为了向后兼容）
             df[orig_chunk_col] = video_idx["chunk"]
             df[orig_file_col] = video_idx["file"]
             df[f"videos/{key}/from_timestamp"] = (
@@ -299,16 +299,16 @@ def update_meta_data(
             )
             df[f"videos/{key}/to_timestamp"] = df[f"videos/{key}/to_timestamp"] + video_idx["latest_duration"]
 
-        # Clean up temporary columns
+        # 清理临时列
         df = df.drop(columns=["_orig_chunk", "_orig_file"])
 
     df["dataset_from_index"] = df["dataset_from_index"] + dst_meta.info.total_frames
     df["dataset_to_index"] = df["dataset_to_index"] + dst_meta.info.total_frames
     df["episode_index"] = df["episode_index"] + dst_meta.info.total_episodes
 
-    # Per-episode stats still describe the pre-merge values of the bookkeeping columns
-    # reindexed above. index/episode_index shift by a constant; task_index is relabeled,
-    # so recompute it from the episode's (stable) task strings via the unified tasks table.
+    # 每个 episode 的统计信息仍描述上面重新索引的簿记列的合并前值。
+    # index/episode_index 按常量偏移；task_index 被重新标记，
+    # 因此通过统一的 tasks 表，从 episode 的（稳定的）任务字符串重新计算它。
     shift_stat_keys = ("min", "max", "mean", "q01", "q10", "q50", "q90", "q99")
     for name, offset in (
         ("episode_index", dst_meta.info.total_episodes),
@@ -340,7 +340,7 @@ def update_meta_data(
         for stat in ("min", "max", "mean", "std", *quantiles):
             col = f"stats/task_index/{stat}"
             if col in df.columns:
-                # np.full_like preserves each cell container and dtype so the parquet schema is unchanged.
+                # np.full_like 保留每个单元格的容器和 dtype，因此 parquet 模式保持不变。
                 df[col] = [
                     np.full_like(orig, _task_stat(ids, stat))
                     for orig, ids in zip(df[col], ids_per_row, strict=True)
@@ -360,24 +360,24 @@ def aggregate_datasets(
     concatenate_videos: bool = True,
     concatenate_data: bool = True,
 ) -> None:
-    """Aggregates multiple LeRobot datasets into a single unified dataset.
+    """将多个 LeRobot 数据集聚合为单个统一的数据集。
 
-    This is the main function that orchestrates the aggregation process by:
-    1. Loading and validating all source dataset metadata
-    2. Creating a new destination dataset with unified tasks
-    3. Aggregating videos, data, and metadata from all source datasets
-    4. Finalizing the aggregated dataset with proper statistics
+    这是编排聚合过程的主函数，步骤如下：
+    1. 加载并验证所有源数据集的元数据
+    2. 创建具有统一任务的新目标数据集
+    3. 聚合所有源数据集的视频、数据和元数据
+    4. 以正确的统计信息完成聚合数据集
 
     Args:
-        repo_ids: List of repository IDs for the datasets to aggregate.
-        aggr_repo_id: Repository ID for the aggregated output dataset.
-        roots: Optional list containing one root path for each source dataset.
-        aggr_root: Optional root path for the aggregated dataset.
-        data_files_size_in_mb: Maximum size for data files in MB (defaults to DEFAULT_DATA_FILE_SIZE_IN_MB)
-        video_files_size_in_mb: Maximum size for video files in MB (defaults to DEFAULT_VIDEO_FILE_SIZE_IN_MB)
-        chunk_size: Maximum number of files per chunk (defaults to DEFAULT_CHUNK_SIZE)
-        concatenate_videos: When False, keep one mp4 per source file instead of packing into shards.
-        concatenate_data: When False, keep one parquet per source file instead of packing into shards.
+        repo_ids: 要聚合的数据集的仓库 ID 列表。
+        aggr_repo_id: 聚合输出数据集的仓库 ID。
+        roots: 可选列表，包含每个源数据集的一个根路径。
+        aggr_root: 聚合数据集的可选根路径。
+        data_files_size_in_mb: 数据文件的最大大小（MB）（默认为 DEFAULT_DATA_FILE_SIZE_IN_MB）
+        video_files_size_in_mb: 视频文件的最大大小（MB）（默认为 DEFAULT_VIDEO_FILE_SIZE_IN_MB）
+        chunk_size: 每个 chunk 的最大文件数（默认为 DEFAULT_CHUNK_SIZE）
+        concatenate_videos: 为 False 时，每个源文件保留一个 mp4，而不是打包成分片。
+        concatenate_data: 为 False 时，每个源文件保留一个 parquet，而不是打包成分片。
     """
     logger.info("Start aggregate_datasets")
 
@@ -438,8 +438,8 @@ def aggregate_datasets(
 
         meta_idx = aggregate_metadata(src_meta, dst_meta, meta_idx, data_idx, videos_idx)
 
-        # Clear the src_to_dst mapping after processing each source dataset
-        # to avoid interference between different source datasets
+        # 在处理完每个源数据集后清除 src_to_dst 映射，
+        # 以避免不同源数据集之间的干扰
         data_idx.pop("src_to_dst", None)
 
         dst_meta.info.total_episodes += src_meta.total_episodes
@@ -457,29 +457,29 @@ def aggregate_videos(
     chunk_size: int,
     concatenate_videos: bool = True,
 ) -> VideoIndexState:
-    """Aggregates video chunks from a source dataset into the destination dataset.
+    """将源数据集的视频块聚合到目标数据集。
 
-    Handles video file concatenation and rotation based on file size limits.
-    Creates new video files when size limits are exceeded.
+    根据文件大小限制处理视频文件的拼接和轮换。
+    当超出大小限制时创建新的视频文件。
 
     Args:
-        src_meta: Source dataset metadata.
-        dst_meta: Destination dataset metadata.
-        videos_idx: Dictionary tracking video chunk and file indices.
-        video_files_size_in_mb: Maximum size for video files in MB (defaults to DEFAULT_VIDEO_FILE_SIZE_IN_MB)
-        chunk_size: Maximum number of files per chunk (defaults to DEFAULT_CHUNK_SIZE)
-        concatenate_videos: When False, keep one mp4 per source file instead of packing into shards.
+        src_meta: 源数据集元数据。
+        dst_meta: 目标数据集元数据。
+        videos_idx: 跟踪视频 chunk 和 file 索引的字典。
+        video_files_size_in_mb: 视频文件的最大大小（MB）（默认为 DEFAULT_VIDEO_FILE_SIZE_IN_MB）
+        chunk_size: 每个 chunk 的最大文件数（默认为 DEFAULT_CHUNK_SIZE）
+        concatenate_videos: 为 False 时，每个源文件保留一个 mp4，而不是打包成分片。
     Returns:
-        dict: Updated videos_idx with current chunk and file indices.
+        dict: 更新后的 videos_idx，包含当前的 chunk 和 file 索引。
     """
     for key in videos_idx:
         videos_idx[key]["episode_duration"] = 0
-        # Track offset for each source (chunk, file) pair
+        # 跟踪每个源 (chunk, file) 对的偏移
         videos_idx[key]["src_to_offset"] = {}
-        # Track destination (chunk, file) for each source (chunk, file) pair
+        # 跟踪每个源 (chunk, file) 对的目标 (chunk, file)
         videos_idx[key]["src_to_dst"] = {}
-        # Initialize dst_file_durations if not present
-        # dst_file_durations tracks duration of each destination file
+        # 如果不存在则初始化 dst_file_durations
+        # dst_file_durations 跟踪每个目标文件的时长
         if "dst_file_durations" not in videos_idx[key]:
             videos_idx[key]["dst_file_durations"] = {}
 
@@ -516,22 +516,22 @@ def aggregate_videos(
             dst_key = (chunk_idx, file_idx)
 
             if not dst_path.exists():
-                # New destination file: offset is 0
+                # 新的目标文件：偏移为 0
                 videos_idx[key]["src_to_offset"][(src_chunk_idx, src_file_idx)] = 0
                 videos_idx[key]["src_to_dst"][(src_chunk_idx, src_file_idx)] = dst_key
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(str(src_path), str(dst_path))
-                # Track duration of this destination file
+                # 跟踪此目标文件的时长
                 dst_file_durations[dst_key] = src_duration
                 videos_idx[key]["episode_duration"] += src_duration
                 continue
 
-            # Check file sizes before appending
+            # 在追加之前检查文件大小
             src_size = get_file_size_in_mb(src_path)
             dst_size = get_file_size_in_mb(dst_path)
 
             if not concatenate_videos or dst_size + src_size >= video_files_size_in_mb:
-                # Rotate to a new file - offset is 0
+                # 轮换到新文件——偏移为 0
                 chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, chunk_size)
                 dst_key = (chunk_idx, file_idx)
                 videos_idx[key]["src_to_offset"][(src_chunk_idx, src_file_idx)] = 0
@@ -543,21 +543,21 @@ def aggregate_videos(
                 )
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(str(src_path), str(dst_path))
-                # Track duration of this new destination file
+                # 跟踪此新目标文件的时长
                 dst_file_durations[dst_key] = src_duration
             else:
-                # Append to existing destination file
-                # Offset is the current duration of this destination file
+                # 追加到现有的目标文件
+                # 偏移是此目标文件的当前时长
                 current_dst_duration = dst_file_durations.get(dst_key, 0)
                 videos_idx[key]["src_to_offset"][(src_chunk_idx, src_file_idx)] = current_dst_duration
                 videos_idx[key]["src_to_dst"][(src_chunk_idx, src_file_idx)] = dst_key
-                # TODO(CarolinePascal): Move the check before the loop to avoid failing in the middle + add possibility to re-encode the video if the check fails
+                # TODO(CarolinePascal): 将检查移到循环之前以避免中途失败 + 如果检查失败则增加重新编码视频的可能性
                 concatenate_video_files(
                     [dst_path, src_path],
                     dst_path,
                     compatibility_check=True,
                 )
-                # Update duration of this destination file
+                # 更新此目标文件的时长
                 dst_file_durations[dst_key] = current_dst_duration + src_duration
 
             videos_idx[key]["episode_duration"] += src_duration
@@ -576,25 +576,25 @@ def aggregate_data(
     chunk_size: int,
     concatenate_data: bool = True,
 ) -> IndexState:
-    """Aggregates data chunks from a source dataset into the destination dataset.
+    """将源数据集的数据块聚合到目标数据集。
 
-    Reads source data files, updates indices to match the aggregated dataset,
-    and writes them to the destination with proper file rotation.
+    读取源数据文件，更新索引以匹配聚合后的数据集，
+    并通过适当的文件轮换将它们写入目标位置。
 
-    Tracks a `src_to_dst` mapping from source (chunk, file) to destination (chunk, file)
-    which is critical for correctly updating episode metadata when source datasets
-    have multiple data files (e.g., from a previous merge operation).
+    跟踪从源 (chunk, file) 到目标 (chunk, file) 的 `src_to_dst` 映射，
+    当源数据集具有多个数据文件（例如来自先前的合并操作）时，
+    这对于正确更新 episode 元数据至关重要。
 
     Args:
-        src_meta: Source dataset metadata.
-        dst_meta: Destination dataset metadata.
-        data_idx: Dictionary tracking data chunk and file indices.
-        data_files_size_in_mb: Maximum size for data files in MB.
-        chunk_size: Maximum number of files per chunk.
-        concatenate_data: When False, keep one parquet per source file instead of packing into shards.
+        src_meta: 源数据集元数据。
+        dst_meta: 目标数据集元数据。
+        data_idx: 跟踪数据 chunk 和 file 索引的字典。
+        data_files_size_in_mb: 数据文件的最大大小（MB）。
+        chunk_size: 每个 chunk 的最大文件数。
+        concatenate_data: 为 False 时，每个源文件保留一个 parquet，而不是打包成分片。
 
     Returns:
-        dict: Updated data_idx with current chunk and file indices.
+        dict: 更新后的 data_idx，包含当前的 chunk 和 file 索引。
     """
     unique_chunk_file_ids: list[ChunkFile] = sorted(
         {
@@ -608,11 +608,11 @@ def aggregate_data(
     )
     contains_images = len(dst_meta.image_keys) > 0
 
-    # retrieve features schema for proper image typing in parquet
+    # 获取 features 模式以便在 parquet 中正确进行图像类型标注
     hf_features = get_hf_features_from_features(dst_meta.features) if contains_images else None
 
-    # Track source to destination file mapping for metadata update
-    # This is critical for handling datasets that are already results of a merge
+    # 跟踪源到目标文件的映射，用于更新元数据
+    # 这对于处理已经是合并结果的数据集至关重要
     src_to_dst: dict[ChunkFile, ChunkFile] = {}
 
     for src_chunk_idx, src_file_idx in unique_chunk_file_ids:
@@ -620,15 +620,15 @@ def aggregate_data(
             chunk_index=src_chunk_idx, file_index=src_file_idx
         )
         if contains_images:
-            # Use HuggingFace datasets to read source data to preserve image format
+            # 使用 HuggingFace datasets 读取源数据以保留图像格式
             src_ds = datasets.Dataset.from_parquet(str(src_path))
             df = src_ds.to_pandas()
         else:
             df = pd.read_parquet(src_path)
         df = update_data_df(df, src_meta, dst_meta)
 
-        # Write data and get the actual destination file it was written to
-        # This avoids duplicating the rotation logic here
+        # 写入数据并获取其实际写入的目标文件
+        # 这避免了在此处重复轮换逻辑
         data_idx, (dst_chunk, dst_file) = append_or_create_parquet_file(
             df,
             src_path,
@@ -643,10 +643,10 @@ def aggregate_data(
             one_row_group_per_episode=True,
         )
 
-        # Record the mapping from source to actual destination
+        # 记录从源到实际目标的映射
         src_to_dst[(src_chunk_idx, src_file_idx)] = (dst_chunk, dst_file)
 
-    # Add the mapping to data_idx for use in metadata update
+    # 将映射添加到 data_idx，供元数据更新时使用
     data_idx["src_to_dst"] = src_to_dst
 
     return data_idx
@@ -659,20 +659,20 @@ def aggregate_metadata(
     data_idx: IndexState,
     videos_idx: VideoIndexState,
 ) -> IndexState:
-    """Aggregates metadata from a source dataset into the destination dataset.
+    """将源数据集的元数据聚合到目标数据集。
 
-    Reads source metadata files, updates all indices and timestamps,
-    and writes them to the destination with proper file rotation.
+    读取源元数据文件，更新所有索引和时间戳，
+    并通过适当的文件轮换将它们写入目标位置。
 
     Args:
-        src_meta: Source dataset metadata.
-        dst_meta: Destination dataset metadata.
-        meta_idx: Dictionary tracking metadata chunk and file indices.
-        data_idx: Dictionary tracking data chunk and file indices.
-        videos_idx: Dictionary tracking video indices and timestamps.
+        src_meta: 源数据集元数据。
+        dst_meta: 目标数据集元数据。
+        meta_idx: 跟踪元数据 chunk 和 file 索引的字典。
+        data_idx: 跟踪数据 chunk 和 file 索引的字典。
+        videos_idx: 跟踪视频索引和时间戳的字典。
 
     Returns:
-        dict: Updated meta_idx with current chunk and file indices.
+        dict: 更新后的 meta_idx，包含当前的 chunk 和 file 索引。
     """
     chunk_file_ids: list[ChunkFile] = sorted(
         {
@@ -706,7 +706,7 @@ def aggregate_metadata(
             aggr_root=dst_meta.root,
         )
 
-    # Increment latest_duration by the total duration added from this source dataset
+    # 将 latest_duration 增加此源数据集所添加的总时长
     for k in videos_idx:
         videos_idx[k]["latest_duration"] += videos_idx[k]["episode_duration"]
 
@@ -726,31 +726,31 @@ def append_or_create_parquet_file(
     concatenate: bool = True,
     one_row_group_per_episode: bool = False,
 ) -> tuple[IndexState, ChunkFile]:
-    """Appends data to an existing parquet file or creates a new one based on size constraints.
+    """根据大小约束将数据追加到现有的 parquet 文件或创建新文件。
 
-    Manages file rotation when size limits are exceeded to prevent individual files
-    from becoming too large. Handles both regular parquet files and those containing images.
+    当超出大小限制时管理文件轮换，以防止单个文件
+    变得过大。同时处理普通 parquet 文件和包含图像的文件。
 
     Args:
-        df: DataFrame to write to the parquet file.
-        src_path: Path to the source file (used for size estimation).
-        idx: Dictionary containing current 'chunk' and 'file' indices.
-        max_mb: Maximum allowed file size in MB before rotation.
-        chunk_size: Maximum number of files per chunk before incrementing chunk index.
-        default_path: Format string for generating file paths.
-        contains_images: Whether the data contains images requiring special handling.
-        aggr_root: Root path for the aggregated dataset.
-        hf_features: Optional HuggingFace Features schema for proper image typing.
-        concatenate: When False, always rotate to a new file instead of appending to the current one.
-        one_row_group_per_episode: True for DATA parquet (emit one row group per episode); False for
-            the episodes-metadata parquet (already one row per episode).
+        df: 要写入 parquet 文件的 DataFrame。
+        src_path: 源文件路径（用于大小估算）。
+        idx: 包含当前 'chunk' 和 'file' 索引的字典。
+        max_mb: 轮换前允许的最大文件大小（MB）。
+        chunk_size: 递增 chunk 索引之前每个 chunk 的最大文件数。
+        default_path: 用于生成文件路径的格式字符串。
+        contains_images: 数据是否包含需要特殊处理的图像。
+        aggr_root: 聚合数据集的根路径。
+        hf_features: 可选的 HuggingFace Features 模式，用于正确的图像类型标注。
+        concatenate: 为 False 时，总是轮换到新文件而不是追加到当前文件。
+        one_row_group_per_episode: 对 DATA parquet 为 True（每个 episode 输出一个行组）；
+            对 episodes 元数据 parquet 为 False（已经是每个 episode 一行）。
 
     Returns:
-        tuple: (updated_idx, (dst_chunk, dst_file)) where updated_idx is the index dict
-               and (dst_chunk, dst_file) is the actual destination file the data was written to.
+        tuple: (updated_idx, (dst_chunk, dst_file))，其中 updated_idx 是索引字典，
+               (dst_chunk, dst_file) 是数据实际写入的目标文件。
 
     Raises:
-        ValueError: If aggr_root is not provided.
+        ValueError: 如果未提供 aggr_root。
     """
     if aggr_root is None:
         raise ValueError("aggr_root must be provided.")
@@ -780,7 +780,7 @@ def append_or_create_parquet_file(
         target_path = new_path
     else:
         if contains_images:
-            # Use HuggingFace datasets to read existing data to preserve image format
+            # 使用 HuggingFace datasets 读取现有数据以保留图像格式
             existing_ds = datasets.Dataset.from_parquet(str(dst_path))
             existing_df = existing_ds.to_pandas()
         else:
@@ -801,14 +801,14 @@ def append_or_create_parquet_file(
 def finalize_aggregation(
     aggr_meta: LeRobotDatasetMetadata, all_metadata: list[LeRobotDatasetMetadata]
 ) -> None:
-    """Finalizes the dataset aggregation by writing summary files and statistics.
+    """通过写入摘要文件和统计信息来完成数据集聚合。
 
-    Writes the tasks file, info file with total counts and splits, and
-    aggregated statistics from all source datasets.
+    写入 tasks 文件、包含总计数和 splits 的 info 文件，以及
+    来自所有源数据集的聚合统计信息。
 
     Args:
-        aggr_meta: Aggregated dataset metadata.
-        all_metadata: List of all source dataset metadata objects.
+        aggr_meta: 聚合后的数据集元数据。
+        all_metadata: 所有源数据集元数据对象的列表。
     """
     logger.info("write tasks")
     write_tasks(aggr_meta.tasks, aggr_meta.root)

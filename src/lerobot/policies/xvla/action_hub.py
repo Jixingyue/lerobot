@@ -22,13 +22,13 @@ import torch
 import torch.nn as nn
 
 # =============================================================================
-# Registry
+# 注册表
 # =============================================================================
 ACTION_REGISTRY: dict[str, type[BaseActionSpace]] = {}
 
 
 def register_action(name: str):
-    """Decorator for registering a new action space."""
+    """用于注册新动作空间的装饰器。"""
 
     def _wrap(cls):
         key = name.lower()
@@ -42,7 +42,7 @@ def register_action(name: str):
 
 
 def build_action_space(name: str, **kwargs) -> BaseActionSpace:
-    """Instantiate a registered action space by name."""
+    """按名称实例化一个已注册的动作空间。"""
     key = name.lower()
     if key not in ACTION_REGISTRY:
         raise KeyError(f"Unknown action space '{name}'. Available: {list(ACTION_REGISTRY.keys())}")
@@ -50,18 +50,18 @@ def build_action_space(name: str, **kwargs) -> BaseActionSpace:
 
 
 # =============================================================================
-# Base class
+# 基类
 # =============================================================================
 class BaseActionSpace(nn.Module):
     """
-    Abstract base class for all action-space definitions.
+    所有动作空间定义的抽象基类。
 
-    Each subclass defines:
-      - `dim_action`: dimension of the action vector.
-      - `gripper_idx`: indices of gripper channels.
-      - `compute_loss(pred, target)`: supervised loss for this space.
-      - `preprocess(proprio, action, mode)`: pre-step modifications.
-      - `postprocess(action)`: post-step corrections (e.g. apply sigmoid).
+    每个子类需要定义：
+      - `dim_action`：动作向量的维度。
+      - `gripper_idx`：夹爪通道的索引。
+      - `compute_loss(pred, target)`：该空间的监督损失。
+      - `preprocess(proprio, action, mode)`：步骤前的修改。
+      - `postprocess(action)`：步骤后的修正（例如应用 sigmoid）。
     """
 
     name: str = "base"
@@ -72,17 +72,17 @@ class BaseActionSpace(nn.Module):
         super().__init__()
 
     # ---------------------------------------------------------------------
-    # Core supervised loss
+    # 核心监督损失
     # ---------------------------------------------------------------------
     def compute_loss(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
         raise NotImplementedError
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Alias for compute_loss."""
+        """compute_loss 的别名。"""
         return self.compute_loss(pred, target)
 
     # ---------------------------------------------------------------------
-    # Space-level hooks
+    # 空间级别的钩子
     # ---------------------------------------------------------------------
     def preprocess(
         self,
@@ -90,16 +90,16 @@ class BaseActionSpace(nn.Module):
         action: torch.Tensor,
         mode: str = "train",
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Default: return unchanged."""
+        """默认：原样返回。"""
         return proprio, action
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
-        """Default: return unchanged."""
+        """默认：原样返回。"""
         return action
 
 
 # =============================================================================
-# Utilities
+# 工具函数
 # =============================================================================
 def _ensure_indices_valid(dim_action: int, idx: Iterable[int], name: str) -> None:
     bad = [i for i in idx if i < 0 or i >= dim_action]
@@ -108,11 +108,11 @@ def _ensure_indices_valid(dim_action: int, idx: Iterable[int], name: str) -> Non
 
 
 # =============================================================================
-# Implementations
+# 具体实现
 # =============================================================================
 @register_action("ee6d")
 class EE6DActionSpace(BaseActionSpace):
-    """End-effector layout with xyz, 6D rotation, and gripper channels."""
+    """末端执行器布局，包含 xyz、6D 旋转和夹爪通道。"""
 
     dim_action = 20
     gripper_idx = (9, 19)
@@ -135,17 +135,17 @@ class EE6DActionSpace(BaseActionSpace):
         batch_size, seq_len, action_dim = pred.shape
         _ensure_indices_valid(action_dim, self.gripper_idx, "gripper_idx")
 
-        # Gripper BCE
+        # 夹爪 BCE
         g_losses = [self.bce(pred[:, :, gi], target[:, :, gi]) for gi in self.gripper_idx]
         gripper_loss = sum(g_losses) / len(self.gripper_idx) * self.GRIPPER_SCALE
 
-        # XYZ position
+        # XYZ 位置
         pos_loss = (
             self.mse(pred[:, :, self.POS_IDX_1], target[:, :, self.POS_IDX_1])
             + self.mse(pred[:, :, self.POS_IDX_2], target[:, :, self.POS_IDX_2])
         ) * self.XYZ_SCALE
 
-        # Rotation 6D
+        # 6D 旋转
         rot_loss = (
             self.mse(pred[:, :, self.ROT_IDX_1], target[:, :, self.ROT_IDX_1])
             + self.mse(pred[:, :, self.ROT_IDX_2], target[:, :, self.ROT_IDX_2])
@@ -158,7 +158,7 @@ class EE6DActionSpace(BaseActionSpace):
         }
 
     def preprocess(self, proprio, action, mode="train"):
-        """Zero-out gripper channels in proprio/action."""
+        """将 proprio/action 中的夹爪通道置零。"""
         proprio_m = proprio.clone()
         action_m = action.clone()
         proprio_m[..., self.gripper_idx] = 0.0
@@ -166,7 +166,7 @@ class EE6DActionSpace(BaseActionSpace):
         return proprio_m, action_m
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
-        """Apply sigmoid to gripper logits."""
+        """对夹爪 logits 应用 sigmoid。"""
         if action.size(-1) > max(self.gripper_idx):
             action[..., self.gripper_idx] = torch.sigmoid(action[..., self.gripper_idx])
         return action
@@ -174,7 +174,7 @@ class EE6DActionSpace(BaseActionSpace):
 
 @register_action("joint")
 class JointActionSpace(BaseActionSpace):
-    """Joint-space layout with joints + gripper only."""
+    """关节空间布局，仅包含关节 + 夹爪。"""
 
     dim_action = 14
     gripper_idx = (6, 13)
@@ -203,7 +203,7 @@ class JointActionSpace(BaseActionSpace):
         }
 
     def preprocess(self, proprio, action, mode="train"):
-        """Zero-out gripper channels in proprio/action."""
+        """将 proprio/action 中的夹爪通道置零。"""
         proprio_m = proprio.clone()
         action_m = action.clone()
         proprio_m[..., self.gripper_idx] = 0.0
@@ -211,7 +211,7 @@ class JointActionSpace(BaseActionSpace):
         return proprio_m, action_m
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
-        """Apply sigmoid to gripper logits."""
+        """对夹爪 logits 应用 sigmoid。"""
         if action.size(-1) > max(self.gripper_idx):
             action[..., self.gripper_idx] = torch.sigmoid(action[..., self.gripper_idx])
         return action
@@ -219,7 +219,7 @@ class JointActionSpace(BaseActionSpace):
 
 @register_action("agibot_ee6d")
 class AGIBOTEE6DActionSpace(BaseActionSpace):
-    """AGI-bot variant of EE6DActionSpace using MSE for all components."""
+    """EE6DActionSpace 的 AGI-bot 变体，对所有分量都使用 MSE。"""
 
     dim_action = 20
     gripper_idx = (9, 19)
@@ -259,26 +259,26 @@ class AGIBOTEE6DActionSpace(BaseActionSpace):
         }
 
     def preprocess(self, proprio, action, mode="train"):
-        """No preprocessing applied in AGIBOT variant."""
+        """AGIBOT 变体不做预处理。"""
         return proprio, action
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
-        """AGIBOT does not postprocess."""
+        """AGIBOT 不做后处理。"""
         return action
 
 
 @register_action("franka_joint7")
 class FrankaJoint7ActionSpace(BaseActionSpace):
     """
-    Franka Panda joint-space: 7 joints, with gripper.
+    Franka Panda 关节空间：7 个关节，带夹爪。
 
-    - Real robot action dim: 7
-    - Model-facing dim: 20 (padded with zeros)
-      compatible with pretrained VLA models expecting 20D.
+    - 真实机器人动作维度：7
+    - 面向模型的维度：20（用零填充），
+      与期望 20 维输入的预训练 VLA 模型兼容。
     """
 
-    dim_action = 20  # model dimension
-    REAL_DIM = 7  # actual Franka joints
+    dim_action = 20  # 模型维度
+    REAL_DIM = 7  # Franka 的实际关节数
 
     JOINTS_SCALE = 1.0
 
@@ -287,7 +287,7 @@ class FrankaJoint7ActionSpace(BaseActionSpace):
         self.mse = nn.MSELoss()
 
     def _pad_to_model_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """Pad 7 → 20 dims (zeros for the dummy channels)."""
+        """将 7 维填充到 20 维（哑通道用零填充）。"""
         if x is None:
             return None
         if x.size(-1) == self.dim_action:
@@ -297,20 +297,20 @@ class FrankaJoint7ActionSpace(BaseActionSpace):
                 f"Expected last dim to be {self.REAL_DIM} or {self.dim_action}, got {x.size(-1)}"
             )
 
-        pad_shape = list(x.shape[:-1]) + [self.dim_action - self.REAL_DIM]  # 13 zeros
+        pad_shape = list(x.shape[:-1]) + [self.dim_action - self.REAL_DIM]  # 13 个零
         pad = x.new_zeros(pad_shape)
         return torch.cat([x, pad], dim=-1)
 
     def _trim_to_real_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """Trim model output 20 → 7 dims."""
+        """将模型输出从 20 维裁剪到 7 维。"""
         return x[..., : self.REAL_DIM]
 
     def compute_loss(self, pred, target):
         """
         pred :  [B, T, 20]
-        target : [B, T, 7] or [B, T, 20]
+        target : [B, T, 7] 或 [B, T, 20]
 
-        Only compute MSE on the first 7 dims.
+        只在前 7 维上计算 MSE。
         """
         pred = self._pad_to_model_dim(pred)
         target = self._pad_to_model_dim(target)
@@ -319,7 +319,7 @@ class FrankaJoint7ActionSpace(BaseActionSpace):
 
         joints_loss = (
             self.mse(
-                pred[:, :, : self.REAL_DIM],  # use only the first 7 joints
+                pred[:, :, : self.REAL_DIM],  # 只使用前 7 个关节
                 target[:, :, : self.REAL_DIM],
             )
             * self.JOINTS_SCALE
@@ -329,15 +329,15 @@ class FrankaJoint7ActionSpace(BaseActionSpace):
 
     def preprocess(self, proprio, action, mode="train"):
         """
-        During training:
-        - Pad [7] → [20]
+        训练期间：
+        - 将 [7] 填充到 [20]
         """
         return proprio, self._pad_to_model_dim(action)
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
         """
-        After model prediction:
-        - Trim [20] → [7] for real robot control.
+        模型预测之后：
+        - 将 [20] 裁剪到 [7]，用于真实机器人控制。
         """
         return self._trim_to_real_dim(action)
 
@@ -345,16 +345,16 @@ class FrankaJoint7ActionSpace(BaseActionSpace):
 @register_action("auto")
 class AutoActionSpace(BaseActionSpace):
     """
-    Auto-detecting action space that adapts to any action dimension.
+    自动检测的动作空间，可适配任意动作维度。
 
-    - Auto-detects the real action dimension from the policy feature
-    - Model outputs max_dim for compatibility with pretrained models
-    - Loss is computed only on the first real_dim dimensions
-    - Postprocess trims output back to real_dim
+    - 根据策略特征自动检测真实动作维度
+    - 为与预训练模型兼容，模型输出 max_dim 维
+    - 损失只在前 real_dim 个维度上计算
+    - 后处理时将输出裁剪回 real_dim
 
     Args:
-        real_dim: The actual action dimension from the dataset/policy feature
-        max_dim: The model's output dimension for pretrained VLA compatibility
+        real_dim: 来自数据集/策略特征的实际动作维度
+        max_dim: 为与预训练 VLA 兼容而使用的模型输出维度
     """
 
     JOINTS_SCALE = 1.0
@@ -362,17 +362,17 @@ class AutoActionSpace(BaseActionSpace):
     def __init__(self, real_dim: int, max_dim: int):
         super().__init__()
         self.real_dim = real_dim
-        self.dim_action = max_dim  # Model-facing dimension
+        self.dim_action = max_dim  # 面向模型的维度
         self.mse = nn.MSELoss()
 
     def _pad_to_model_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """Pad real_dim → max_dim (zeros for the dummy channels)."""
+        """将 real_dim 填充到 max_dim（哑通道用零填充）。"""
         if x is None:
             return None
         if x.size(-1) == self.dim_action:
             return x
         if x.size(-1) != self.real_dim:
-            # If dimension doesn't match either, pad/trim to real_dim first
+            # 如果维度与两者都不匹配，先填充/裁剪到 real_dim
             if x.size(-1) < self.real_dim:
                 pad_shape = list(x.shape[:-1]) + [self.real_dim - x.size(-1)]
                 pad = x.new_zeros(pad_shape)
@@ -385,15 +385,15 @@ class AutoActionSpace(BaseActionSpace):
         return torch.cat([x, pad], dim=-1)
 
     def _trim_to_real_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """Trim model output max_dim → real_dim."""
+        """将模型输出从 max_dim 裁剪到 real_dim。"""
         return x[..., : self.real_dim]
 
     def compute_loss(self, pred: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
         """
-        Compute loss only on the first real_dim dimensions.
+        只在前 real_dim 个维度上计算损失。
 
-        pred:   [B, T, max_dim] from the model
-        target: [B, T, real_dim] or [B, T, max_dim]
+        pred:   来自模型的 [B, T, max_dim]
+        target: [B, T, real_dim] 或 [B, T, max_dim]
 
         Loss = MSE(pred[:,:,:real_dim], target[:,:,:real_dim])
         """
@@ -401,7 +401,7 @@ class AutoActionSpace(BaseActionSpace):
         target = self._pad_to_model_dim(target)
         assert pred.shape == target.shape, f"Shape mismatch: pred {pred.shape} vs target {target.shape}"
 
-        # only compute loss on the real dimensions
+        # 只在真实维度上计算损失
         joints_loss = (
             self.mse(
                 pred[:, :, : self.real_dim],
@@ -414,13 +414,13 @@ class AutoActionSpace(BaseActionSpace):
 
     def preprocess(self, proprio: torch.Tensor, action: torch.Tensor, mode: str = "train"):
         """
-        Pad action from real_dim to max_dim for the model.
+        为模型将动作从 real_dim 填充到 max_dim。
         """
         return proprio, self._pad_to_model_dim(action)
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
         """
-        Trim model output from max_dim to real_dim for real robot control.
+        为真实机器人控制将模型输出从 max_dim 裁剪到 real_dim。
         """
         return self._trim_to_real_dim(action)
 
@@ -428,33 +428,33 @@ class AutoActionSpace(BaseActionSpace):
 @register_action("so101_bimanual")
 class BimanualSO101ActionSpace(BaseActionSpace):
     """
-    Bimanual SO101 robot: 2 arms with 5 joints each + gripper.
+    双臂 SO101 机器人：2 条手臂，每条 5 个关节 + 夹爪。
 
-    Layout (real robot):
-    [left_arm (5 joints + gripper), right_arm (5 joints + gripper)]
-    - Left arm:  shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
-    - Right arm: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
+    布局（真实机器人）：
+    [left_arm（5 个关节 + 夹爪）, right_arm（5 个关节 + 夹爪）]
+    - 左臂： shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
+    - 右臂： shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
 
-    Real action dim: 12
-    Model-facing dim: 20 (extra 8 dummy dims at the end)
+    真实动作维度：12
+    面向模型的维度：20（末尾额外的 8 个哑维度）
     """
 
-    # Model output / training dimension (to match pretrained policy)
+    # 模型输出 / 训练维度（与预训练策略匹配）
     dim_action = 20
 
-    # Real robot action dimension
+    # 真实机器人动作维度
     REAL_DIM = 12
 
-    # Indices of real vs dummy channels
+    # 真实通道与哑通道的索引
     REAL_IDXS = tuple(range(REAL_DIM))  # 0..11
     DUMMY_IDXS = tuple(range(REAL_DIM, dim_action))  # 12..19
 
-    # Grippers live in the real part
-    gripper_idx = (5, 11)  # left_gripper at idx 5, right_gripper at idx 11
+    # 夹爪位于真实部分中
+    gripper_idx = (5, 11)  # left_gripper 在索引 5，right_gripper 在索引 11
     GRIPPER_SCALE = 1.0
     JOINTS_SCALE = 1.0
 
-    # Indices for left and right arm joints (excluding grippers)
+    # 左臂和右臂关节的索引（不包含夹爪）
     LEFT_ARM_JOINTS = (0, 1, 2, 3, 4)
     RIGHT_ARM_JOINTS = (6, 7, 8, 9, 10)
 
@@ -463,10 +463,10 @@ class BimanualSO101ActionSpace(BaseActionSpace):
         self.mse = nn.MSELoss()
         self.bce = nn.BCEWithLogitsLoss()
 
-    # ---------- helpers ----------
+    # ---------- 辅助方法 ----------
 
     def _pad_to_model_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """If last dim is REAL_DIM (12), pad zeros to reach dim_action (20)."""
+        """如果最后一维为 REAL_DIM（12），则补零到 dim_action（20）。"""
         if x is None:
             return None
         if x.size(-1) == self.dim_action:
@@ -480,23 +480,23 @@ class BimanualSO101ActionSpace(BaseActionSpace):
         return torch.cat([x, pad], dim=-1)
 
     def _trim_to_real_dim(self, x: torch.Tensor) -> torch.Tensor:
-        """Keep only the first REAL_DIM (12) dims for the real robot."""
+        """为真实机器人只保留前 REAL_DIM（12）维。"""
         return x[..., : self.REAL_DIM]
 
-    # ---------- loss ----------
+    # ---------- 损失 ----------
 
     def compute_loss(self, pred, target):
         """
-        pred:  [B, T, 20] from the model
-        target: [B, T, 12] or [B, T, 20]
-        We pad target → 20 and compute loss only on the real dims.
+        pred:  来自模型的 [B, T, 20]
+        target: [B, T, 12] 或 [B, T, 20]
+        我们将 target 填充到 20 维，并且只在真实维度上计算损失。
         """
-        # Ensure both are [B, T, 20]
+        # 确保两者都是 [B, T, 20]
         pred = self._pad_to_model_dim(pred)
         target = self._pad_to_model_dim(target)
         assert pred.shape == target.shape
 
-        # ---- MSE for all real dims (0–11) ----
+        # ---- 对所有真实维度（0–11）计算 MSE ----
         real_dims = 12
 
         joints_loss = (
@@ -525,12 +525,12 @@ class BimanualSO101ActionSpace(BaseActionSpace):
             "right_arm_loss": right_arm_loss,
         }
 
-    # ---------- preprocess / postprocess ----------
+    # ---------- 预处理 / 后处理 ----------
 
     def preprocess(self, proprio, action, mode="train"):
         """
-        - If proprio/action are 12-dim, pad them to 20 for the model.
-        - Zero-out gripper channels in proprio/action to focus learning on joints.
+        - 如果 proprio/action 是 12 维，则为模型将其填充到 20 维。
+        - 将 proprio/action 中的夹爪通道置零，使学习聚焦于关节。
         """
         proprio_m = self._pad_to_model_dim(proprio.clone())
         action_m = self._pad_to_model_dim(action.clone()) if action is not None else None
@@ -543,9 +543,9 @@ class BimanualSO101ActionSpace(BaseActionSpace):
 
     def postprocess(self, action: torch.Tensor) -> torch.Tensor:
         """
-        - Model outputs [*, 20]
-        - Apply sigmoid to gripper logits
-        - Return only the first 12 dims for the real robot:
+        - 模型输出 [*, 20]
+        - 对夹爪 logits 应用 sigmoid
+        - 只为真实机器人返回前 12 维：
           ["left_shoulder_pan.pos",
            "left_shoulder_lift.pos",
            "left_elbow_flex.pos",
@@ -559,20 +559,20 @@ class BimanualSO101ActionSpace(BaseActionSpace):
            "right_wrist_roll.pos",
            "right_gripper.pos"]
         """
-        # Ensure we at least have the real dims + grippers
+        # 确保至少具有真实维度和夹爪
         if action.size(-1) < self.REAL_DIM:
             raise ValueError(f"Expected at least {self.REAL_DIM} dims in action, got {action.size(-1)}")
 
-        # Apply sigmoid on gripper channels in model space (indices 5 and 11)
+        # 在模型空间中对夹爪通道（索引 5 和 11）应用 sigmoid
         if action.size(-1) > max(self.gripper_idx):
             action[..., self.gripper_idx] = torch.sigmoid(action[..., self.gripper_idx])
 
-        # Return only the real 12-dim control vector for the env
+        # 只为环境返回真实的 12 维控制向量
         return self._trim_to_real_dim(action)
 
 
 # =============================================================================
-# Exports
+# 导出
 # =============================================================================
 __all__ = [
     "BaseActionSpace",

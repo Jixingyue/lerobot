@@ -14,8 +14,8 @@
 
 from lerobot.utils.import_utils import require_package
 
-# LeRobotDataset (imported at module top in dataset.py) pulls in heavy dataset deps;
-# guard the optional dependency here so importing this package fails loudly if it's missing.
+# LeRobotDataset（在 dataset.py 模块顶部导入）引入了重量级数据集依赖；
+# 在这里保护可选依赖，以便在缺少此包时导入此包会大声失败。
 require_package("datasets", extra="dataset")
 
 from .annotate import submit_annotate_to_hf

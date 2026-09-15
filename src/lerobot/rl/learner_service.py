@@ -39,15 +39,15 @@ else:
     send_bytes_in_chunks = None
     _ServicerBase = object
 
-MAX_WORKERS = 3  # Stream parameters, send transitions and interactions
+MAX_WORKERS = 3  # 流式传输参数、发送转移和交互消息
 SHUTDOWN_TIMEOUT = 10
 
 
 class LearnerService(_ServicerBase):
     """
-    Implementation of the LearnerService gRPC service
-    This service is used to send parameters to the Actor and receive transitions and interactions from the Actor
-    check transport.proto for the gRPC service definition
+    LearnerService gRPC 服务的实现
+    该服务用于向 Actor 发送参数，并从 Actor 接收转移和交互消息
+    gRPC 服务定义请查看 transport.proto
     """
 
     def __init__(
@@ -69,7 +69,7 @@ class LearnerService(_ServicerBase):
     def StreamParameters(  # noqa: N802
         self, request: "services_pb2.Empty", context: "grpc.ServicerContext"
     ):
-        # TODO: authorize the request
+        # TODO: 对请求进行授权
         logging.info("[LEARNER] Received request to stream parameters from the Actor")
 
         last_push_time = 0
@@ -78,8 +78,8 @@ class LearnerService(_ServicerBase):
             time_since_last_push = time.time() - last_push_time
             if time_since_last_push < self.seconds_between_pushes:
                 self.shutdown_event.wait(self.seconds_between_pushes - time_since_last_push)
-                # Continue, because we could receive a shutdown event,
-                # and it's checked in the while loop
+                # 继续执行，因为我们可能会收到关闭事件，
+                # 而该事件会在 while 循环中被检查
                 continue
 
             logging.info("[LEARNER] Push parameters to the Actor")
@@ -104,7 +104,7 @@ class LearnerService(_ServicerBase):
         return services_pb2.Empty()
 
     def SendTransitions(self, request_iterator, _context: "grpc.ServicerContext"):  # noqa: N802
-        # TODO: authorize the request
+        # TODO: 对请求进行授权
         logging.info("[LEARNER] Received request to receive transitions from the Actor")
 
         receive_bytes_in_chunks(
@@ -118,7 +118,7 @@ class LearnerService(_ServicerBase):
         return services_pb2.Empty()
 
     def SendInteractions(self, request_iterator, _context: "grpc.ServicerContext"):  # noqa: N802
-        # TODO: authorize the request
+        # TODO: 对请求进行授权
         logging.info("[LEARNER] Received request to receive interactions from the Actor")
 
         receive_bytes_in_chunks(

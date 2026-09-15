@@ -68,24 +68,24 @@ class HopeJrHand(Robot):
         self.bus = FeetechMotorsBus(
             port=self.config.port,
             motors={
-                # Thumb
+                # 拇指
                 "thumb_cmc": Motor(1, "scs0009", MotorNormMode.RANGE_0_100),
                 "thumb_mcp": Motor(2, "scs0009", MotorNormMode.RANGE_0_100),
                 "thumb_pip": Motor(3, "scs0009", MotorNormMode.RANGE_0_100),
                 "thumb_dip": Motor(4, "scs0009", MotorNormMode.RANGE_0_100),
-                # Index
+                # 食指
                 "index_radial_flexor": Motor(5, "scs0009", MotorNormMode.RANGE_0_100),
                 "index_ulnar_flexor": Motor(6, "scs0009", MotorNormMode.RANGE_0_100),
                 "index_pip_dip": Motor(7, "scs0009", MotorNormMode.RANGE_0_100),
-                # Middle
+                # 中指
                 "middle_radial_flexor": Motor(8, "scs0009", MotorNormMode.RANGE_0_100),
                 "middle_ulnar_flexor": Motor(9, "scs0009", MotorNormMode.RANGE_0_100),
                 "middle_pip_dip": Motor(10, "scs0009", MotorNormMode.RANGE_0_100),
-                # Ring
+                # 无名指
                 "ring_radial_flexor": Motor(11, "scs0009", MotorNormMode.RANGE_0_100),
                 "ring_ulnar_flexor": Motor(12, "scs0009", MotorNormMode.RANGE_0_100),
                 "ring_pip_dip": Motor(13, "scs0009", MotorNormMode.RANGE_0_100),
-                # Pinky
+                # 小指
                 "pinky_radial_flexor": Motor(14, "scs0009", MotorNormMode.RANGE_0_100),
                 "pinky_ulnar_flexor": Motor(15, "scs0009", MotorNormMode.RANGE_0_100),
                 "pinky_pip_dip": Motor(16, "scs0009", MotorNormMode.RANGE_0_100),
@@ -129,7 +129,7 @@ class HopeJrHand(Robot):
         if not self.is_calibrated and calibrate:
             self.calibrate()
 
-        # Connect the cameras
+        # 连接相机
         for cam in self.cameras.values():
             cam.connect()
 
@@ -156,7 +156,7 @@ class HopeJrHand(Robot):
             self.bus.configure_motors()
 
     def setup_motors(self) -> None:
-        # TODO: add docstring
+        # TODO: 添加文档字符串
         for motor in self.bus.motors:
             input(f"Connect the controller board to the '{motor}' motor only and press enter.")
             self.bus.setup_motor(motor)
@@ -166,14 +166,14 @@ class HopeJrHand(Robot):
     def get_observation(self) -> RobotObservation:
         obs_dict = {}
 
-        # Read hand position
+        # 读取手部位置
         start = time.perf_counter()
         for motor in self.bus.motors:
             obs_dict[f"{motor}.pos"] = self.bus.read("Present_Position", motor)
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()

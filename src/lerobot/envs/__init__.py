@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# NOTE: gymnasium is currently a core dependency but is a candidate for moving to an
-# optional extra in the future. When that transition happens, uncomment the guard below
-# and update the extra name to the one that will contain gymnasium.
+# 注意：gymnasium 目前是核心依赖，但未来可能会迁移为可选 extra。
+# 当该迁移发生时，请取消下方守卫代码的注释，
+# 并将 extra 名称更新为届时包含 gymnasium 的那个。
 # from lerobot.utils.import_utils import require_package
 # require_package("gymnasium", extra="<update_extra>", import_name="gymnasium")
 

@@ -31,36 +31,36 @@ from .utils import _LazyAsyncVectorEnv, parse_camera_names
 
 logger = logging.getLogger(__name__)
 
-# Dimensions for the flat action/state vectors used by the LeRobot wrapper.
-# These correspond to the PandaOmron robot in RoboCasa365.
+# LeRobot 包装器所使用的扁平动作/状态向量的维度。
+# 它们对应 RoboCasa365 中的 PandaOmron 机器人。
 OBS_STATE_DIM = 16  # base_pos(3) + base_quat(4) + ee_pos_rel(3) + ee_quat_rel(4) + gripper_qpos(2)
 ACTION_DIM = 12  # base_motion(4) + control_mode(1) + ee_pos(3) + ee_rot(3) + gripper(1)
 ACTION_LOW = -1.0
 ACTION_HIGH = 1.0
 
-# Default PandaOmron cameras. We surface these raw names directly as
-# `observation.images.<name>` so the LeRobot dataset/policy keys match
-# RoboCasa's native convention (no implicit renaming).
+# 默认的 PandaOmron 相机。我们直接将这些原始名称以
+# `observation.images.<name>` 的形式暴露出来，使 LeRobot 数据集/策略的键
+# 与 RoboCasa 的原生约定一致（不做隐式重命名）。
 DEFAULT_CAMERAS = [
     "robot0_agentview_left",
     "robot0_eye_in_hand",
     "robot0_agentview_right",
 ]
 
-# Object-mesh registries to sample from. RoboCasa's upstream default is
-# ("objaverse", "lightwheel"), but the objaverse pack is huge (~30GB) and
-# most users — including our CI image — only download the lightwheel pack
-# (`--type objs_lw` in `download_kitchen_assets`). When a sampled object
-# category has zero candidates in every registry, robocasa crashes with
-# `ValueError: Probabilities contain NaN` (0/0 divide in the probability
-# normalization). Restricting to registries that are actually on disk
-# avoids the NaN and matches what the asset download provides.
+# 用于采样的物体网格注册表。RoboCasa 的上游默认值为
+# ("objaverse", "lightwheel")，但 objaverse 包非常大（约 30GB），
+# 大多数用户 —— 包括我们的 CI 镜像 —— 只下载 lightwheel 包
+# （`download_kitchen_assets` 中的 `--type objs_lw`）。当某个被采样的物体
+# 类别在所有注册表中都没有候选项时，robocasa 会崩溃并抛出
+# `ValueError: Probabilities contain NaN`（概率归一化时出现 0/0 除法）。
+# 将范围限定到磁盘上实际存在的注册表，
+# 可以避免 NaN，并与资源下载所提供的内容保持一致。
 DEFAULT_OBJ_REGISTRIES: tuple[str, ...] = ("lightwheel",)
 
-# Task-group shortcuts accepted as `--env.task`. When the user passes one of
-# these names, we expand it to the upstream RoboCasa task list and auto-set
-# the dataset split. Individual task names (optionally comma-separated) still
-# take precedence; this only triggers on an exact group-name match.
+# 可作为 `--env.task` 接受的任务组快捷方式。当用户传入这些
+# 名称之一时，我们会将其展开为上游的 RoboCasa 任务列表，并自动设置
+# 数据集划分。单个任务名（可选地以逗号分隔）仍然
+# 优先；这仅在组名完全匹配时才会触发。
 _TASK_GROUP_SPLITS = {
     "atomic_seen": "target",
     "composite_seen": "target",
@@ -73,12 +73,12 @@ _TASK_GROUP_SPLITS = {
 
 
 def _resolve_tasks(task: str) -> tuple[list[str], str | None]:
-    """Resolve a `--env.task` value to (task_names, split_override).
+    """将 `--env.task` 的值解析为 (task_names, split_override)。
 
-    If `task` is a known task-group name (e.g. `atomic_seen`, `pretrain100`),
-    expand it via `robocasa.utils.dataset_registry.{TARGET,PRETRAINING}_TASKS`
-    and return the matching split. Otherwise treat `task` as a single task or
-    comma-separated list and leave the split untouched (None).
+    如果 `task` 是已知的任务组名（例如 `atomic_seen`、`pretrain100`），
+    则通过 `robocasa.utils.dataset_registry.{TARGET,PRETRAINING}_TASKS`
+    将其展开，并返回对应的划分。否则将 `task` 视为单个任务或
+    以逗号分隔的列表，并保持划分不变（None）。
     """
     key = task.strip()
     if key in _TASK_GROUP_SPLITS:
@@ -99,7 +99,7 @@ def _resolve_tasks(task: str) -> tuple[list[str], str | None]:
 
 
 def _get_task_horizon(task: str) -> int:
-    """Return the rollout horizon registered by RoboCasa for a task."""
+    """返回 RoboCasa 为某个任务注册的 rollout 时长。"""
     from robocasa.utils.dataset_registry_utils import get_task_horizon
 
     try:
@@ -112,9 +112,9 @@ def _get_task_horizon(task: str) -> int:
 
 
 def convert_action(flat_action: np.ndarray) -> dict[str, Any]:
-    """Split a flat (12,) action vector into a RoboCasa action dict.
+    """将扁平的 (12,) 动作向量拆分为 RoboCasa 动作字典。
 
-    Layout: base_motion(4) + control_mode(1) + ee_pos(3) + ee_rot(3) + gripper(1)
+    布局：base_motion(4) + control_mode(1) + ee_pos(3) + ee_rot(3) + gripper(1)
     """
     return {
         "action.base_motion": flat_action[0:4],
@@ -126,11 +126,11 @@ def convert_action(flat_action: np.ndarray) -> dict[str, Any]:
 
 
 class RoboCasaEnv(gym.Env):
-    """LeRobot gym.Env wrapper for RoboCasa365 kitchen environments.
+    """用于 RoboCasa365 厨房环境的 LeRobot gym.Env 包装器。
 
-    Wraps RoboCasaGymEnv from the robocasa package and converts its
-    dict-based observations and actions into the flat arrays LeRobot expects.
-    Raw RoboCasa camera names are preserved verbatim under `pixels/<cam>`.
+    包装 robocasa 包中的 RoboCasaGymEnv，并将其基于字典的
+    观测和动作转换为 LeRobot 所期望的扁平数组。
+    原始的 RoboCasa 相机名称会以 `pixels/<cam>` 的形式原样保留。
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 20}
@@ -160,17 +160,17 @@ class RoboCasaEnv(gym.Env):
         self.visualization_height = visualization_height
         self.split = split
         self.obj_registries = tuple(obj_registries)
-        # Per-worker index (0..n_envs-1) used to spread the user-provided
-        # seed across factories so each sub-env explores a distinct layout
-        # even when the same seed is passed to `reset()`.
+        # 每个 worker 的索引（0..n_envs-1），用于将用户提供的种子
+        # 分散到各个工厂，使每个子环境探索不同的布局，
+        # 即使向 `reset()` 传入的是相同的种子。
         self.episode_index = int(episode_index)
 
         self.camera_name = parse_camera_names(camera_name)
 
         self._max_episode_steps = episode_length if episode_length is not None else _get_task_horizon(task)
 
-        # Deferred — created on first reset() inside the worker subprocess
-        # to avoid inheriting stale GPU/EGL contexts across fork().
+        # 延迟创建 —— 在 worker 子进程内首次 reset() 时创建，
+        # 以避免在 fork() 后继承过期的 GPU/EGL 上下文。
         self._env: Any = None
         self.task_description = ""
 
@@ -209,20 +209,20 @@ class RoboCasaEnv(gym.Env):
         )
 
     def _ensure_env(self) -> None:
-        """Create the underlying RoboCasaGymEnv on first use.
+        """在首次使用时创建底层的 RoboCasaGymEnv。
 
-        Called inside the worker subprocess after fork(), so each worker gets
-        its own clean rendering context rather than inheriting a stale one from
-        the parent process (which causes crashes with AsyncVectorEnv).
+        在 fork() 之后于 worker 子进程内调用，这样每个 worker 都能获得
+        自己干净的渲染上下文，而不是从父进程继承一个过期的上下文
+        （那会在 AsyncVectorEnv 中导致崩溃）。
         """
         if self._env is not None:
             return
         from robocasa.wrappers.gym_wrapper import RoboCasaGymEnv
 
-        # RoboCasaGymEnv defaults split="test", which create_env rejects
-        # (only None/"all"/"pretrain"/"target" are valid). Always pass a
-        # valid value so we don't hit that default. Extra kwargs are
-        # forwarded to the underlying kitchen env via create_env/robosuite.make.
+        # RoboCasaGymEnv 默认 split="test"，而 create_env 会拒绝该值
+        # （只有 None/"all"/"pretrain"/"target" 是有效的）。始终传入
+        # 有效的值，以免命中那个默认值。额外的 kwargs 会
+        # 通过 create_env/robosuite.make 转发给底层的厨房环境。
         self._env = RoboCasaGymEnv(
             env_name=self.task,
             camera_widths=self.observation_width,
@@ -235,14 +235,14 @@ class RoboCasaEnv(gym.Env):
         self.task_description = ep_meta.get("lang", self.task)
 
     def _format_raw_obs(self, raw_obs: dict) -> RobotObservation:
-        """Convert RoboCasaGymEnv observation dict to LeRobot format."""
-        # RoboCasaGymEnv emits camera frames under "video.<cam>".
+        """将 RoboCasaGymEnv 的观测字典转换为 LeRobot 格式。"""
+        # RoboCasaGymEnv 在 "video.<cam>" 键下输出相机帧。
         images = {cam: raw_obs[f"video.{cam}"] for cam in self.camera_name if f"video.{cam}" in raw_obs}
 
         if self.obs_type == "pixels":
             return {"pixels": images}
 
-        # `state.*` keys come from PandaOmronKeyConverter inside the wrapper.
+        # `state.*` 键来自包装器内部的 PandaOmronKeyConverter。
         agent_pos = np.concatenate(
             [
                 raw_obs.get("state.base_position", np.zeros(3)),
@@ -265,11 +265,11 @@ class RoboCasaEnv(gym.Env):
         self._ensure_env()
         assert self._env is not None
         super().reset(seed=seed)
-        # Spread the seed across workers so n_envs factories don't all
-        # roll the same scene. With an explicit user seed we shift it by
-        # episode_index; with no seed we fall back to episode_index so
-        # each worker is still distinct rather than inheriting the same
-        # global RNG state.
+        # 将种子分散到各个 worker，使 n_envs 个工厂不会全都
+        # 生成相同的场景。当用户显式提供种子时，我们按
+        # episode_index 偏移；没有种子时则回退到 episode_index，
+        # 这样每个 worker 仍然是彼此不同的，而不是继承相同的
+        # 全局 RNG 状态。
         worker_seed = seed + self.episode_index if seed is not None else self.episode_index
         raw_obs, info = self._env.reset(seed=worker_seed)
 
@@ -327,11 +327,11 @@ def _make_env_fns(
     episode_length: int | None,
     obj_registries: Sequence[str],
 ) -> list[Callable[[], RoboCasaEnv]]:
-    """Build n_envs factory callables for a single task.
+    """为单个任务构建 n_envs 个工厂可调用对象。
 
-    Each factory carries a distinct ``episode_index`` (``0..n_envs-1``) so
-    ``RoboCasaEnv.reset()`` can derive a per-worker seed series from the
-    user-provided seed.
+    每个工厂携带一个不同的 ``episode_index``（``0..n_envs-1``），
+    这样 ``RoboCasaEnv.reset()`` 就能从用户提供的种子派生出
+    每个 worker 的种子序列。
     """
 
     def _make_env(episode_index: int) -> RoboCasaEnv:
@@ -362,18 +362,18 @@ def create_robocasa_envs(
     episode_length: int | None = None,
     obj_registries: Sequence[str] = DEFAULT_OBJ_REGISTRIES,
 ) -> dict[str, dict[int, Any]]:
-    """Create vectorized RoboCasa365 environments with a consistent return shape.
+    """创建返回形状一致的向量化 RoboCasa365 环境。
 
     Returns:
-        dict[task_name][task_id] -> vec_env (env_cls([...]) with exactly n_envs factories)
+        dict[task_name][task_id] -> vec_env（env_cls([...])，恰好包含 n_envs 个工厂）
 
-    `task` can be:
-      - a single task name (e.g. `CloseFridge`)
-      - a comma-separated list of task names (e.g. `CloseFridge,PickPlaceCoffee`)
-      - a benchmark-group shortcut (`atomic_seen`, `composite_seen`,
-        `composite_unseen`, `pretrain50`, `pretrain100`, `pretrain200`,
-        `pretrain300`), which auto-expands to the upstream task list and
-        auto-sets the dataset `split` ("target" or "pretrain").
+    `task` 可以是：
+      - 单个任务名（例如 `CloseFridge`）
+      - 以逗号分隔的任务名列表（例如 `CloseFridge,PickPlaceCoffee`）
+      - 基准测试组快捷方式（`atomic_seen`、`composite_seen`、
+        `composite_unseen`、`pretrain50`、`pretrain100`、`pretrain200`、
+        `pretrain300`），会自动展开为上游任务列表并自动设置数据集
+        `split`（"target" 或 "pretrain"）。
     """
     if env_cls is None or not callable(env_cls):
         raise ValueError("env_cls must be a callable that wraps a list of environment factory callables.")

@@ -22,59 +22,57 @@ from typing import Any
 
 from lerobot.configs.default import JobConfig
 
-# The annotation pipeline boots its own vLLM server, so the pod starts from the
-# official vLLM runtime rather than the prebuilt `lerobot-gpu` training image;
-# `lerobot` is pip-installed on top (see `lerobot.jobs.annotate`).
+# 标注流水线会启动自己的 vLLM 服务器，因此 pod 从官方 vLLM 运行时启动，
+# 而不是预构建的 `lerobot-gpu` 训练镜像；`lerobot` 在此之上通过 pip 安装
+# （参见 `lerobot.jobs.annotate`）。
 DEFAULT_ANNOTATE_JOB_IMAGE = "vllm/vllm-openai:latest"
 
 
 @dataclass
 class AnnotationJobConfig(JobConfig):
-    """`JobConfig` with the annotation runtime's defaults.
+    """带有标注运行时默认值的 `JobConfig`。
 
-    Adds `lerobot_ref` because the vLLM image ships no lerobot: the pod installs
-    it from git, and the ref decides which code actually annotates. Point it at a
-    branch/tag/SHA to try unmerged changes remotely.
+    添加了 `lerobot_ref`，因为 vLLM 镜像不自带 lerobot：pod 会从 git 安装它，
+    而 ref 决定实际执行标注的代码。将其指向分支/标签/SHA 以远程尝试未合并的更改。
     """
 
     image: str = DEFAULT_ANNOTATE_JOB_IMAGE
-    # Annotation is a bounded pass over a dataset; a tighter cap than training's
-    # "2d" keeps a wedged vLLM server from burning a day of GPU time.
+    # 标注是对数据集的有界遍历；比训练的"2d"更严格的上限可以防止卡住的 vLLM
+    # 服务器浪费一整天的 GPU 时间。
     timeout: str | None = "2h"
     lerobot_ref: str = "main"
 
 
 @dataclass
 class PlanConfig:
-    """``plan`` module: subtasks + plan + memory + task augmentation."""
+    """``plan`` 模块：子任务 + 计划 + 记忆 + 任务增强。"""
 
     enabled: bool = True
 
-    # ``task_aug`` rephrasings at t=0 (renderer rotates ${task} among them); 0 disables.
+    # 在 t=0 时的 ``task_aug`` 复述（渲染器在其中轮换 ${task}）；0 表示禁用。
     n_task_rephrasings: int = 10
 
-    # Derive the task from video instead of episode_task: off / if_short / always.
-    # Affects prompts only; ``meta/tasks.parquet`` is untouched.
+    # 从视频而不是 episode_task 推导任务：off / if_short / always。
+    # 仅影响提示词；``meta/tasks.parquet`` 不受影响。
     derive_task_from_video: str = "if_short"
     derive_task_min_words: int = 3
 
-    # --- Frame input: timestamped contact sheets (always on) ---------------
-    # The subtask describe/segment passes ALWAYS render the episode as
-    # macrodata/refiner-style contact sheets: sampled frames packed into JPEG
-    # grids with each frame's timestamp burned into its corner, so the VLM
-    # cites the exact source time of a boundary directly. This is far cheaper
-    # in vision tokens than one image per frame (≈2× faster subtask generation
-    # in practice), which is why the sampling is dense by default.
+    # --- 帧输入：带时间戳的联系表（始终开启）---------------
+    # 子任务描述/分割阶段始终将回合渲染为
+    # macrodata/refiner 风格的联系表：采样帧打包成 JPEG 网格，
+    # 每帧的时间戳烧录在其角落中，这样 VLM 可以直接引用边界的确切源时间。
+    # 这在视觉 token 上比每帧一张图像便宜得多（实际上子任务生成速度约快 2 倍），
+    # 这就是为什么默认采样是密集的。
     #
-    # ``frames_per_second`` is the sampling rate: 2.0 = one frame every 0.5s.
+    # ``frames_per_second`` 是采样率：2.0 = 每 0.5 秒一帧。
     frames_per_second: float = 2.0
-    # Frame budget per VLM call (= columns × rows × sheets). When a whole
-    # episode sampled at ``frames_per_second`` exceeds this, the episode is
-    # AUTOMATICALLY split into consecutive windows of
-    # ``max_frames_per_prompt`` frames each (one describe→segment call per
-    # window, still at the full ``frames_per_second`` density), and the
-    # per-window spans are merged + stitched into one contiguous cover. So an
-    # episode of any length is always covered at the full sampling density.
+    # 每次 VLM 调用的帧预算（= 列 × 行 × 表）。当以
+    # ``frames_per_second`` 采样的整个回合超过此值时，回合会被
+    # 自动分割为连续的窗口，每个窗口包含
+    # ``max_frames_per_prompt`` 帧（每个窗口一次 describe→segment 调用，
+    # 仍保持完整的 ``frames_per_second`` 密度），然后
+    # 各窗口的跨度会被合并 + 拼接成一个连续的覆盖。因此
+    # 任何长度的回合始终以完整采样密度被覆盖。
     max_frames_per_prompt: int = 60
     contact_sheet_columns: int = 5
     contact_sheet_frames_per_sheet: int = 20
@@ -84,37 +82,37 @@ class PlanConfig:
     min_subtask_seconds: float = 1.5
     plan_max_steps: int = 8
 
-    # Narrate-only grounding pass before segmenting — best defense against subtasks
-    # invented from the task text (+1 VLM call/episode).
+    # 分割前的仅叙述基础验证——这是防止从任务文本虚构子任务的最佳防御
+    # （每个回合 +1 次 VLM 调用）。
     subtask_describe_first: bool = True
 
-    # Seeded relabeling: after segmentation, re-label each span with a focused
-    # pass that sees the previous / current / next segment contact sheets and
-    # minimally corrects the seed label (macrodata's best end-to-end labeling
-    # step). Costs +1 VLM call per subtask; off by default.
+    # 种子重标注：在分割之后，使用一个聚焦的过程重新标注每个跨度，
+    # 该过程查看前一个/当前/下一个片段的联系表并
+    # 最小化地修正种子标签（macrodata 最佳的端到端标注步骤）。
+    # 每个子任务花费 +1 次 VLM 调用；默认关闭。
     subtask_seeded_relabel: bool = False
-    # Frames sampled uniformly per segment sheet in the relabel pass.
+    # 重标注过程中每个片段表均匀采样的帧数。
     subtask_relabel_frames: int = 5
 
-    # Emit ``style="plan"`` rows at each boundary; False = subtasks + memory only.
+    # 在每个边界处发出 ``style="plan"`` 行；False = 仅子任务 + 记忆。
     emit_plan: bool = True
 
-    # Emit ``style="memory"`` rows at each boundary; False = subtasks (+ plan) only.
-    # Symmetric counterpart of ``emit_plan``.
+    # 在每个边界处发出 ``style="memory"`` 行；False = 仅子任务（+ 计划）。
+    # ``emit_plan`` 的对称对应项。
     emit_memory: bool = True
 
-    # (subtask spans are always stitched to a contiguous full-episode cover; not configurable.)
+    # （子任务跨度始终被拼接到连续的全回合覆盖；不可配置。）
 
-    # Optional EgoMimic-style 5-axis task augmentation; replaces n_task_rephrasings.
+    # 可选的 EgoMimic 风格 5 轴任务增强；替代 n_task_rephrasings。
     task_aug_axes: TaskAugAxesConfig = field(default_factory=lambda: TaskAugAxesConfig())
 
 
 @dataclass
 class TaskAugAxesConfig:
-    """5-axis t=0 task augmentation (EgoMimic-style): synonym / omit_arm /
-    omit_orientation / omit_grasp_method / combined. Replaces n_task_rephrasings
-    when enabled; each variant becomes a ``task_aug`` row. Axes with nothing to
-    omit emit fewer entries. Defaults (3+3+2+2+2) match EgoMimic."""
+    """5 轴 t=0 任务增强（EgoMimic 风格）：同义词 / 省略手臂 /
+    省略朝向 / 省略抓取方法 / 组合。启用时替代 n_task_rephrasings；
+    每个变体成为一个 ``task_aug`` 行。没有可省略内容的轴会发出更少的条目。
+    默认值（3+3+2+2+2）与 EgoMimic 一致。"""
 
     enabled: bool = False
 
@@ -127,54 +125,54 @@ class TaskAugAxesConfig:
 
 @dataclass
 class InterjectionsConfig:
-    """``interjections`` module: interjections + paired speech."""
+    """``interjections`` 模块：插入语 + 配对语音。"""
 
     enabled: bool = True
 
-    # Each emits a paired (interjection, speech) row + a plan refresh at that ts.
+    # 每个都会发出一个配对的（插入语，语音）行 + 在该时间戳处的计划刷新。
     max_interjections_per_episode: int = 3
     interjection_min_t: float = 2.0
 
-    # Frame window centered on the timestamp so the VLM sees motion, not one frame.
+    # 以时间戳为中心的帧窗口，以便 VLM 看到运动，而不是单帧。
     interjection_window_seconds: float = 2.0
     interjection_window_frames: int = 4
 
 
 @dataclass
 class VqaConfig:
-    """``vqa`` module: general VQA."""
+    """``vqa`` 模块：通用 VQA。"""
 
     enabled: bool = True
     vqa_emission_hz: float = 1.0
     K: int = 1
-    """Consecutive frames per emission tick. The VLM grounds on the FIRST frame,
-    so K>1 smears stale labels onto moved frames. Default 1 (no smear)."""
+    """每个发射节拍的连续帧数。VLM 以第一帧为基础，
+    因此 K>1 会将过时的标签涂抹到移动的帧上。默认 1（无涂抹）。"""
     question_types: tuple[str, ...] = ("bbox", "keypoint", "count", "attribute", "spatial")
 
-    # True: ground VQA only on --vlm.camera_key (default: every camera).
+    # True：仅在 --vlm.camera_key 上进行 VQA 基础定位（默认：每个摄像头）。
     restrict_to_default_camera: bool = False
 
 
 @dataclass
 class VlmConfig:
-    """Shared Qwen-VL client configuration."""
+    """共享的 Qwen-VL 客户端配置。"""
 
-    # Only ``openai`` (OpenAI-compatible vLLM server, auto-spawned when
-    # auto_serve=True); ``stub`` is for tests.
+    # 仅 ``openai``（兼容 OpenAI 的 vLLM 服务器，当 auto_serve=True 时自动生成）；
+    # ``stub`` 用于测试。
     backend: str = "openai"
     model_id: str = "Qwen/Qwen3.6-27B"
 
-    # OpenAI-compatible endpoint; ``EMPTY`` key works for local servers.
+    # 兼容 OpenAI 的端点；``EMPTY`` 密钥适用于本地服务器。
     api_base: str = "http://localhost:8000/v1"
     api_key: str = "EMPTY"
 
-    # Spawn a server if none answers api_base; False = fail fast on a remote.
+    # 如果没有服务器响应 api_base 则生成一个；False = 在远程服务器上快速失败。
     auto_serve: bool = True
     serve_port: int = 8000
-    # Override the auto-serve command; ``{port}`` substituted per replica.
+    # 覆盖自动生成命令；``{port}`` 按副本替换。
     serve_command: str | None = None
 
-    # Independent servers for round-robin routing (one per GPU). num_gpus=0 = one each.
+    # 用于轮询路由的独立服务器（每个 GPU 一个）。num_gpus=0 = 每个一个。
     parallel_servers: int = 1
     num_gpus: int = 0
     client_concurrency: int = 16
@@ -183,42 +181,42 @@ class VlmConfig:
     max_new_tokens: int = 512
     temperature: float = 0.2
 
-    # Auto-serve context length (None → 32768); other vLLM flags go in serve_command.
+    # 自动生成的上下文长度（None → 32768）；其他 vLLM 标志放在 serve_command 中。
     max_model_len: int | None = None
 
-    # Camera for keyframes; None → first ``observation.images.*`` key.
+    # 关键帧的摄像头；None → 第一个 ``observation.images.*`` 键。
     camera_key: str | None = None
-    # Forwarded as extra_body.chat_template_kwargs (e.g. {"enable_thinking": false}).
+    # 作为 extra_body.chat_template_kwargs 转发（例如 {"enable_thinking": false}）。
     chat_template_kwargs: dict[str, Any] | None = None
 
-    # OpenAI-style thinking budget hint ("low"/"medium"/"high"); forwarded to
-    # the server when set. Used to cap a thinking model's reasoning so it
-    # leaves tokens for the actual JSON answer on OpenAI-compatible endpoints.
+    # OpenAI 风格的思考预算提示（"low"/"medium"/"high"）；设置时转发到
+    # 服务器。用于限制思考模型的推理，使其在兼容 OpenAI 的端点上
+    # 为实际的 JSON 答案留出 token。
     reasoning_effort: str | None = None
 
 
 @dataclass
 class ExecutorConfig:
-    """Executor settings (intra-process episode concurrency; distribution via HF Jobs)."""
+    """执行器设置（进程内回合并发；通过 HF Jobs 进行分布式）。"""
 
-    # Episodes processed concurrently per phase; main knob for saturating the servers.
+    # 每个阶段并发处理的回合数；是使服务器饱和的主要旋钮。
     episode_parallelism: int = 16
 
 
 @dataclass
 class AnnotationPipelineConfig:
-    """Top-level config for ``lerobot-annotate`` (rewrites data shards in place)."""
+    """``lerobot-annotate`` 的顶层配置（原地重写数据分片）。"""
 
-    # Hub dataset: download source when ``root`` unset; push target when push_to_hub
-    # is on and ``new_repo_id`` unset.
+    # Hub 数据集：当 ``root`` 未设置时的下载源；当 push_to_hub 开启且
+    # ``new_repo_id`` 未设置时的推送目标。
     repo_id: str | None = None
 
-    # Separate push target (matches the LeRobot edit tools). Unset → push in place.
+    # 单独的推送目标（与 LeRobot 编辑工具一致）。未设置 → 原地推送。
     new_repo_id: str | None = None
 
     root: Path | None = None
 
-    # Defaults to ``<root>/.annotate_staging/``.
+    # 默认为 ``<root>/.annotate_staging/``。
     staging_dir: Path | None = None
 
     seed: int = 1729
@@ -230,20 +228,20 @@ class AnnotationPipelineConfig:
     vlm: VlmConfig = field(default_factory=VlmConfig)
     executor: ExecutorConfig = field(default_factory=ExecutorConfig)
 
-    # Where the annotation runs: omitted / "local" annotates on this machine, any
-    # other value is an HF Jobs flavor (e.g. "h200") and submits the run there.
-    # List flavors + pricing with `hf jobs hardware`.
+    # 标注运行的位置：省略 / "local" 在本机上标注，任何其他值都是
+    # HF Jobs 风格（例如 "h200"）并在那里提交运行。
+    # 使用 `hf jobs hardware` 列出风格 + 价格。
     job: AnnotationJobConfig = field(default_factory=AnnotationJobConfig)
 
     skip_validation: bool = False
     only_episodes: tuple[int, ...] | None = None
 
-    # Keyframe decode backend forwarded to ``decode_video_frames``. None →
-    # library default (torchcodec when available, else PyAV). Or pin
-    # ``"torchcodec"`` / ``"pyav"`` explicitly.
+    # 转发到 ``decode_video_frames`` 的关键帧解码后端。None → 库默认
+    # （torchcodec 可用时使用，否则 PyAV）。或显式指定
+    # ``"torchcodec"`` / ``"pyav"``。
     video_backend: str | None = None
 
-    # Upload to the Hub (new_repo_id if set, else repo_id; one must be set).
+    # 上传到 Hub（如果设置则用 new_repo_id，否则 repo_id；必须设置其中一个）。
     push_to_hub: bool = False
     push_private: bool = False
     push_commit_message: str | None = None

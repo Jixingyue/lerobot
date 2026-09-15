@@ -29,7 +29,7 @@ from .pipeline import ActionProcessorStep, ProcessorStepRegistry
 @dataclass
 @ProcessorStepRegistry.register("robot_action_to_policy_action_processor")
 class RobotActionToPolicyActionProcessorStep(ActionProcessorStep):
-    """Processor step to map a dictionary to a tensor action."""
+    """将字典映射为张量动作的处理步骤。"""
 
     motor_names: list[str]
 
@@ -51,7 +51,7 @@ class RobotActionToPolicyActionProcessorStep(ActionProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register("policy_action_to_robot_action_processor")
 class PolicyActionToRobotActionProcessorStep(ActionProcessorStep):
-    """Processor step to map a policy action to a robot action."""
+    """将策略动作映射为机器人动作的处理步骤。"""
 
     motor_names: list[str]
 

@@ -43,7 +43,7 @@ EO1_DEFAULT_SYSTEM_MESSAGE = "You are a helpful physical assistant."
 
 
 def _eo1_default_recipe() -> dict:
-    """Serialized recipe; keep policy config discovery independent of dataset extras."""
+    """序列化后的 recipe；使策略配置发现与数据集 extras 保持独立。"""
     return {
         "messages": [
             {
@@ -70,27 +70,27 @@ def _eo1_default_recipe() -> dict:
 @PreTrainedConfig.register_subclass("eo1")
 @dataclass
 class EO1Config(PreTrainedConfig):
-    """Configuration for native EO1 policy integration in LeRobot."""
+    """LeRobot 中原生 EO1 策略集成的配置。"""
 
     vlm_base: str = "Qwen/Qwen2.5-VL-3B-Instruct"
     vlm_config: dict | None = None
 
-    # Vision processor settings.
+    # 视觉处理器设置。
     image_min_pixels: int | None = 64 * 28 * 28
     image_max_pixels: int | None = 128 * 28 * 28
     use_fast_processor: bool = False
 
-    # Execution and action horizon.
+    # 执行和动作范围。
     n_obs_steps: int = 1
-    # Match the released IPEC-COMMUNITY/EO-1-3B checkpoint.
+    # 与已发布的 IPEC-COMMUNITY/EO-1-3B 检查点保持一致。
     chunk_size: int = 16
     n_action_steps: int = 16
 
-    # State/action padding to match EO1 flow head dimensionality.
+    # 状态/动作填充，以匹配 EO1 流匹配头的维度。
     max_state_dim: int = 32
     max_action_dim: int = 32
 
-    # Flow matching sampling.
+    # 流匹配采样。
     num_denoise_steps: int = 10
     num_action_layers: int = 2
     action_act: str = "linear"
@@ -103,26 +103,26 @@ class EO1Config(PreTrainedConfig):
     supervise_padding_action_dims: bool = True
     supervise_padding_actions: bool = True
 
-    # Policy-level dtype request for the Qwen backbone.
-    # - "auto": follow the backbone config/checkpoint default dtype. For Qwen2.5-VL this resolves to bf16.
-    #           The EO1 flow-matching head still keeps its own parameters in fp32.
-    # - "bfloat16": force the backbone to initialize/load in bf16 regardless of the saved config default.
-    # - "float32": force the backbone to initialize/load in fp32 for maximum numerical conservatism.
-    dtype: str = "auto"  # Options: "auto", "bfloat16", "float32"
+    # 针对 Qwen 主干的策略级 dtype 请求。
+    # - "auto"：遵循主干配置/检查点的默认 dtype。对于 Qwen2.5-VL，这会解析为 bf16。
+    #           EO1 流匹配头仍将其自身参数保持在 fp32。
+    # - "bfloat16"：无论保存的配置默认值如何，都强制主干以 bf16 初始化/加载。
+    # - "float32"：强制主干以 fp32 初始化/加载，以获得最大的数值保守性。
+    dtype: str = "auto"  # 选项："auto"、"bfloat16"、"float32"
     force_fp32_autocast: bool = True
 
-    # Optional attention backend request passed through to the Qwen backbone.
-    # Common values: None, "eager", "sdpa", "flash_attention_2".
+    # 传递给 Qwen 主干的可选注意力后端请求。
+    # 常见取值：None、"eager"、"sdpa"、"flash_attention_2"。
     attn_implementation: str | None = None
 
-    # Training settings.
-    gradient_checkpointing: bool = False  # Enable gradient checkpointing for memory optimization
-    # The built-in recipe handles annotated training and runtime prompts.
-    # recipe_path optionally overrides it; recipe=None disables recipe training.
+    # 训练设置。
+    gradient_checkpointing: bool = False  # 启用梯度检查点以优化显存
+    # 内置 recipe 处理带标注的训练和运行时提示词。
+    # recipe_path 可选地覆盖它；recipe=None 则禁用 recipe 训练。
     recipe_path: str | None = None
-    # EO-1's language contract. Defaults to the subtask wording the released
-    # checkpoints answer; a fine-tune with `recipe_path` replaces it, and the
-    # checkpoint then prompts itself with the recipe it was trained on.
+    # EO-1 的语言约定。默认使用已发布检查点所回答的 subtask 措辞；
+    # 使用 `recipe_path` 的微调会替换它，此后检查点会用其训练时
+    # 所用的 recipe 来提示自己。
     recipe: dict | None = field(default_factory=_eo1_default_recipe)
     tokenizer_max_length: int = 1000
     text_temperature: float = 0.0
@@ -138,17 +138,17 @@ class EO1Config(PreTrainedConfig):
         }
     )
 
-    # Optimizer settings aligned with EO1/experiments/2_libero/train.sh and EO1 TrainPipelineConfig defaults.
+    # 与 EO1/experiments/2_libero/train.sh 及 EO1 TrainPipelineConfig 默认值对齐的优化器设置。
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple[float, float] = (0.9, 0.999)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 0.1
     optimizer_grad_clip_norm: float = 1.0
 
-    # Scheduler settings aligned with EO1 train.sh: cosine schedule with warmup_ratio=0.03.
-    # Note: These will auto-scale if --steps < scheduler_decay_steps
-    # For example, --steps=3000 will scale warmup to 100 and decay to 3000
-    scheduler_warmup_steps: int = 900  # 0.03 * 30_000 long-run steps
+    # 与 EO1 train.sh 对齐的调度器设置：带预热的余弦调度，warmup_ratio=0.03。
+    # 注意：如果 --steps < scheduler_decay_steps，这些值会自动缩放
+    # 例如，--steps=3000 会将预热缩放为 100，衰减缩放为 3000
+    scheduler_warmup_steps: int = 900  # 0.03 * 30_000 长期运行步数
     scheduler_decay_steps: int = 30_000
     scheduler_decay_lr: float = 0.0
 
@@ -175,7 +175,7 @@ class EO1Config(PreTrainedConfig):
         if not 0 < self.text_top_p <= 1:
             raise ValueError("text_top_p must be in (0, 1].")
 
-        # Populate the serialized backbone config only when the caller did not provide one.
+        # 仅在调用方未提供序列化的主干配置时才填充它。
         if self.vlm_config is None:
             require_package("transformers", extra="eo1")
             self.vlm_config = Qwen2_5_VLConfig.from_pretrained(self.vlm_base).to_dict()
@@ -197,7 +197,7 @@ class EO1Config(PreTrainedConfig):
         return self.vlm_backbone_config.vision_config
 
     def validate_features(self) -> None:
-        """Validate and set up EO1 input and output features."""
+        """校验并设置 EO1 的输入和输出特征。"""
         image_features = [key for key, feat in self.input_features.items() if feat.type == FeatureType.VISUAL]
         if not image_features:
             raise ValueError(

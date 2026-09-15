@@ -14,7 +14,7 @@
 
 
 """
-MolmoAct2 configuration
+MolmoAct2 配置
 """
 
 from typing import Any
@@ -28,14 +28,14 @@ logger = logging.get_logger(__name__)
 
 class MolmoAct2VitConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MolmoAct2VisionTransformer`].
-    It is used to instantiate a `MolmoAct2VisionTransformer` according to the specified arguments,
-    defining the model architecture.
+    这是用于存储 [`MolmoAct2VisionTransformer`] 配置的配置类。
+    它用于根据指定参数实例化 `MolmoAct2VisionTransformer`，
+    并定义模型架构。
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    配置对象继承自 [`PretrainedConfig`]，可用于控制模型输出。阅读
+    [`PretrainedConfig`] 的文档以了解更多信息。
 
-    Example:
+    示例：
     ```python
     >>> from transformers import MolmoAct2VitConfig, MolmoAct2VisionTransformer
 
@@ -98,14 +98,14 @@ class MolmoAct2VitConfig(PretrainedConfig):
 
 class MolmoAct2AdapterConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of MolmoAct2Adapter. With MolmoAct2VitConfig,
-    It is used to instantiate an MolmoAct2VisionBackbone according to the specified arguments,
-    defining the model architecture.
+    这是用于存储 MolmoAct2Adapter 配置的配置类。与 MolmoAct2VitConfig 一起，
+    用于根据指定参数实例化 MolmoAct2VisionBackbone，
+    并定义模型架构。
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    配置对象继承自 [`PretrainedConfig`]，可用于控制模型输出。阅读
+    [`PretrainedConfig`] 的文档以了解更多信息。
 
-    Example:
+    示例：
 
     ```python
     >>> from transformers import MolmoAct2VitConfig, MolmoAct2AdapterConfig, MolmoAct2VisionBackbone
@@ -164,13 +164,13 @@ class MolmoAct2AdapterConfig(PretrainedConfig):
 
 class MolmoAct2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MolmoAct2TextModel`]. It is used to instantiate a
-    `MolmoAct2TextModel` according to the specified arguments, defining the model architecture.
+    这是用于存储 [`MolmoAct2TextModel`] 配置的配置类。它用于根据指定参数实例化
+    `MolmoAct2TextModel`，并定义模型架构。
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    配置对象继承自 [`PretrainedConfig`]，可用于控制模型输出。阅读
+    [`PretrainedConfig`] 的文档以了解更多信息。
 
-    Example:
+    示例：
     ```python
     >>> from transformers import MolmoAct2TextConfig, MolmoAct2TextModel
 
@@ -258,12 +258,12 @@ class MolmoAct2TextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 
-        # Validate the correctness of rotary position embeddings parameters
+        # 校验旋转位置嵌入参数的正确性
         rope_config_validation(self)
 
 
 class MolmoAct2ActionExpertConfig(PretrainedConfig):
-    r"""Configuration for the MolmoAct2 modern action expert."""
+    r"""MolmoAct2 现代动作专家（action expert）的配置。"""
 
     model_type = "molmoact2_action_expert"
     base_config_key = "action_expert_config"
@@ -306,8 +306,8 @@ class MolmoAct2ActionExpertConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
-        # These are derived from the parent MolmoAct2Config for HF exports. Keeping
-        # them out of the public nested config avoids duplicated sources of truth.
+        # 这些字段是从父级 MolmoAct2Config 派生出来用于 HF 导出的。将它们
+        # 排除在公开的嵌套配置之外，可以避免出现重复的真实值来源。
         output.pop("max_action_horizon", None)
         output.pop("max_action_dim", None)
         return output
@@ -315,10 +315,10 @@ class MolmoAct2ActionExpertConfig(PretrainedConfig):
 
 class MolmoAct2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MolmoAct2ForConditionalGeneration`].
-    It is used to instantiate an MolmoAct2 model according to the specified arguments, defining the model architecture.
+    这是用于存储 [`MolmoAct2ForConditionalGeneration`] 配置的配置类。
+    它用于根据指定参数实例化 MolmoAct2 模型，并定义模型架构。
 
-    Example:
+    示例：
 
     ```python
     >>> from transformers import MolmoAct2Config, MolmoAct2VitConfig, MolmoAct2AdapterConfig, MolmoAct2TextConfig

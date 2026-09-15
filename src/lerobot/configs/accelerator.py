@@ -13,12 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Execution-runtime configuration: everything handed to (or applied by) the `Accelerator`.
+"""执行时配置：交给 `Accelerator`（或由其应用）的所有内容。
 
-Each sub-config mirrors the plain-typed subset of the corresponding accelerate object and
-builds it at runtime (the way ``OptimizerConfig.build()`` constructs a ``torch.optim.Optimizer``),
-so the whole tree round-trips through the CLI and ``train_config.json`` and parsing a config
-never imports accelerate.
+每个子配置都镜像了对应 accelerate 对象的简单类型子集，
+并在运行时构建它（就像 ``OptimizerConfig.build()`` 构建 ``torch.optim.Optimizer`` 一样），
+因此整棵树可以通过 CLI 和 ``train_config.json`` 往返，解析配置时
+永远不会导入 accelerate。
 """
 
 from dataclasses import dataclass, field
@@ -38,27 +38,27 @@ if TYPE_CHECKING:
 
 @dataclass
 class FSDPConfig:
-    """Mirror of the `FullyShardedDataParallelPlugin` subset LeRobot supports (FSDP2 only).
+    """镜像 LeRobot 支持的 `FullyShardedDataParallelPlugin` 子集（仅 FSDP2）。
 
-    Exactly one wrap policy applies: `wrap_modules` (module *class names* forming the FSDP
-    units — and, later, the activation-checkpointing units) or `min_num_params` (size-based).
-    When both are None, the policy's own `_fsdp_wrap_modules` declaration is used; a run where
-    no wrap source exists at all fails loudly rather than silently wrapping only the root.
+    恰好只应用一种 wrap 策略：`wrap_modules`（构成 FSDP 单元的模块*类名*——
+    之后也是激活检查点单元）或 `min_num_params`（基于大小）。
+    当两者都为 None 时，使用策略自身的 `_fsdp_wrap_modules` 声明；
+    如果完全不存在 wrap 来源，运行会大声失败，而不是静默地只 wrap 根模块。
     """
 
     reshard_after_forward: bool = True
     wrap_modules: list[str] | None = None
     min_num_params: int | None = None
     cpu_offload: bool = False
-    # Regex matched against module FQNs to exclude their parameters from sharding.
+    # 与模块 FQN 匹配的正则表达式，用于将其参数排除在分片之外。
     ignored_modules: str | None = None
 
     def __post_init__(self) -> None:
-        """Validate the wrap-policy fields.
+        """验证 wrap 策略字段。
 
         Raises:
-            ValueError: If both ``wrap_modules`` and ``min_num_params`` are set (they are
-                mutually exclusive wrap policies), or if ``min_num_params`` is < 1.
+            ValueError: 如果同时设置了 ``wrap_modules`` 和 ``min_num_params``
+                （它们是互斥的 wrap 策略），或 ``min_num_params`` < 1。
         """
         if self.wrap_modules is not None and self.min_num_params is not None:
             raise ValueError(
@@ -68,11 +68,11 @@ class FSDPConfig:
             raise ValueError(f"fsdp.min_num_params must be >= 1, got {self.min_num_params}.")
 
     def build_plugin(self) -> "FullyShardedDataParallelPlugin":
-        """Build the FSDP2 plugin for `Accelerator(fsdp_plugin=...)`.
+        """为 `Accelerator(fsdp_plugin=...)` 构建 FSDP2 插件。
 
         Returns:
-            FullyShardedDataParallelPlugin: FSDP2 (`fsdp_version=2`) plugin carrying the
-                mirrored wrap policy, resharding, CPU-offload, and ignored-modules settings.
+            FullyShardedDataParallelPlugin: 携带镜像的 wrap 策略、重新分片、
+                CPU offload 和 ignored-modules 设置的 FSDP2（`fsdp_version=2`）插件。
         """
         from accelerate.utils import FullyShardedDataParallelPlugin
 
@@ -81,33 +81,33 @@ class FSDPConfig:
             fsdp_version=2,
             reshard_after_forward=self.reshard_after_forward,
             auto_wrap_policy="size_based_wrap" if use_size_policy else "transformer_based_wrap",
-            # May legitimately still be None here: the policy-declared default is applied right
-            # before `accelerator.prepare()` (see lerobot.distributed.factory.set_fsdp_wrap_modules).
+            # 这里合理地仍可能为 None：策略声明的默认值会在 `accelerator.prepare()`
+            # 之前应用（参见 lerobot.distributed.factory.set_fsdp_wrap_modules）。
             transformer_cls_names_to_wrap=list(self.wrap_modules) if self.wrap_modules else None,
             min_num_params=self.min_num_params,
             cpu_offload=self.cpu_offload,
             ignored_modules=self.ignored_modules,
-            # state_dict_type stays at the FSDP2 default (SHARDED_STATE_DICT) and is never
-            # switched: full gathers go through torch's state-dict API, which does not consult
-            # the plugin. activation_checkpointing stays False: AC is LeRobot-owned.
+            # state_dict_type 保持 FSDP2 默认值（SHARDED_STATE_DICT），从不切换：
+            # 完整聚合通过 torch 的 state-dict API 进行，不会查询该插件。
+            # activation_checkpointing 保持 False：AC 由 LeRobot 拥有。
         )
 
 
 @dataclass
 class DDPConfig:
-    """Mirror of the `DistributedDataParallelKwargs` subset LeRobot exposes."""
+    """镜像 LeRobot 公开的 `DistributedDataParallelKwargs` 子集。"""
 
-    # Today's in-script default, kept for models with conditional computation.
+    # 当前脚本内的默认值，为具有条件计算的模型保留。
     find_unused_parameters: bool = True
     gradient_as_bucket_view: bool = False
     static_graph: bool = False
 
     def build_kwargs_handler(self) -> "DistributedDataParallelKwargs":
-        """Build the DDP kwargs handler for `Accelerator(kwargs_handlers=[...])`.
+        """为 `Accelerator(kwargs_handlers=[...])` 构建 DDP kwargs 处理器。
 
         Returns:
-            DistributedDataParallelKwargs: Handler carrying the mirrored DDP fields, applied
-                by accelerate when it wraps the model in `DistributedDataParallel`.
+            DistributedDataParallelKwargs: 携带镜像的 DDP 字段的处理器，
+                当 accelerate 用 `DistributedDataParallel` 包装模型时应用。
         """
         from accelerate.utils import DistributedDataParallelKwargs
 
@@ -120,35 +120,35 @@ class DDPConfig:
 
 @dataclass
 class GradientAccumulationConfig:
-    """Mirror of the `GradientAccumulationPlugin` subset LeRobot supports.
+    """镜像 LeRobot 支持的 `GradientAccumulationPlugin` 子集。
 
-    Only the step count is a knob. ``sync_with_dataloader`` is pinned to False by
-    :meth:`build_plugin`: the training loop cycles a finite dataloader, so accelerate's default
-    of syncing at every dataloader end would force an optimizer step at every dataset epoch
-    boundary instead of every ``steps`` micro-batches.
+    只有步数是一个可调参数。``sync_with_dataloader`` 由
+    :meth:`build_plugin` 固定为 False：训练循环会循环使用有限的 dataloader，
+    因此 accelerate 默认的在每个 dataloader 结束时同步，会在每个数据集 epoch
+    边界而不是每 ``steps`` 个微批次强制进行优化器步进。
     """
 
     steps: int = 1
 
     def __post_init__(self) -> None:
-        """Validate the accumulation step count.
+        """验证累积步数。
 
         Raises:
-            ValueError: If ``steps`` is < 1.
+            ValueError: 如果 ``steps`` < 1。
         """
         if self.steps < 1:
             raise ValueError(f"gradient_accumulation.steps must be >= 1, got {self.steps}.")
 
     def build_plugin(self) -> "GradientAccumulationPlugin":
-        """Build the plugin for `Accelerator(gradient_accumulation_plugin=...)`.
+        """为 `Accelerator(gradient_accumulation_plugin=...)` 构建插件。
 
-        A named plugin argument, not a `kwargs_handlers` entry: accelerate consumes this object
-        through its dedicated constructor parameter — the `KwargsHandler` base class only lends
-        it `to_kwargs()`, so the consumption site, not the inheritance, decides its role.
+        这是一个命名的插件参数，而不是 `kwargs_handlers` 条目：accelerate 通过
+        其专用的构造函数参数消费此对象 —— `KwargsHandler` 基类只是借给它
+        `to_kwargs()`，因此是消费点而不是继承决定了它的角色。
 
         Returns:
-            GradientAccumulationPlugin: Carrying the mirrored step count, with
-                ``sync_with_dataloader=False`` pinned (see the class docstring).
+            GradientAccumulationPlugin: 携带镜像的步数，并固定
+                ``sync_with_dataloader=False``（参见类的 docstring）。
         """
         from accelerate.utils import GradientAccumulationPlugin
 
@@ -157,11 +157,11 @@ class GradientAccumulationConfig:
 
 @dataclass
 class CompileConfig:
-    """torch.compile knobs — a configured placeholder: wiring lands in a later round.
+    """torch.compile 参数 —— 已配置的占位符：接线将在后续轮次落地。
 
-    The setup-order contract it will follow is already fixed: compile applies
-    after CP dispatch install and activation checkpointing, before `fully_shard`, regionally
-    (per wrap unit) — the only combination proven with FSDP2.
+    它将遵循的初始化顺序约定已经固定：compile 在 CP dispatch 安装和
+    激活检查点之后、`fully_shard` 之前应用，按区域（每个 wrap 单元）进行——
+    这是唯一经过 FSDP2 验证的组合。
     """
 
     enabled: bool = False
@@ -177,10 +177,10 @@ class ActivationCheckpointingMode(str, Enum):
 
 @dataclass
 class ActivationCheckpointingConfig:
-    """Activation-checkpointing knobs — a configured placeholder: wiring lands in a later round.
+    """激活检查点参数 —— 已配置的占位符：接线将在后续轮次落地。
 
-    AC units will coincide with the FSDP wrap units (one declaration drives both), applied
-    before torch.compile and `fully_shard` (the same ordering contract as CompileConfig).
+    AC 单元将与 FSDP wrap 单元一致（一个声明驱动两者），在
+    torch.compile 和 `fully_shard` 之前应用（与 CompileConfig 相同的顺序约定）。
     """
 
     mode: ActivationCheckpointingMode = ActivationCheckpointingMode.NONE
@@ -188,12 +188,12 @@ class ActivationCheckpointingConfig:
 
 @dataclass
 class AcceleratorConfig:
-    """Builds the `Accelerator` — the runtime counterpart of the `parallelism` topology.
+    """构建 `Accelerator` —— `parallelism` 拓扑的运行时对应物。
 
-    `mixed_precision` selects accelerate-native AMP for DDP/single-GPU runs and the FSDP2
-    `MixedPrecisionPolicy` for sharded runs (accelerate derives it). Sharded runs support
-    "no" and "bf16" only; fp16's GradScaler-over-DTensor path is unverified and fails fast
-    at config validation.
+    `mixed_precision` 为 DDP/单 GPU 运行选择 accelerate 原生的 AMP，
+    为分片运行选择 FSDP2 的 `MixedPrecisionPolicy`（由 accelerate 推导）。
+    分片运行仅支持 "no" 和 "bf16"；fp16 的 GradScaler-over-DTensor 路径
+    未经验证，会在配置验证时快速失败。
     """
 
     mixed_precision: str = "no"
@@ -206,10 +206,10 @@ class AcceleratorConfig:
     )
 
     def __post_init__(self) -> None:
-        """Validate the accelerate-facing scalar fields.
+        """验证面向 accelerate 的标量字段。
 
         Raises:
-            ValueError: If ``mixed_precision`` is not one of ``"no"``, ``"fp16"``, ``"bf16"``.
+            ValueError: 如果 ``mixed_precision`` 不是 ``"no"``、``"fp16"``、``"bf16"`` 之一。
         """
         if self.mixed_precision not in ("no", "fp16", "bf16"):
             raise ValueError(
@@ -217,25 +217,25 @@ class AcceleratorConfig:
             )
 
     def build(self, parallelism: ParallelismConfig, *, cpu: bool = False) -> "Accelerator":
-        """Translate the mirrored fields into a ready `Accelerator` (call once per process).
+        """将镜像的字段转换为就绪的 `Accelerator`（每个进程调用一次）。
 
-        `parallelism` must already be resolved against the world size. The degradation matrix
-        is encoded here and nowhere else: sharded -> FSDP2 (+HSDP via the accelerate
-        `ParallelismConfig` mesh), replicated-only -> DDP kwargs, single process -> plain.
+        `parallelism` 必须已经针对世界大小完成解析。降级矩阵在这里编码，
+        且仅在此处：分片 -> FSDP2（通过 accelerate 的 `ParallelismConfig` mesh
+        实现 +HSDP），仅复制 -> DDP kwargs，单进程 -> 普通模式。
 
         Args:
-            parallelism (ParallelismConfig): The resolved process topology; selects which
-                accelerate path (FSDP2 mesh, DDP kwargs handler, or plain) is configured.
-            cpu (bool): Force CPU execution even when CUDA is available. Defaults to False.
+            parallelism (ParallelismConfig): 已解析的进程拓扑；选择配置哪条
+                accelerate 路径（FSDP2 mesh、DDP kwargs 处理器或普通模式）。
+            cpu (bool): 即使 CUDA 可用也强制使用 CPU 执行。默认为 False。
 
         Returns:
-            Accelerator: The configured accelerate entry point for this process.
+            Accelerator: 此进程配置好的 accelerate 入口。
         """
         from accelerate import Accelerator
 
         kwargs: dict = {
-            # LeRobot steps its scheduler manually once per training step; accelerate must not
-            # rescale scheduler stepping by num_processes.
+            # LeRobot 在每个训练步手动步进一次调度器；accelerate 不得
+            # 按 num_processes 重新缩放调度器的步进。
             "step_scheduler_with_optimizer": False,
             "gradient_accumulation_plugin": self.gradient_accumulation.build_plugin(),
             "mixed_precision": self.mixed_precision,
@@ -250,19 +250,19 @@ class AcceleratorConfig:
 
 
 def _accelerate_parallelism_config(parallelism: ParallelismConfig) -> object:
-    """LeRobot topology -> accelerate `ParallelismConfig`.
+    """LeRobot 拓扑 -> accelerate 的 `ParallelismConfig`。
 
-    CP is declared honestly (`cp_size = ring x ulysses`) so accelerate builds the canonical
-    mesh, folds CP into the FSDP shard group (`dp_shard_cp`), and duplicates batches within CP
-    groups. The ring/ulysses sub-structure stays private to `lerobot.distributed.ParallelDims`.
+    CP 被如实声明（`cp_size = ring x ulysses`），这样 accelerate 会构建规范的
+    mesh，将 CP 并入 FSDP 分片组（`dp_shard_cp`），并在 CP 组内复制批次。
+    ring/ulysses 的子结构保持为 `lerobot.distributed.ParallelDims` 的私有内容。
 
     Args:
-        parallelism (ParallelismConfig): The resolved LeRobot topology to translate.
+        parallelism (ParallelismConfig): 要转换的已解析 LeRobot 拓扑。
 
     Returns:
-        object: The accelerate `ParallelismConfig` mirroring `dp_replicate`, `dp_shard`, and
-            the collapsed `cp_size` (annotated as `object` so importing this module never
-            imports accelerate).
+        object: 镜像 `dp_replicate`、`dp_shard` 和折叠后的 `cp_size` 的
+            accelerate `ParallelismConfig`（标注为 `object`，这样导入本模块
+            永远不会导入 accelerate）。
     """
     from accelerate.parallelism_config import ParallelismConfig as AccelerateParallelismConfig
 

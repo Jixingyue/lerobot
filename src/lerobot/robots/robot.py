@@ -25,21 +25,21 @@ from lerobot.utils.constants import HF_LEROBOT_CALIBRATION, ROBOTS
 from .config import RobotConfig
 
 
-# TODO(aliberts): action/obs typing such as Generic[ObsType, ActType] similar to gym.Env ?
+# TODO(aliberts): 类似 gym.Env 的 action/obs 类型标注，例如 Generic[ObsType, ActType]？
 # https://github.com/Farama-Foundation/Gymnasium/blob/3287c869f9a48d99454306b0d4b4ec537f0f35e3/gymnasium/core.py#L23
 class Robot(abc.ABC):
     """
-    The base abstract class for all LeRobot-compatible robots.
+    所有兼容 LeRobot 的机器人的基础抽象类。
 
-    This class provides a standardized interface for interacting with physical robots.
-    Subclasses must implement all abstract methods and properties to be usable.
+    该类提供了与物理机器人交互的标准化接口。
+    子类必须实现所有抽象方法和属性才能使用。
 
     Attributes:
-        config_class (RobotConfig): The expected configuration class for this robot.
-        name (str): The unique robot name used to identify this robot type.
+        config_class (RobotConfig): 该机器人预期的配置类。
+        name (str): 用于标识该机器人类型的唯一机器人名称。
     """
 
-    # Set these in ALL subclasses
+    # 在所有子类中设置这些属性
     config_class: builtins.type[RobotConfig]
     name: str
 
@@ -60,23 +60,23 @@ class Robot(abc.ABC):
 
     def __enter__(self):
         """
-        Context manager entry.
-        Automatically connects to the camera.
+        上下文管理器入口。
+        自动连接到相机。
         """
         self.connect()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """
-        Context manager exit.
-        Automatically disconnects, ensuring resources are released even on error.
+        上下文管理器出口。
+        自动断开连接，确保即使出错也能释放资源。
         """
         self.disconnect()
 
     def __del__(self) -> None:
         """
-        Destructor safety net.
-        Attempts to disconnect if the object is garbage collected without cleanup.
+        析构安全网。
+        如果对象在未清理的情况下被垃圾回收，则尝试断开连接。
         """
         try:
             if self.is_connected:
@@ -84,18 +84,18 @@ class Robot(abc.ABC):
         except Exception:  # nosec B110
             pass
 
-    # TODO(aliberts): create a proper Feature class for this that links with datasets
+    # TODO(aliberts): 为此创建一个与数据集关联的正式 Feature 类
     @property
     @abc.abstractmethod
     def observation_features(self) -> dict:
         """
-        A dictionary describing the structure and types of the observations produced by the robot.
-        Its structure (keys) should match the structure of what is returned by :pymeth:`get_observation`.
-        Values for the dict should either be:
-            - The type of the value if it's a simple value, e.g. `float` for single proprioceptive value (a joint's position/velocity)
-            - A tuple representing the shape if it's an array-type value, e.g. `(height, width, channel)` for images
+        描述机器人产生的观测的结构和类型的字典。
+        其结构（键）应与 :pymeth:`get_observation` 返回内容的结构一致。
+        字典的值应为以下之一：
+            - 如果是简单值，则为该值的类型，例如单个本体感知值（关节的位置/速度）对应 `float`
+            - 如果是数组类型的值，则为表示形状的元组，例如图像对应 `(height, width, channel)`
 
-        Note: this property should be able to be called regardless of whether the robot is connected or not.
+        注意：无论机器人是否已连接，都应能调用此属性。
         """
         pass
 
@@ -103,12 +103,12 @@ class Robot(abc.ABC):
     @abc.abstractmethod
     def action_features(self) -> dict:
         """
-        A dictionary describing the structure and types of the actions expected by the robot. Its structure
-        (keys) should match the structure of what is passed to :pymeth:`send_action`. Values for the dict
-        should be the type of the value if it's a simple value, e.g. `float` for single proprioceptive value
-        (a joint's goal position/velocity)
+        描述机器人期望的动作的结构和类型的字典。其结构
+        （键）应与传递给 :pymeth:`send_action` 的内容的结构一致。字典的值
+        如果是简单值，则应为该值的类型，例如单个本体感知值
+        （关节的目标位置/速度）对应 `float`
 
-        Note: this property should be able to be called regardless of whether the robot is connected or not.
+        注意：无论机器人是否已连接，都应能调用此属性。
         """
         pass
 
@@ -116,44 +116,44 @@ class Robot(abc.ABC):
     @abc.abstractmethod
     def is_connected(self) -> bool:
         """
-        Whether the robot is currently connected or not. If `False`, calling :pymeth:`get_observation` or
-        :pymeth:`send_action` should raise an error.
+        机器人当前是否已连接。如果为 `False`，调用 :pymeth:`get_observation` 或
+        :pymeth:`send_action` 时应抛出错误。
         """
         pass
 
     @abc.abstractmethod
     def connect(self, calibrate: bool = True) -> None:
         """
-        Establish communication with the robot.
+        建立与机器人的通信。
 
         Args:
-            calibrate (bool): If True, automatically calibrate the robot after connecting if it's not
-                calibrated or needs calibration (this is hardware-dependant).
+            calibrate (bool): 如果为 True，则在连接后自动校准机器人（如果尚未校准
+                或需要校准，具体取决于硬件）。
         """
         pass
 
     @property
     @abc.abstractmethod
     def is_calibrated(self) -> bool:
-        """Whether the robot is currently calibrated or not. Should be always `True` if not applicable"""
+        """机器人当前是否已校准。如果不适用，应始终为 `True`"""
         pass
 
     @abc.abstractmethod
     def calibrate(self) -> None:
         """
-        Calibrate the robot if applicable. If not, this should be a no-op.
+        如果适用，则校准机器人。如果不适用，应为空操作。
 
-        This method should collect any necessary data (e.g., motor offsets) and update the
-        :pyattr:`calibration` dictionary accordingly.
+        该方法应收集必要的数据（例如电机偏移量）并相应地更新
+        :pyattr:`calibration` 字典。
         """
         pass
 
     def _load_calibration(self, fpath: Path | None = None) -> None:
         """
-        Helper to load calibration data from the specified file.
+        从指定文件加载校准数据的辅助方法。
 
         Args:
-            fpath (Path | None): Optional path to the calibration file. Defaults to `self.calibration_fpath`.
+            fpath (Path | None): 校准文件的可选路径。默认为 `self.calibration_fpath`。
         """
         fpath = self.calibration_fpath if fpath is None else fpath
         with open(fpath) as f, draccus.config_type("json"):
@@ -161,10 +161,10 @@ class Robot(abc.ABC):
 
     def _save_calibration(self, fpath: Path | None = None) -> None:
         """
-        Helper to save calibration data to the specified file.
+        将校准数据保存到指定文件的辅助方法。
 
         Args:
-            fpath (Path | None): Optional path to save the calibration file. Defaults to `self.calibration_fpath`.
+            fpath (Path | None): 保存校准文件的可选路径。默认为 `self.calibration_fpath`。
         """
         fpath = self.calibration_fpath if fpath is None else fpath
         with open(fpath, "w") as f, draccus.config_type("json"):
@@ -173,19 +173,19 @@ class Robot(abc.ABC):
     @abc.abstractmethod
     def configure(self) -> None:
         """
-        Apply any one-time or runtime configuration to the robot.
-        This may include setting motor parameters, control modes, or initial state.
+        对机器人应用一次性或运行时配置。
+        这可能包括设置电机参数、控制模式或初始状态。
         """
         pass
 
     @abc.abstractmethod
     def get_observation(self) -> RobotObservation:
         """
-        Retrieve the current observation from the robot.
+        从机器人获取当前观测。
 
         Returns:
-            RobotObservation: A flat dictionary representing the robot's current sensory state. Its structure
-                should match :pymeth:`observation_features`.
+            RobotObservation: 表示机器人当前感知状态的扁平字典。其结构
+                应与 :pymeth:`observation_features` 一致。
         """
 
         pass
@@ -193,19 +193,19 @@ class Robot(abc.ABC):
     @abc.abstractmethod
     def send_action(self, action: RobotAction) -> RobotAction:
         """
-        Send an action command to the robot.
+        向机器人发送动作命令。
 
         Args:
-            action (RobotAction): Dictionary representing the desired action. Its structure should match
-                :pymeth:`action_features`.
+            action (RobotAction): 表示期望动作的字典。其结构应与
+                :pymeth:`action_features` 一致。
 
         Returns:
-            RobotAction: The action actually sent to the motors potentially clipped or modified, e.g. by
-                safety limits on velocity.
+            RobotAction: 实际发送给电机的动作，可能经过裁剪或修改，例如
+                受到速度安全限制的约束。
         """
         pass
 
     @abc.abstractmethod
     def disconnect(self) -> None:
-        """Disconnect from the robot and perform any necessary cleanup."""
+        """断开与机器人的连接并执行必要的清理。"""
         pass

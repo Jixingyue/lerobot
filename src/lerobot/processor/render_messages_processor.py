@@ -41,12 +41,12 @@ if TYPE_CHECKING:
 @dataclass
 @ProcessorStepRegistry.register(name="render_training_messages_processor")
 class RenderTrainingMessagesStep(ProcessorStep):
-    """Render training annotations and keep observations/actions aligned when filtering samples.
+    """渲染训练标注，并在过滤样本时保持观测/动作的对齐。
 
-    This is a general ProcessorStep because sparse samples can be dropped from
-    the entire transition, not just from complementary data.
-    Without a recipe, inputs pass through unchanged. Otherwise, runs only on raw
-    annotations or action targets, and skips runtime queries.
+    这是一个通用的 ProcessorStep，因为稀疏样本可能会从整个转移中被丢弃，
+    而不仅仅是从补充数据中丢弃。
+    如果没有 recipe，输入将原样透传。否则，仅对原始标注或动作目标运行，
+    并跳过运行时查询。
     """
 
     recipe: TrainingRecipe | None = None
@@ -54,7 +54,7 @@ class RenderTrainingMessagesStep(ProcessorStep):
 
     def __post_init__(self) -> None:
         if isinstance(self.recipe, dict):
-            # Import only for recipes: the datasets package requires optional extras.
+            # 仅在 recipe 场景下导入：datasets 包需要可选的 extras。
             from lerobot.datasets.recipe import TrainingRecipe
 
             self.recipe = TrainingRecipe.from_dict(self.recipe)
@@ -65,7 +65,7 @@ class RenderTrainingMessagesStep(ProcessorStep):
         }
 
     def __call__(self, transition: EnvTransition) -> EnvTransition | None:
-        """Render one sample or one batch of training annotations."""
+        """渲染单个样本或一个批次的训练标注。"""
         if self.recipe is None:
             return transition
 
@@ -73,8 +73,8 @@ class RenderTrainingMessagesStep(ProcessorStep):
         kind = complementary_data.get(QUERY_KIND)
         has_raw_language = LANGUAGE_PERSISTENT in complementary_data or LANGUAGE_EVENTS in complementary_data
 
-        # Both renderers live in the same saved pipeline. Explicit text queries
-        # belong to the runtime renderer; ordinary observations have no targets.
+        # 两个渲染器位于同一个已保存的流水线中。显式文本查询
+        # 属于运行时渲染器；普通观测没有目标。
         if kind is not None:
             return transition
         if not has_raw_language and transition.get(TransitionKey.ACTION) is None:
@@ -87,8 +87,8 @@ class RenderTrainingMessagesStep(ProcessorStep):
         events = complementary_data.get(LANGUAGE_EVENTS) or []
 
         if not persistent and not events:
-            # A dataset without language annotations remains usable: render its
-            # task as low-level supervision, or pass it through when no task exists.
+            # 没有语言标注的数据集仍然可用：将其 task 渲染为
+            # 低层级监督，或在不存在 task 时直接透传。
             rendered = _fallback_low_level_render(complementary_data.get("task"))
             if rendered is None:
                 return transition
@@ -116,8 +116,8 @@ class RenderTrainingMessagesStep(ProcessorStep):
             dataset_ctx=self.dataset_ctx,
         )
         if rendered is None:
-            # Language is present but this sparse frame has no applicable recipe
-            # branch. Keep it only when task-level action supervision is possible.
+            # 存在语言，但该稀疏帧没有适用的 recipe 分支。
+            # 仅当可以进行任务级动作监督时才保留该样本。
             rendered = _fallback_low_level_render(complementary_data.get("task"))
             if rendered is None:
                 return None
@@ -137,10 +137,10 @@ class RenderTrainingMessagesStep(ProcessorStep):
         persistent_batch: list,
         events_batch: list,
     ) -> EnvTransition | None:
-        """Render a language batch.
+        """渲染语言批次。
 
-        Non-empty persistent and event batches must have the same size. Either
-        list may be empty when that language column is absent from the batch.
+        非空的 persistent 和 events 批次必须具有相同的大小。
+        当批次中不存在某个语言列时，对应的列表可以为空。
         """
         timestamp = complementary_data.get("timestamp")
         if timestamp is None:
@@ -200,24 +200,24 @@ class RenderTrainingMessagesStep(ProcessorStep):
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
-        """Preserve feature shapes; filtering changes only the batch length."""
+        """保留特征形状；过滤仅改变批次长度。"""
         return features
 
 
 @dataclass
 @ProcessorStepRegistry.register(name="render_runtime_messages_processor")
 class RenderRuntimeMessagesStep(ComplementaryDataProcessorStep):
-    """Render VQA and next-subtask prompts using the checkpoint's saved recipe.
+    """使用检查点中保存的 recipe 渲染 VQA 和下一子任务提示。
 
-    Ordinary action inputs and already-rendered conversations pass through.
-    Chat templates, images and tokenization remain policy-owned.
+    普通动作输入和已渲染的对话将直接透传。
+    聊天模板、图像和分词仍由策略负责。
     """
 
     recipe: TrainingRecipe | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.recipe, dict):
-            # Import only for recipes: the datasets package requires optional extras.
+            # 仅在 recipe 场景下导入：datasets 包需要可选的 extras。
             from lerobot.datasets.recipe import TrainingRecipe
 
             self.recipe = TrainingRecipe.from_dict(self.recipe)
@@ -268,7 +268,7 @@ def _is_batched_language(value: Any) -> bool:
 
 
 def _render_sample(**kwargs) -> dict[str, Any] | None:
-    """Import dataset rendering only when recipe training uses it."""
+    """仅在 recipe 训练使用数据集渲染时才导入。"""
     from lerobot.datasets.language_render import render_sample
 
     return render_sample(**kwargs)
@@ -316,7 +316,7 @@ def _select_value(value: Any, indices: list[int], batch_size: int, path: str) ->
 
 
 def _fallback_low_level_render(task: Any) -> dict[str, Any] | None:
-    """Keep action-only samples trainable when no recipe branch matches."""
+    """当没有匹配的 recipe 分支时，保持仅有动作的样本可训练。"""
     if hasattr(task, "item"):
         task = task.item()
     if isinstance(task, list):

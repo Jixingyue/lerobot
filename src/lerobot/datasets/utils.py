@@ -86,9 +86,9 @@ class ForwardCompatibilityError(CompatibilityError):
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_CHUNK_SIZE = 1000  # Max number of files per chunk
-DEFAULT_DATA_FILE_SIZE_IN_MB = 100  # Max size per file
-DEFAULT_VIDEO_FILE_SIZE_IN_MB = 200  # Max size per file
+DEFAULT_CHUNK_SIZE = 1000  # 每个分片的最大文件数
+DEFAULT_DATA_FILE_SIZE_IN_MB = 100  # 每个文件的最大大小
+DEFAULT_VIDEO_FILE_SIZE_IN_MB = 200  # 每个文件的最大大小
 
 INFO_PATH = "meta/info.json"
 STATS_PATH = "meta/stats.json"
@@ -106,11 +106,11 @@ def resolve_episode_indices(
     total_episodes: int,
     exclude_episodes: Sequence[int] | None = None,
 ) -> list[int] | None:
-    """Resolve an optional episode allowlist and exclusion list against dataset bounds.
+    """针对数据集边界解析可选的 episode 允许列表和排除列表。
 
-    ``None`` is preserved when no filtering is requested so callers can retain
-    their native "all episodes" fast path. Invalid indices are ignored with a
-    warning, and the input order is preserved.
+    当未请求任何过滤时保留 ``None``，以便调用方保留其
+    原生的“所有 episode”快速路径。无效索引会被忽略并发出
+    警告，同时保留输入顺序。
     """
     if total_episodes < 0:
         raise ValueError(f"total_episodes must be non-negative, got {total_episodes}")
@@ -155,47 +155,47 @@ LEGACY_TASKS_PATH = "meta/tasks.jsonl"
 
 @dataclass
 class DatasetInfo:
-    """Typed representation of the ``meta/info.json`` file for a LeRobot dataset.
+    """LeRobot 数据集 ``meta/info.json`` 文件的带类型表示。
 
-    Replaces the previously untyped ``dict`` returned by ``load_info()`` and
-    created by ``create_empty_dataset_info()``.  Using a dataclass provides
-    explicit field definitions, IDE auto-completion, and validation at
-    construction time.
+    取代了此前由 ``load_info()`` 返回、由
+    ``create_empty_dataset_info()`` 创建的无类型 ``dict``。
+    使用 dataclass 可以提供显式的字段定义、IDE 自动补全，
+    以及构造时的校验。
     """
 
     codebase_version: str
     fps: int
     features: dict[str, dict]
 
-    # Episode / frame counters — start at zero for new datasets
+    # Episode / 帧计数器 —— 新数据集从零开始
     total_episodes: int = 0
     total_frames: int = 0
     total_tasks: int = 0
 
-    # Storage settings
+    # 存储设置
     chunks_size: int = field(default=DEFAULT_CHUNK_SIZE)
     data_files_size_in_mb: int = field(default=DEFAULT_DATA_FILE_SIZE_IN_MB)
     video_files_size_in_mb: int = field(default=DEFAULT_VIDEO_FILE_SIZE_IN_MB)
 
-    # File path templates
+    # 文件路径模板
     data_path: str = field(default=DEFAULT_DATA_PATH)
     video_path: str | None = field(default=DEFAULT_VIDEO_PATH)
 
-    # Format holding the underlying data files. ``None`` means the built-in
-    # parquet/mp4 layout; any other value (e.g. "lance") routes LeRobotDataset's
-    # data access through the storage backend registered for that format.
+    # 持有底层数据文件的格式。``None`` 表示内置的
+    # parquet/mp4 布局；任何其他值（例如 "lance"）都会将
+    # LeRobotDataset 的数据访问路由到为该格式注册的存储后端。
     storage_format: str | None = None
 
-    # Optional metadata
+    # 可选元数据
     robot_type: str | None = None
     splits: dict[str, str] = field(default_factory=dict)
-    # OpenAI-style tool schemas declared by the dataset. ``None`` means the
-    # dataset doesn't declare any — readers fall back to ``DEFAULT_TOOLS``.
+    # 数据集声明的 OpenAI 风格工具模式。``None`` 表示
+    # 数据集没有声明任何工具——读取器会回退到 ``DEFAULT_TOOLS``。
     tools: list[dict] | None = None
 
     def __post_init__(self) -> None:
-        # Coerce feature shapes from list to tuple — JSON deserialisation
-        # returns lists, but the rest of the codebase expects tuples.
+        # 将特征形状从 list 强制转换为 tuple —— JSON 反序列化
+        # 返回的是 list，但代码库的其他部分期望 tuple。
         for ft in self.features.values():
             if isinstance(ft.get("shape"), list):
                 ft["shape"] = tuple(ft["shape"])
@@ -210,11 +210,11 @@ class DatasetInfo:
             raise ValueError(f"video_files_size_in_mb must be positive, got {self.video_files_size_in_mb}")
 
     def to_dict(self) -> dict:
-        """Return a JSON-serialisable dict.
+        """返回一个可 JSON 序列化的字典。
 
-        Converts tuple shapes back to lists so ``json.dump`` can handle them.
-        Drops ``tools`` and ``storage_format`` when unset so existing datasets
-        keep a clean ``info.json``.
+        将 tuple 形状转换回 list，以便 ``json.dump`` 能够处理。
+        当 ``tools`` 和 ``storage_format`` 未设置时将其移除，
+        使已有数据集保持干净的 ``info.json``。
         """
         d = dataclasses.asdict(self)
         for ft in d["features"].values():
@@ -228,11 +228,11 @@ class DatasetInfo:
 
     @classmethod
     def from_dict(cls, data: dict) -> "DatasetInfo":
-        """Construct from a raw dict (e.g. loaded directly from JSON).
+        """从原始字典构造（例如直接从 JSON 加载的字典）。
 
-        Unknown keys are ignored for forward compatibility with datasets that
-        carry additional fields (e.g. ``total_videos`` from v2.x). A warning is
-        logged when such fields are present.
+        为前向兼容携带额外字段的数据集（例如来自 v2.x 的
+        ``total_videos``），未知键会被忽略。当存在此类字段时
+        会记录一条警告。
         """
         known = {f.name for f in dataclasses.fields(cls)}
         unknown = sorted(k for k in data if k not in known)
@@ -241,9 +241,9 @@ class DatasetInfo:
         return cls(**{k: v for k, v in data.items() if k in known})
 
     # ---------------------------------------------------------------------------
-    # Temporary dict-style compatibility layer
-    # Allows existing ``info["key"]`` call-sites to keep working without changes.
-    # Once all callers have been migrated to attribute access, remove these.
+    # 临时的字典风格兼容层
+    # 允许已有的 ``info["key"]`` 调用点无需改动即可继续工作。
+    # 待所有调用方迁移到属性访问后，删除这些方法。
     # ---------------------------------------------------------------------------
     def __getitem__(self, key: str):
         import warnings
@@ -273,11 +273,11 @@ class DatasetInfo:
         setattr(self, key, value)
 
     def __contains__(self, key: str) -> bool:
-        """Check if a field exists (dict-like interface)."""
+        """检查某字段是否存在（字典风格接口）。"""
         return hasattr(self, key)
 
     def get(self, key: str, default=None):
-        """Get attribute value with default fallback (dict-like interface)."""
+        """获取属性值，找不到时回退到默认值（字典风格接口）。"""
         try:
             return getattr(self, key)
         except AttributeError:
@@ -285,13 +285,12 @@ class DatasetInfo:
 
 
 def has_legacy_hub_download_metadata(root: Path) -> bool:
-    """Return ``True`` when *root* looks like a legacy Hub ``local_dir`` mirror.
+    """当 *root* 看起来像遗留的 Hub ``local_dir`` 镜像时返回 ``True``。
 
-    ``snapshot_download(local_dir=...)`` stores lightweight metadata under
-    ``<local_dir>/.cache/huggingface/download/``.  The presence of this
-    directory is a reliable indicator that the dataset was downloaded with
-    the old non-revision-safe ``local_dir`` mode and should be re-fetched
-    through the snapshot cache instead.
+    ``snapshot_download(local_dir=...)`` 会将轻量元数据存储在
+    ``<local_dir>/.cache/huggingface/download/`` 下。该目录的
+    存在是一个可靠标志，表明数据集是用旧的、非版本安全的
+    ``local_dir`` 模式下载的，应当改为通过快照缓存重新获取。
     """
     return (root / ".cache" / "huggingface" / "download").exists()
 
@@ -306,18 +305,19 @@ def update_chunk_file_indices(chunk_idx: int, file_idx: int, chunks_size: int) -
 
 
 def serialize_dict(stats: dict[str, torch.Tensor | np.ndarray | dict]) -> dict:
-    """Serialize a dictionary containing tensors or numpy arrays to be JSON-compatible.
+    """将包含张量或 numpy 数组的字典序列化为 JSON 兼容形式。
 
-    Converts torch.Tensor, np.ndarray, and np.generic types to lists or native Python types.
+    会将 torch.Tensor、np.ndarray 和 np.generic 类型转换为列表或
+    Python 原生类型。
 
     Args:
-        stats (dict): A dictionary that may contain non-serializable numeric types.
+        stats (dict): 可能包含不可序列化数值类型的字典。
 
     Returns:
-        dict: A dictionary with all values converted to JSON-serializable types.
+        dict: 所有值都已转换为 JSON 可序列化类型的字典。
 
     Raises:
-        NotImplementedError: If a value has an unsupported type.
+        NotImplementedError: 当某个值的类型不受支持时。
     """
     serialized_dict = {}
     for key, value in flatten_dict(stats).items():
@@ -335,13 +335,13 @@ def serialize_dict(stats: dict[str, torch.Tensor | np.ndarray | dict]) -> dict:
 
 
 def is_valid_version(version: str) -> bool:
-    """Check if a string is a valid PEP 440 version.
+    """检查一个字符串是否为有效的 PEP 440 版本号。
 
     Args:
-        version (str): The version string to check.
+        version (str): 待检查的版本字符串。
 
     Returns:
-        bool: True if the version string is valid, False otherwise.
+        bool: 版本字符串有效时返回 True，否则返回 False。
     """
     try:
         packaging.version.parse(version)
@@ -356,17 +356,17 @@ def check_version_compatibility(
     current_version: str | packaging.version.Version,
     enforce_breaking_major: bool = True,
 ) -> None:
-    """Check for version compatibility between a dataset and the current codebase.
+    """检查数据集与当前代码库之间的版本兼容性。
 
     Args:
-        repo_id (str): The repository ID for logging purposes.
-        version_to_check (str | packaging.version.Version): The version of the dataset.
-        current_version (str | packaging.version.Version): The current version of the codebase.
-        enforce_breaking_major (bool): If True, raise an error on major version mismatch.
+        repo_id (str): 用于日志记录的仓库 ID。
+        version_to_check (str | packaging.version.Version): 数据集的版本。
+        current_version (str | packaging.version.Version): 代码库的当前版本。
+        enforce_breaking_major (bool): 若为 True，主版本不匹配时抛出错误。
 
     Raises:
-        BackwardCompatibilityError: If the dataset version is from a newer, incompatible
-            major version of the codebase.
+        BackwardCompatibilityError: 当数据集版本来自更新的、不兼容的
+            代码库主版本时。
     """
     v_check = (
         packaging.version.parse(version_to_check)
@@ -385,16 +385,16 @@ def check_version_compatibility(
 
 
 def get_repo_versions(repo_id: str, *, token: str | bool | None = None) -> list[packaging.version.Version]:
-    """Return available valid versions (branches and tags) on a given Hub repo.
+    """返回给定 Hub 仓库上可用的有效版本（分支和标签）。
 
     Args:
-        repo_id (str): The repository ID on the Hugging Face Hub.
-        token: Authentication token used for Hub requests. Pass a string token,
-            ``True`` to require the locally stored token, ``False`` to disable
-            authentication, or ``None`` to use the Hugging Face Hub default.
+        repo_id (str): Hugging Face Hub 上的仓库 ID。
+        token: 用于 Hub 请求的认证令牌。可传入字符串令牌；
+            ``True`` 表示要求使用本地存储的令牌；``False``
+            表示禁用认证；``None`` 表示使用 Hugging Face Hub 的默认行为。
 
     Returns:
-        list[packaging.version.Version]: A list of valid versions found.
+        list[packaging.version.Version]: 找到的有效版本列表。
     """
     api = HfApi() if token is None else HfApi(token=token)
     repo_refs = api.list_repo_refs(repo_id, repo_type="dataset")
@@ -413,23 +413,23 @@ def get_safe_version(
     *,
     token: str | bool | None = None,
 ) -> str:
-    """Return the specified version if available on repo, or the latest compatible one.
+    """若仓库上存在指定版本则返回它，否则返回最新的兼容版本。
 
-    If the exact version is not found, it looks for the latest version with the
-    same major version number that is less than or equal to the target minor version.
+    如果找不到确切版本，则查找主版本号相同且次版本号
+    小于或等于目标次版本号的最新版本。
 
     Args:
-        repo_id (str): The repository ID on the Hugging Face Hub.
-        version (str | packaging.version.Version): The target version.
-        token: Authentication token forwarded to the Hub version lookup.
+        repo_id (str): Hugging Face Hub 上的仓库 ID。
+        version (str | packaging.version.Version): 目标版本。
+        token: 转发给 Hub 版本查询的认证令牌。
 
     Returns:
-        str: The safe version string (e.g., "v1.2.3") to use as a revision.
+        str: 用作 revision 的安全版本字符串（例如 "v1.2.3"）。
 
     Raises:
-        RuntimeError: If the repo has no version tags.
-        BackwardCompatibilityError: If only older major versions are available.
-        ForwardCompatibilityError: If only newer major versions are available.
+        RuntimeError: 当仓库没有任何版本标签时。
+        BackwardCompatibilityError: 当只有更旧主版本的版本可用时。
+        ForwardCompatibilityError: 当只有更新主版本的版本可用时。
     """
     target_version = (
         packaging.version.parse(version) if not isinstance(version, packaging.version.Version) else version
@@ -461,14 +461,14 @@ def get_safe_version(
 
 
 def create_branch(repo_id: str, *, branch: str, repo_type: str | None = None) -> None:
-    """Create a branch on an existing Hugging Face repo.
+    """在已有的 Hugging Face 仓库上创建分支。
 
-    Deletes the branch if it already exists before creating it.
+    如果分支已存在，则先删除再创建。
 
     Args:
-        repo_id (str): The ID of the repository.
-        branch (str): The name of the branch to create.
-        repo_type (str | None): The type of the repository (e.g., "dataset").
+        repo_id (str): 仓库的 ID。
+        branch (str): 要创建的分支名。
+        repo_type (str | None): 仓库类型（例如 "dataset"）。
     """
     api = HfApi()
 
@@ -486,20 +486,21 @@ def create_lerobot_dataset_card(
     dataset_info: DatasetInfo | None = None,
     **kwargs,
 ) -> DatasetCard:
-    """Create a `DatasetCard` for a LeRobot dataset.
+    """为 LeRobot 数据集创建 `DatasetCard`。
 
-    Keyword arguments are used to replace values in the card template.
-    Note: If specified, `license` must be a valid license identifier from
-    https://huggingface.co/docs/hub/repositories-licenses.
+    关键字参数用于替换卡片模板中的值。
+    注意：如果指定 `license`，它必须是
+    https://huggingface.co/docs/hub/repositories-licenses
+    上有效的许可证标识符。
 
     Args:
-        tags (list | None): A list of tags to add to the dataset card.
-        dataset_info (DatasetInfo | None): The dataset's info object, which will
-            be displayed on the card.
-        **kwargs: Additional keyword arguments to populate the card template.
+        tags (list | None): 要添加到数据集卡片的标签列表。
+        dataset_info (DatasetInfo | None): 数据集的 info 对象，
+            将展示在卡片上。
+        **kwargs: 用于填充卡片模板的额外关键字参数。
 
     Returns:
-        DatasetCard: The generated dataset card object.
+        DatasetCard: 生成的数据集卡片对象。
     """
     card_tags = ["LeRobot"]
 
@@ -543,7 +544,7 @@ def find_float_index(target, float_list, threshold=1e-6):
 
 def safe_shard(dataset: datasets.IterableDataset, index: int, num_shards: int) -> datasets.Dataset:
     """
-    Safe shards the dataset.
+    安全地对数据集进行分片。
     """
     shard_idx = min(dataset.num_shards, index + 1) - 1
 

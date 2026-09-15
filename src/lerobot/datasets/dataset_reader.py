@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Private reader component for LeRobotDataset. Handles random-access reading (HF dataset, delta indices, video decoding)."""
+"""LeRobotDataset 的私有读取器组件。负责随机访问读取（HF 数据集、delta 索引、视频解码）。"""
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -45,19 +45,18 @@ from .video_utils import decode_video_frames
 
 
 class BaseDatasetReader(ABC):
-    """Read-side data access contract for :class:`LeRobotDataset`.
+    """:class:`LeRobotDataset` 的读取侧数据访问契约。
 
-    A reader owns row fetching and video decoding for one storage format and
-    returns fully assembled frame dicts — tabular features, delta-timestamp
-    windows, padding masks, decoded video frames — so every format produces
-    the same items. ``LeRobotDataset`` delegates ``__getitem__`` and
-    ``__getitems__`` to it and keeps everything else (metadata, episode
-    selection, the public API). Subclasses define their own constructor
-    (their inputs legitimately differ) and must be picklable so
-    ``DataLoader`` workers can reopen their own connections.
+    读取器负责某种存储格式的行获取与视频解码，并返回完整组装好的
+    帧字典——表格特征、delta 时间戳窗口、填充掩码、解码后的视频帧——
+    从而使每种格式都产出相同的条目。``LeRobotDataset`` 将
+    ``__getitem__`` 和 ``__getitems__`` 委托给它，并保留其余部分
+    （元数据、episode 选择、公共 API）。子类定义各自的构造函数
+    （它们的输入合理地有所不同），并且必须可 pickle，以便
+    ``DataLoader`` 工作进程能重新打开各自的连接。
 
-    Subclasses must set :attr:`episodes` (the selected episode indices, or
-    ``None`` for all) during construction.
+    子类必须在构造期间设置 :attr:`episodes`（所选的 episode 索引，
+    或 ``None`` 表示全部）。
     """
 
     episodes: list[int] | None
@@ -65,30 +64,30 @@ class BaseDatasetReader(ABC):
     @property
     @abstractmethod
     def num_frames(self) -> int:
-        """Number of frames in selected episodes."""
+        """所选 episode 中的帧数。"""
 
     @property
     @abstractmethod
     def num_episodes(self) -> int:
-        """Number of episodes selected."""
+        """所选的 episode 数量。"""
 
     @property
     @abstractmethod
     def absolute_to_relative_idx(self) -> dict[int, int] | None:
-        """Mapping from absolute frame indices to relative row positions.
+        """从绝对帧索引到相对行位置的映射。
 
-        Non-None only for episode-filtered datasets where absolute indices
-        (from metadata) differ from positions in the filtered view.
+        仅对于经过 episode 过滤的数据集为非 None，此时（来自元数据的）
+        绝对索引与过滤后视图中的位置不同。
         """
 
     @abstractmethod
     def get_item(self, idx: int) -> dict:
-        """Return one fully assembled frame dict for a relative index."""
+        """为一个相对索引返回一个完整组装好的帧字典。"""
 
     def get_items(self, indices: list[int]) -> list[dict]:
-        """Return frame dicts for a batch of relative indices.
+        """为一批相对索引返回帧字典。
 
-        Subclasses may override this with a batched implementation.
+        子类可以用批量实现覆盖此方法。
         """
         return [self.get_item(idx) for idx in indices]
 
@@ -96,20 +95,20 @@ class BaseDatasetReader(ABC):
         return self.num_frames
 
     def set_image_transforms(self, image_transforms: Callable | None) -> None:
-        """Replace the transform applied to visual observations."""
+        """替换应用于视觉观测的变换。"""
         if image_transforms is not None and not callable(image_transforms):
             raise TypeError("image_transforms must be callable or None.")
         self._image_transforms = image_transforms
 
     def clear_image_transforms(self) -> None:
-        """Remove the transform applied to visual observations."""
+        """移除应用于视觉观测的变换。"""
         self._image_transforms = None
 
 
 class DatasetReader(BaseDatasetReader):
-    """Default reader serving the parquet/mp4 storage format.
+    """服务于 parquet/mp4 存储格式的默认读取器。
 
-    Owns: hf_dataset, _absolute_to_relative_idx, delta_indices.
+    拥有：hf_dataset、_absolute_to_relative_idx、delta_indices。
     """
 
     def __init__(
@@ -124,26 +123,25 @@ class DatasetReader(BaseDatasetReader):
         return_uint8: bool = False,
         depth_output_unit: str = DEFAULT_DEPTH_UNIT,
     ):
-        """Initialize the reader with metadata, filtering, and transform config.
+        """使用元数据、过滤和变换配置初始化读取器。
 
-        The HF dataset is not loaded here — call :meth:`try_load` or
-        :meth:`load_and_activate` afterward.
+        HF 数据集不会在此处加载——之后请调用 :meth:`try_load` 或
+        :meth:`load_and_activate`。
 
         Args:
-            meta: Dataset metadata instance.
-            root: Local dataset root directory.
-            episodes: Optional list of episode indices to select. ``None``
-                means all episodes.
-            tolerance_s: Timestamp synchronization tolerance in seconds.
-            video_backend: Video decoding backend identifier.
-            delta_timestamps: Optional dict mapping feature keys to lists of
-                relative timestamp offsets for temporal context windows.
-            image_transforms: Optional torchvision v2 transform applied to
-                visual features.
-            return_uint8: If True, return RGB video frames as raw uint8 tensors
-                instead of normalized float32.
-            depth_output_unit: Physical unit depth maps are dequantized to
-                (``"m"`` or ``"mm"``). Defaults to ``"mm"``.
+            meta: 数据集元数据实例。
+            root: 本地数据集根目录。
+            episodes: 要选择的 episode 索引的可选列表。``None``
+                表示所有 episode。
+            tolerance_s: 时间戳同步容差（秒）。
+            video_backend: 视频解码后端标识符。
+            delta_timestamps: 可选字典，将特征键映射到用于时间上下文窗口的
+                相对时间戳偏移列表。
+            image_transforms: 应用于视觉特征的可选 torchvision v2 变换。
+            return_uint8: 如果为 True，则返回原始 uint8 张量形式的
+                RGB 视频帧，而非归一化的 float32。
+            depth_output_unit: 深度图反量化后的物理单位
+                （``"m"`` 或 ``"mm"``）。默认为 ``"mm"``。
         """
         self._meta = meta
         self.root = root
@@ -160,7 +158,7 @@ class DatasetReader(BaseDatasetReader):
         self._column_views_source: datasets.Dataset | None = None
         self._column_views_transform: Callable | None = None
 
-        # Setup delta_indices (doesn't depend on hf_dataset)
+        # 设置 delta_indices（不依赖 hf_dataset）
         self.delta_indices = None
         if delta_timestamps is not None:
             check_delta_timestamps(delta_timestamps, meta.fps, tolerance_s)
@@ -171,7 +169,7 @@ class DatasetReader(BaseDatasetReader):
             for vid_key in self._meta.depth_keys
         }
 
-        # Get the input unit of each depth feature stored as raw images.
+        # 获取以原始图像形式存储的每个深度特征的输入单位。
         self._image_depth_units: dict[str, str | None] = {
             key: (self._meta.features[key].get("info") or {}).get("depth_unit")
             for key in self._meta.depth_keys
@@ -179,7 +177,7 @@ class DatasetReader(BaseDatasetReader):
         }
 
     def try_load(self) -> bool:
-        """Attempt to load from local cache. Returns True if data is sufficient."""
+        """尝试从本地缓存加载。如果数据足够则返回 True。"""
         try:
             self.hf_dataset = self._load_hf_dataset()
         except (FileNotFoundError, NotADirectoryError):
@@ -192,12 +190,12 @@ class DatasetReader(BaseDatasetReader):
         return True
 
     def load_and_activate(self) -> None:
-        """Load HF dataset from disk and build index mapping. Call after data is on disk."""
+        """从磁盘加载 HF 数据集并构建索引映射。在数据已在磁盘上之后调用。"""
         self.hf_dataset = self._load_hf_dataset()
         self._build_index_mapping()
 
     def _build_index_mapping(self) -> None:
-        """Build absolute-to-relative index mapping from loaded hf_dataset."""
+        """从已加载的 hf_dataset 构建绝对索引到相对索引的映射。"""
         self._absolute_to_relative_idx = None
         if self.episodes is not None and self.hf_dataset is not None:
             indices = self.hf_dataset.data.column("index").to_numpy()
@@ -205,25 +203,25 @@ class DatasetReader(BaseDatasetReader):
 
     @property
     def num_frames(self) -> int:
-        """Number of frames in selected episodes."""
+        """所选 episode 中的帧数。"""
         if self.episodes is not None and self.hf_dataset is not None:
             return len(self.hf_dataset)
         return self._meta.total_frames
 
     @property
     def num_episodes(self) -> int:
-        """Number of episodes selected."""
+        """所选的 episode 数量。"""
         return len(self.episodes) if self.episodes is not None else self._meta.total_episodes
 
     @property
     def absolute_to_relative_idx(self) -> dict[int, int] | None:
-        """Mapping from absolute frame indices to HF dataset row positions."""
+        """从绝对帧索引到 HF 数据集行位置的映射。"""
         if self.hf_dataset is None:
             self.load_and_activate()
         return self._absolute_to_relative_idx
 
     def _load_hf_dataset(self) -> datasets.Dataset:
-        """hf_dataset contains all the observations, states, actions, rewards, etc."""
+        """hf_dataset 包含所有的观测、状态、动作、奖励等。"""
         features = get_hf_features_from_features(self._meta.features)
         self._validate_language_columns_declared(features)
         hf_dataset = load_nested_dataset(self.root / "data", features=features, episodes=self.episodes)
@@ -231,8 +229,8 @@ class DatasetReader(BaseDatasetReader):
         return hf_dataset
 
     def _validate_language_columns_declared(self, features: datasets.Features) -> None:
-        """Require language columns stored in Parquet to be declared in metadata."""
-        # Leave empty datasets to fail through the normal loading path.
+        """要求存储在 Parquet 中的语言列必须在元数据中声明。"""
+        # 让空数据集通过正常的加载路径失败。
         try:
             sample = next((self.root / "data").glob("*/*.parquet"))
         except StopIteration:
@@ -240,7 +238,7 @@ class DatasetReader(BaseDatasetReader):
 
         from pyarrow import parquet as _pq  # noqa: PLC0415
 
-        # LeRobot shards are schema-uniform, so one schema represents the dataset.
+        # LeRobot 分片的模式是统一的，因此一个模式即可代表整个数据集。
         schema_names = set(_pq.read_schema(sample).names)
         from .language import LANGUAGE_COLUMNS  # noqa: PLC0415
 
@@ -254,7 +252,7 @@ class DatasetReader(BaseDatasetReader):
             )
 
     def _check_cached_episodes_sufficient(self) -> bool:
-        """Check if the cached dataset contains all requested episodes and their video files."""
+        """检查缓存的数据集是否包含所有请求的 episode 及其视频文件。"""
         if self.hf_dataset is None or len(self.hf_dataset) == 0:
             return False
 
@@ -281,9 +279,9 @@ class DatasetReader(BaseDatasetReader):
         return True
 
     def get_episodes_file_paths(self) -> list[Path]:
-        """Return deduplicated file paths (data + video) for selected episodes.
+        """返回所选 episode 的去重文件路径（数据 + 视频）。
 
-        Used to build the ``allow_patterns`` list for ``snapshot_download``.
+        用于为 ``snapshot_download`` 构建 ``allow_patterns`` 列表。
         """
         episodes = self.episodes if self.episodes is not None else list(range(self._meta.total_episodes))
         fpaths = [str(self._meta.get_data_file_path(ep_idx)) for ep_idx in episodes]
@@ -294,14 +292,14 @@ class DatasetReader(BaseDatasetReader):
                 for ep_idx in episodes
             ]
             fpaths += video_files
-        # episodes are stored in the same files, so we return unique paths only
+        # episode 存储在同一文件中，因此仅返回唯一路径
         fpaths = list(set(fpaths))
         return fpaths
 
     def _get_query_indices(
         self, abs_idx: int, ep_idx: int
     ) -> tuple[dict[str, list[int]], dict[str, torch.Tensor]]:
-        """Compute query indices for delta timestamps."""
+        """计算 delta 时间戳的查询索引。"""
         ep = self._meta.episodes[ep_idx]
         ep_start = ep["dataset_from_index"]
         ep_end = ep["dataset_to_index"]
@@ -337,21 +335,20 @@ class DatasetReader(BaseDatasetReader):
         return query_timestamps
 
     def _column_view(self, key: str) -> datasets.Dataset:
-        """Return a cached single-column view of ``hf_dataset``.
+        """返回 ``hf_dataset`` 的缓存单列视图。
 
-        ``select_columns`` is a zero-copy schema projection: row queries on the
-        view fetch and decode only ``key``. By contrast, ``hf_dataset[indices]``
-        (and, since a custom transform disables the lazy-``Column`` fast path in
-        ``datasets`` >= 4.4, also ``hf_dataset[key][indices]``) fetches and
-        decodes entire rows. On image datasets that decodes every embedded
-        camera image of every queried row just to read a low-dimensional column
-        like ``action`` (#2895). The view keeps the ``hf_transform_to_torch``
-        transform, which is column-wise, so outputs are identical to a plain
-        row query.
+        ``select_columns`` 是零拷贝的模式投影：对该视图的行查询只会
+        获取并解码 ``key``。相比之下，``hf_dataset[indices]``
+        （以及在 ``datasets`` >= 4.4 中，由于自定义变换禁用了惰性
+        ``Column`` 快速路径，``hf_dataset[key][indices]`` 也是如此）
+        会获取并解码整行。在图像数据集上，仅仅为了读取像 ``action``
+        这样的低维列，也会解码每个被查询行中嵌入的所有相机图像
+        （#2895）。该视图保留了 ``hf_transform_to_torch`` 变换，
+        而该变换是按列进行的，因此输出与普通的行查询完全相同。
         """
         transform = self.hf_dataset.format["format_kwargs"].get("transform")
         if self._column_views_source is not self.hf_dataset or self._column_views_transform is not transform:
-            # hf_dataset was (re)loaded or its transform changed: drop stale views
+            # hf_dataset 被（重新）加载，或其变换已更改：丢弃过期的视图
             self._column_views = {}
             self._column_views_source = self.hf_dataset
             self._column_views_transform = transform
@@ -360,7 +357,7 @@ class DatasetReader(BaseDatasetReader):
         return self._column_views[key]
 
     def _query_hf_dataset(self, query_indices: dict[str, list[int]]) -> dict:
-        """Query dataset for indices across keys, skipping video keys."""
+        """跨各键按索引查询数据集，跳过视频键。"""
         result: dict = {}
         for key, q_idx in query_indices.items():
             if key in self._meta.video_keys:
@@ -374,9 +371,9 @@ class DatasetReader(BaseDatasetReader):
         return result
 
     def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict[str, torch.Tensor]:
-        """Note: When using data workers (e.g. DataLoader with num_workers>0), do not call this function
-        in the main process (e.g. by using a second Dataloader with num_workers=0). It will result in a
-        Segmentation Fault.
+        """注意：在使用数据工作进程时（例如 num_workers>0 的 DataLoader），
+        不要在主进程中调用此函数（例如使用第二个 num_workers=0 的
+        DataLoader）。这会导致段错误（Segmentation Fault）。
         """
         ep = self._meta.episodes[ep_idx]
 
@@ -406,24 +403,23 @@ class DatasetReader(BaseDatasetReader):
 
         items = list(query_timestamps.items())
 
-        # Single camera: no threading overhead
+        # 单相机：无线程开销
         if len(items) <= 1:
             return {vid_key: _decode_single(vid_key, query_ts)[1] for vid_key, query_ts in items}
 
-        # Multi-camera: decode in parallel (video decoding releases the GIL)
+        # 多相机：并行解码（视频解码会释放 GIL）
         with ThreadPoolExecutor(max_workers=len(items)) as pool:
             futures = [pool.submit(_decode_single, k, ts) for k, ts in items]
             return dict(f.result() for f in futures)
 
     def get_item(self, idx) -> dict:
-        """Core __getitem__ logic. Loads hf_dataset on first access.
+        """核心 __getitem__ 逻辑。在首次访问时加载 hf_dataset。
 
-        ``idx`` is a *relative* index into the (possibly episode-filtered)
-        HF dataset, **not** the absolute frame index stored in the ``index``
-        column.  The absolute index is retrieved from the row itself.
+        ``idx`` 是（可能经过 episode 过滤的）HF 数据集中的*相对*索引，
+        **而不是**存储在 ``index`` 列中的绝对帧索引。绝对索引从行本身获取。
         """
         if self.hf_dataset is None:
-            # One-shot load after finalize()
+            # finalize() 之后的一次性加载
             self.load_and_activate()
         item = self.hf_dataset[idx]
         ep_idx = item["episode_index"].item()
@@ -449,14 +445,14 @@ class DatasetReader(BaseDatasetReader):
                     continue
                 item[cam] = self._image_transforms(item[cam])
 
-        # Convert depth features to the output unit.
+        # 将深度特征转换为输出单位。
         for key, stored_unit in self._image_depth_units.items():
             if key in item and stored_unit is not None and stored_unit != self._depth_output_unit:
                 item[key] = (
                     item[key] * MM_PER_METRE if stored_unit == DEPTH_METER_UNIT else item[key] / MM_PER_METRE
                 )
 
-        # Add task as a string
+        # 以字符串形式添加任务
         task_idx = item["task_index"].item()
         item["task"] = self._meta.tasks.iloc[task_idx].name
 

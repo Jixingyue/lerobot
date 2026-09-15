@@ -25,7 +25,7 @@ from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature, PreTr
 from lerobot.optim import CosineDecayWithWarmupSchedulerConfig, XVLAAdamWConfig
 from lerobot.utils.constants import OBS_IMAGES
 
-# Conditional import for type checking and lazy loading
+# 用于类型检查和懒加载的条件导入
 from lerobot.utils.import_utils import _transformers_available
 
 if TYPE_CHECKING or _transformers_available:
@@ -35,10 +35,10 @@ else:
 
 
 def _translate_vision_config(vision_config: dict[str, Any]) -> dict[str, Any]:
-    """Translate a vision config from the original Microsoft remote-code Florence-2 format
-    (used by existing XVLA checkpoints) to the native ``transformers`` format.
+    """将视觉配置从 Microsoft 原始远程代码版 Florence-2 格式（现有 XVLA checkpoint
+    所使用的格式）转换为原生 ``transformers`` 格式。
 
-    Configs already in the native format pass through unchanged.
+    已经是原生格式的配置会原样透传，不做修改。
     """
     vision = dict(vision_config)
     model_type = vision.pop("model_type", None)
@@ -65,7 +65,7 @@ def _translate_vision_config(vision_config: dict[str, Any]) -> dict[str, Any]:
         "spatial_avg_pool",
         "temporal_avg_pool",
     ]:
-        # the native Florence2MultiModalProjector hardcodes this feature combination
+        # 原生的 Florence2MultiModalProjector 硬编码了这一特征组合
         raise ValueError(f"Unsupported image_feature_source: {image_feature_source!r}")
 
     if "dim_embed" in vision:
@@ -77,18 +77,18 @@ def _translate_vision_config(vision_config: dict[str, Any]) -> dict[str, Any]:
 @dataclass
 class XVLAConfig(PreTrainedConfig):
     """
-    Configuration class for the XVLA (Extended Vision-Language-Action) policy so it can
-    plug into the LeRobot training stack.
+    XVLA（Extended Vision-Language-Action）策略的配置类，使其能够
+    接入 LeRobot 训练栈。
 
-    The config mirrors the knobs exposed in the original XVLA repository but also
-    declares the input/output feature contract required by LeRobot.
+    该配置镜像了原始 XVLA 仓库中暴露的各项开关，同时也声明了
+    LeRobot 所要求的输入/输出特征契约。
     """
 
-    # Input / output structure
+    # 输入 / 输出结构
     n_obs_steps: int = 1
     chunk_size: int = 32
     n_action_steps: int = 32
-    dtype: str = "float32"  # Options: "bfloat16", "float32"
+    dtype: str = "float32"  # 可选："bfloat16"、"float32"
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -98,14 +98,14 @@ class XVLAConfig(PreTrainedConfig):
         }
     )
 
-    # Florence2 backbone and tokenizer configuration
+    # Florence2 主干网络和分词器配置
     florence_config: dict[str, Any] = field(default_factory=dict)
     tokenizer_name: str = "facebook/bart-large"
     tokenizer_max_length: int = 64
     tokenizer_padding_side: str = "right"
     pad_language_to: str = "max_length"
 
-    # Transformer head
+    # Transformer 动作头
     hidden_size: int = 1024
     depth: int = 24
     num_heads: int = 16
@@ -116,35 +116,35 @@ class XVLAConfig(PreTrainedConfig):
     max_len_seq: int = 512
     use_hetero_proj: bool = False
 
-    # Action & proprioception
+    # 动作与本体感知
     action_mode: str = "ee6d"
     num_denoising_steps: int = 10
     use_proprio: bool = True
     max_state_dim: int = 32
-    max_action_dim: int = 20  # Maximum action dimension for padding (used by "auto" action mode)
+    max_action_dim: int = 20  # 用于填充的最大动作维度（"auto" 动作模式使用）
     domain_feature_key: str | None = None
 
-    # Vision preprocessing
+    # 视觉预处理
     resize_imgs_with_padding: tuple[int, int] | None = None
     num_image_views: int | None = None
     empty_cameras: int = 0
 
-    # Freezing options for VLM components
-    # By default, VLM encoders are frozen and only policy transformer + soft prompts train
-    freeze_vision_encoder: bool = False  # Freeze VLM vision encoder weights
-    freeze_language_encoder: bool = False  # Freeze VLM language encoder weights
-    train_policy_transformer: bool = True  # Allow policy transformer to train
-    train_soft_prompts: bool = True  # Allow soft prompts to train
+    # VLM 组件的冻结选项
+    # 默认情况下冻结 VLM 编码器，只训练策略 transformer 和 soft prompt
+    freeze_vision_encoder: bool = False  # 冻结 VLM 视觉编码器权重
+    freeze_language_encoder: bool = False  # 冻结 VLM 语言编码器权重
+    train_policy_transformer: bool = True  # 允许训练策略 transformer
+    train_soft_prompts: bool = True  # 允许训练 soft prompt
 
-    # Training presets
+    # 训练预设
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple[float, float] = (0.9, 0.99)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 0.0
     optimizer_grad_clip_norm: float = 10.0
-    # Soft-prompt LR settings (for optional warm-up)
-    optimizer_soft_prompt_lr_scale: float = 1.0  # Scale factor for soft-prompt LR
-    optimizer_soft_prompt_warmup_lr_scale: float | None = None  # Start scale for warmup (e.g., 0.01)
+    # Soft-prompt 学习率设置（用于可选的 warm-up）
+    optimizer_soft_prompt_lr_scale: float = 1.0  # soft-prompt 学习率的缩放因子
+    optimizer_soft_prompt_warmup_lr_scale: float | None = None  # warmup 的起始缩放（例如 0.01）
 
     scheduler_warmup_steps: int = 1_000
     scheduler_decay_steps: int = 30_000
@@ -167,12 +167,11 @@ class XVLAConfig(PreTrainedConfig):
 
     def get_florence_config(self) -> Florence2Config:
         """
-        Build (and cache) the native ``transformers`` Florence-2 config that backs the VLM.
+        构建（并缓存）支撑 VLM 的原生 ``transformers`` Florence-2 配置。
 
-        ``florence_config`` may be given either in the native ``transformers`` format or in the
-        original Microsoft remote-code format stored by existing XVLA checkpoints (e.g. with
-        ``dim_embed`` / ``image_pos_embed`` in the vision config); the latter is translated
-        field-by-field to the native format.
+        ``florence_config`` 既可以用原生 ``transformers`` 格式给出，也可以用现有 XVLA
+        checkpoint 所存储的 Microsoft 原始远程代码格式给出（例如视觉配置中带有
+        ``dim_embed`` / ``image_pos_embed``）；后者会被逐字段转换为原生格式。
         """
         if self._florence_config_obj is None:
             config_dict = dict(self.florence_config)
@@ -184,7 +183,7 @@ class XVLAConfig(PreTrainedConfig):
             vision_config = _translate_vision_config(config_dict["vision_config"])
             text_config = dict(config_dict["text_config"])
             if text_config.get("model_type", "florence2_language") == "florence2_language":
-                # The MS remote-code language config is BART, field for field.
+                # 微软远程代码版的语言配置逐字段对应 BART。
                 text_config["model_type"] = "bart"
 
             kwargs = {
@@ -227,12 +226,12 @@ class XVLAConfig(PreTrainedConfig):
                     )
 
     def get_optimizer_preset(self) -> XVLAAdamWConfig:
-        """Return the XVLA-specific optimizer with differential learning rates.
+        """返回 XVLA 专用的、带差异化学习率的优化器。
 
-        This optimizer applies:
-        - 1/10 LR for VLM parameters (stable optimization)
-        - Full LR for transformer/action head
-        - Configurable LR for soft-prompts (with optional warm-up)
+        该优化器应用：
+        - VLM 参数使用 1/10 的学习率（稳定优化）
+        - transformer/动作头使用完整学习率
+        - soft-prompt 使用可配置的学习率（支持可选的 warm-up）
         """
         return XVLAAdamWConfig(
             lr=self.optimizer_lr,

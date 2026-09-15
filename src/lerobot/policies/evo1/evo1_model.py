@@ -28,11 +28,11 @@ class Evo1Model(nn.Module):
         self.config = config
         self._device = config.device
         self.return_cls_only = config.return_cls_only
-        # Set by Evo1Policy.init_rtc_processor() when config.rtc_config is provided.
+        # 当提供 config.rtc_config 时，由 Evo1Policy.init_rtc_processor() 设置。
         self.rtc_processor = None
 
-        # Gradient checkpointing only pays off when the VLM is actually being trained; keep it off
-        # whenever every VLM branch is frozen so the frozen forward stays cheap.
+        # 梯度检查点只有在 VLM 实际被训练时才有收益；只要所有 VLM 分支都被冻结，
+        # 就保持关闭，使冻结的前向传播保持低成本。
         tracks_vlm_gradients = bool(
             config.finetune_vlm or config.finetune_language_model or config.finetune_vision_model
         )
@@ -83,15 +83,15 @@ class Evo1Model(nn.Module):
         prompt: str | list[str] | None = None,
         return_cls_only: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Fused VL embeddings from per-camera image batches.
+        """从各相机的图像批次获取融合的 VL 嵌入。
 
         Args:
-            images: list of per-camera tensors, each shaped ``(B, C, H, W)`` with values in ``[0, 1]``.
-            image_mask: bool tensor ``(B, max_views)`` marking present views.
+            images: 逐相机张量的列表，每个形状为 ``(B, C, H, W)``，取值在 ``[0, 1]`` 内。
+            image_mask: 布尔张量 ``(B, max_views)``，标记存在的视图。
 
         Returns:
-            ``(embeddings, valid_mask)``: the fused tokens and the bool mask of attendable context
-            positions (None when a single pooled token is returned).
+            ``(embeddings, valid_mask)``：融合后的 token 以及可关注上下文位置的
+            布尔掩码（当返回单个池化 token 时为 None）。
         """
         if return_cls_only is None:
             return_cls_only = self.return_cls_only
@@ -196,8 +196,8 @@ class Evo1Model(nn.Module):
         return module
 
     def set_finetune_flags(self):
-        # __post_init__ resolves every finetune flag to a concrete boolean, so branch-level flags
-        # are authoritative here. Freeze everything first, then re-enable the requested branches.
+        # __post_init__ 会将每个微调标志解析为具体的布尔值，因此分支级标志
+        # 在这里具有权威性。先冻结所有参数，然后重新启用所请求的分支。
         self._set_module_trainable(self.embedder, False)
         self._set_module_trainable(
             self._vlm_submodule("language_model"), bool(self.config.finetune_language_model)

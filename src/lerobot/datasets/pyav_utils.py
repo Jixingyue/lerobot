@@ -13,10 +13,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyAV-based compatibility checks for :class:`VideoEncoderConfig`.
+"""基于 PyAV 的 :class:`VideoEncoderConfig` 兼容性检查。
 
-Centralises all :mod:`av` introspection of the bundled FFmpeg build.
-Checks degrade to a no-op when the target codec isn't available locally.
+集中处理对捆绑的 FFmpeg 构建的所有 :mod:`av` 内省。
+当目标编解码器在本地不可用时，检查会退化为空操作。
 """
 
 import functools
@@ -33,18 +33,18 @@ FFMPEG_INTEGER_OPTION_TYPES = ("INT", "INT64", "UINT64")
 
 
 def write_u16_plane(plane: av.video.plane.VideoPlane, src: np.ndarray, fill_value: int | None = None) -> None:
-    """Copy a 2D ``uint16`` image into the plane's memory buffer, row by row.
+    """将 2D ``uint16`` 图像逐行复制到该平面的内存缓冲区中。
 
-    For speed, each row is padded to a wider size than ``width``, so the true row width in
-    memory is ``plane.line_size`` (bytes), not ``width``. Copying as one straight stream
-    would skew the image, so we write only the first ``width`` columns of each row and
-    leave the padding untouched.
+    为了提高速度，每一行都会被填充到比 ``width`` 更宽的宽度，因此内存中真实的行宽是
+    ``plane.line_size``（字节），而不是 ``width``。如果作为一条连续的流来复制，
+    会使图像发生错位，因此我们只写入每行的前 ``width`` 列，
+    并保持填充部分不变。
 
     Args:
-        plane: Destination 16-bit plane.
-        src: Source image, shape ``(height, width)``, dtype ``uint16``.
-        fill_value: If given, every pixel (padding included) is set to this first, so the
-            padding holds clean data instead of garbage.
+        plane: 目标 16 位平面。
+        src: 源图像，形状 ``(height, width)``，dtype ``uint16``。
+        fill_value: 如果给定，则首先将每个像素（包括填充部分）设置为此值，
+            使填充部分保存干净的数据而不是垃圾数据。
     """
     height, width = src.shape
     stride_u16 = plane.line_size // np.dtype(np.uint16).itemsize
@@ -56,13 +56,13 @@ def write_u16_plane(plane: av.video.plane.VideoPlane, src: np.ndarray, fill_valu
 
 @functools.cache
 def get_pix_fmt_channels(pix_fmt: str) -> int:
-    """Return the number of components (channels) for *pix_fmt*."""
+    """返回 *pix_fmt* 的分量（通道）数量。"""
     return len(av.VideoFormat(pix_fmt).components)
 
 
 @functools.cache
 def get_codec(vcodec: str) -> av.codec.Codec | None:
-    """PyAV write-mode ``Codec`` for *vcodec*, or ``None`` if unavailable."""
+    """返回 *vcodec* 的 PyAV 写入模式 ``Codec``，如果不可用则返回 ``None``。"""
     try:
         return av.codec.Codec(vcodec, "w")
     except Exception:
@@ -71,7 +71,7 @@ def get_codec(vcodec: str) -> av.codec.Codec | None:
 
 @functools.cache
 def _get_codec_options_by_name(vcodec: str) -> dict[str, av.option.Option]:
-    """Private-option name → PyAV ``Option`` for *vcodec* (empty if unavailable)."""
+    """*vcodec* 的私有选项名称 → PyAV ``Option`` 映射（不可用时为空）。"""
     codec = get_codec(vcodec)
     if codec is None:
         return {}
@@ -80,7 +80,7 @@ def _get_codec_options_by_name(vcodec: str) -> dict[str, av.option.Option]:
 
 @functools.cache
 def _get_codec_video_formats(vcodec: str) -> tuple[str, ...]:
-    """Pixel formats accepted by *vcodec* in PyAV's preferred order (empty if unknown)."""
+    """*vcodec* 按 PyAV 首选顺序接受的像素格式（未知时为空）。"""
     codec = get_codec(vcodec)
     if codec is None:
         return ()
@@ -88,9 +88,9 @@ def _get_codec_video_formats(vcodec: str) -> tuple[str, ...]:
 
 
 def detect_available_encoders_pyav(encoders: list[str] | str) -> list[str]:
-    """Return the subset of *encoders* available as video encoders in the local FFmpeg build.
+    """返回 *encoders* 中在本地 FFmpeg 构建中可用作视频编码器的子集。
 
-    Each name is probed directly via :func:`get_codec`; input order is preserved.
+    每个名称都通过 :func:`get_codec` 直接探测；保留输入顺序。
     """
     if isinstance(encoders, str):
         encoders = [encoders]
@@ -106,7 +106,7 @@ def detect_available_encoders_pyav(encoders: list[str] | str) -> list[str]:
 
 
 def _check_option_value(vcodec: str, label: str, value: Any, opt: av.option.Option) -> None:
-    """Range-check numeric *value* and choice-check string *value* against *opt*."""
+    """对数值型 *value* 做范围检查，对字符串型 *value* 做选项检查，依据是 *opt*。"""
     type_name = opt.type.name
     if type_name in FFMPEG_NUMERIC_OPTION_TYPES:
         if isinstance(value, bool):
@@ -127,14 +127,14 @@ def _check_option_value(vcodec: str, label: str, value: Any, opt: av.option.Opti
                 f"{label}={value!r} is not numeric; codec {vcodec!r} expects a number for this option."
             )
 
-        # Check integer type compatibility
+        # 检查整数类型兼容性
         if type_name in FFMPEG_INTEGER_OPTION_TYPES and not num_val.is_integer():
             raise ValueError(
                 f"{label}={num_val!r} must be an integer for codec {vcodec!r} "
                 f"(FFmpeg option {opt.name!r} is {type_name}); float values are not allowed."
             )
 
-        # Check numeric range compatibility
+        # 检查数值范围兼容性
         lo, hi = float(opt.min), float(opt.max)
         if lo < hi and not (lo <= num_val <= hi):
             raise ValueError(
@@ -151,7 +151,7 @@ def _check_option_value(vcodec: str, label: str, value: Any, opt: av.option.Opti
         else:
             raise ValueError(f"{label}={value!r} has unsupported type for STRING option on codec {vcodec!r}")
 
-        # Check string choice compatibility
+        # 检查字符串选项兼容性
         choices = [c.name for c in (opt.choices or [])]
         if choices and str_val not in choices:
             raise ValueError(
@@ -172,7 +172,7 @@ def _check_pixel_format(vcodec: str, pix_fmt: str) -> None:
 
 
 def _check_pix_fmt_channels(pix_fmt: str, channels: int) -> None:
-    """Ensure *pix_fmt* can carry at least *channels* components."""
+    """确保 *pix_fmt* 至少能承载 *channels* 个分量。"""
     pix_fmt_channels = get_pix_fmt_channels(pix_fmt)
     if pix_fmt_channels < channels:
         raise ValueError(
@@ -182,10 +182,10 @@ def _check_pix_fmt_channels(pix_fmt: str, channels: int) -> None:
 
 
 def _check_codec_options(vcodec: str, codec_options: dict[str, Any]) -> None:
-    """Validate merged encoder options (typed) against the codec's published AVOptions."""
+    """根据编解码器公开的 AVOptions 验证（带类型的）合并后的编码器选项。"""
     supported_options = _get_codec_options_by_name(vcodec)
     for key, value in codec_options.items():
-        # GOP size is not a codec-specific option, it has to be validated separately.
+        # GOP 大小不是编解码器特定的选项，必须单独验证。
         if key == "g":
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"g={value!r} must be a positive integer for codec {vcodec!r}")
@@ -201,16 +201,16 @@ def check_video_encoder_parameters_pyav(
     codec_options: dict[str, Any],
     channels: int | None = None,
 ) -> None:
-    """Verify *config* is compatible with the bundled FFmpeg build.
+    """验证 *config* 与捆绑的 FFmpeg 构建兼容。
 
-    Checks pixel format, abstract tuning-field compatibility, and each merged
-    encoder option from :meth:`~lerobot.configs.video.VideoEncoderConfig.get_codec_options`
-    against PyAV (including numeric ``extra_options`` present in that dict).
-    When given, additionally verify that *pix_fmt* carries as many components as the source data channels.
-    No-op when ``config.vcodec`` isn't in the local FFmpeg build.
+    根据 PyAV 检查像素格式、抽象调优字段兼容性，以及来自
+    :meth:`~lerobot.configs.video.VideoEncoderConfig.get_codec_options` 的每个合并后的
+    编码器选项（包括该字典中存在的数值型 ``extra_options``）。
+    如果给定，还会验证 *pix_fmt* 承载的分量数量与源数据通道数一致。
+    当 ``config.vcodec`` 不在本地 FFmpeg 构建中时为空操作。
 
     Raises:
-        ValueError: on the first incompatibility encountered.
+        ValueError: 遇到第一个不兼容项时抛出。
     """
     options = _get_codec_options_by_name(vcodec)
     if not options:

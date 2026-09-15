@@ -15,9 +15,9 @@
 # limitations under the License.
 
 """
-Script to find joint limits and end-effector bounds via teleoperation.
+通过遥操作查找关节限位和末端执行器边界的脚本。
 
-Example:
+示例：
 
 ```shell
 lerobot-find-joint-limits \
@@ -77,17 +77,17 @@ class FindJointLimitsConfig:
     teleop: TeleoperatorConfig
     robot: RobotConfig
 
-    # Path to URDF file for kinematics
-    # NOTE: It is highly recommended to use the urdf in the SO-ARM100 repo:
+    # 用于运动学的 URDF 文件路径
+    # 注意：强烈建议使用 SO-ARM100 仓库中的 urdf：
     # https://github.com/TheRobotStudio/SO-ARM100/blob/main/Simulation/SO101/so101_new_calib.urdf
     urdf_path: str
     target_frame_name: str = "gripper"
 
-    # Duration of the recording phase in seconds
+    # 录制阶段的时长（秒）
     teleop_time_s: float = 30
-    # Duration of the warmup phase in seconds
+    # 预热阶段的时长（秒）
     warmup_time_s: float = 5
-    # Control loop frequency
+    # 控制循环频率
     control_loop_fps: int = 30
 
 
@@ -101,7 +101,7 @@ def find_joint_and_ee_bounds(cfg: FindJointLimitsConfig):
     robot.connect()
     print("Devices connected.")
 
-    # Initialize Kinematics
+    # 初始化运动学
     try:
         kinematics = RobotKinematics(cfg.urdf_path, cfg.target_frame_name)
     except Exception as e:
@@ -111,7 +111,7 @@ def find_joint_and_ee_bounds(cfg: FindJointLimitsConfig):
         teleop.disconnect()
         return
 
-    # Initialize variables
+    # 初始化变量
     max_pos = None
     min_pos = None
     max_ee = None
@@ -130,28 +130,28 @@ def find_joint_and_ee_bounds(cfg: FindJointLimitsConfig):
         while True:
             t0 = time.perf_counter()
 
-            # 1. Teleoperation Control Loop
+            # 1. 遥操作控制循环
             action = teleop.get_action()
             robot.send_action(action)
 
-            # 2. Read Observations
+            # 2. 读取观测
             observation = robot.get_observation()
             joint_positions = np.array([observation[f"{key}.pos"] for key in robot.bus.motors])
 
-            # 3. Calculate Kinematics
-            # Forward kinematics to get (x, y, z) translation
+            # 3. 计算运动学
+            # 通过正向运动学获取 (x, y, z) 平移
             ee_pos = kinematics.forward_kinematics(joint_positions)[:3, 3]
 
             current_time = time.perf_counter()
             elapsed = current_time - start_t
 
-            # 4. Handle Phases
+            # 4. 处理各阶段
             if elapsed < cfg.warmup_time_s:
-                # Still in warmup
+                # 仍处于预热阶段
                 pass
 
             else:
-                # Phase Transition: Warmup -> Recording
+                # 阶段切换：预热 -> 录制
                 if not warmup_done:
                     print("\n" + "=" * 40)
                     print("  RECORDING STARTED")
@@ -159,24 +159,24 @@ def find_joint_and_ee_bounds(cfg: FindJointLimitsConfig):
                     print("  Press Ctrl+C to stop early and save results.")
                     print("=" * 40 + "\n")
 
-                    # Initialize limits with current position at start of recording
+                    # 在录制开始时用当前位置初始化限位
                     max_pos = joint_positions.copy()
                     min_pos = joint_positions.copy()
                     max_ee = ee_pos.copy()
                     min_ee = ee_pos.copy()
                     warmup_done = True
 
-                # Update Limits
+                # 更新限位
                 max_ee = np.maximum(max_ee, ee_pos)
                 min_ee = np.minimum(min_ee, ee_pos)
                 max_pos = np.maximum(max_pos, joint_positions)
                 min_pos = np.minimum(min_pos, joint_positions)
 
-                # Time check
+                # 时间检查
                 recording_time = elapsed - cfg.warmup_time_s
                 remaining = cfg.teleop_time_s - recording_time
 
-                # Simple throttle for print statements (every ~1 sec)
+                # 对打印语句做简单的节流（约每 1 秒一次）
                 if int(recording_time * 100) % 100 == 0:
                     print(f"Time remaining: {remaining:.1f}s", end="\r")
 
@@ -190,18 +190,18 @@ def find_joint_and_ee_bounds(cfg: FindJointLimitsConfig):
         print("\n\nInterrupted by user. Stopping safely...")
 
     finally:
-        # Safety: Disconnect devices
+        # 安全起见：断开设备连接
         print("\nDisconnecting devices...")
         robot.disconnect()
         teleop.disconnect()
 
-    # Results Output
+    # 结果输出
     if max_pos is not None:
         print("\n" + "=" * 40)
         print("FINAL RESULTS")
         print("=" * 40)
 
-        # Rounding for readability
+        # 四舍五入以便阅读
         r_max_ee = np.round(max_ee, 4).tolist()
         r_min_ee = np.round(min_ee, 4).tolist()
         r_max_pos = np.round(max_pos, 4).tolist()

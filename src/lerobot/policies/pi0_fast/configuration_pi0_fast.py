@@ -30,71 +30,71 @@ DEFAULT_IMAGE_SIZE = 224
 class PI0FastConfig(PreTrainedConfig):
     paligemma_variant: str = "gemma_2b"
     action_expert_variant: str = "gemma_300m"
-    dtype: str = "float32"  # Options: "bfloat16", "float32"
+    dtype: str = "float32"  # 可选项："bfloat16"、"float32"
 
-    chunk_size: int = 50  # Number of action steps to predict, in openpi called "action_horizon"
-    n_action_steps: int = 50  # Number of action steps to execute
+    chunk_size: int = 50  # 要预测的动作步数，在 openpi 中称为 "action_horizon"
+    n_action_steps: int = 50  # 要执行的动作步数
 
-    # Shorter state and action vectors will be padded to these dimensions
+    # 较短的状态和动作向量将被填充到这些维度
     max_state_dim: int = 32
     max_action_dim: int = 32
     max_action_tokens: int = 256
 
-    # Relative actions: converts absolute actions to relative (relative to state).
+    # 相对动作：将绝对动作转换为相对动作（相对于状态）。
     use_relative_actions: bool = False
-    # Joint names to exclude from relative (kept absolute). Empty list = all dims relative.
+    # 要从相对动作中排除（保持绝对）的关节名称。空列表 = 所有维度均为相对。
     relative_exclude_joints: list[str] = field(default_factory=lambda: ["gripper"])
-    # Populated at runtime from dataset metadata by make_policy.
+    # 由 make_policy 在运行时根据数据集元数据填充。
     action_feature_names: list[str] | None = None
 
-    # Real-Time Chunking (RTC) configuration
+    # 实时分块（Real-Time Chunking, RTC）配置
     rtc_config: RTCConfig | None = None
 
     image_resolution: tuple[int, int] = (
         DEFAULT_IMAGE_SIZE,
         DEFAULT_IMAGE_SIZE,
-    )  # see openpi `preprocessing_pytorch.py`
+    )  # 参见 openpi `preprocessing_pytorch.py`
 
-    # Add empty images. Used to add empty cameras when no image features are present.
+    # 添加空图像。用于在不存在图像特征时添加空相机。
     empty_cameras: int = 0
 
-    tokenizer_max_length: int = 200  # see openpi `__post_init__`
+    tokenizer_max_length: int = 200  # 参见 openpi `__post_init__`
     text_tokenizer_name: str = "google/paligemma-3b-pt-224"
     action_tokenizer_name: str = "lerobot/fast-action-tokenizer"
     temperature: float = 0.0
     max_decoding_steps: int = 256
     fast_skip_tokens: int = 128
 
-    # Whether to validate that decoded action tokens start with "Action: " prefix
+    # 是否校验解码后的动作 token 以 "Action: " 前缀开头
     validate_action_token_prefix: bool = True
 
-    # Whether to use KV cache for faster autoregressive decoding
+    # 是否使用 KV 缓存以加快自回归解码
     use_kv_cache: bool = True
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.IDENTITY,
-            "STATE": NormalizationMode.MEAN_STD,  # Pi0Fast uses quantiles for state
-            "ACTION": NormalizationMode.MEAN_STD,  # Pi0Fast uses quantiles for action
+            "STATE": NormalizationMode.MEAN_STD,  # Pi0Fast 对状态使用分位数
+            "ACTION": NormalizationMode.MEAN_STD,  # Pi0Fast 对动作使用分位数
         }
     )
 
-    # Training settings
-    gradient_checkpointing: bool = False  # Enable gradient checkpointing for memory optimization
-    compile_model: bool = False  # Whether to use torch.compile for model optimization
-    compile_mode: str = "max-autotune"  # Torch compile mode
-    device: str | None = None  # Device to use for the model (None = auto-detect)
+    # 训练设置
+    gradient_checkpointing: bool = False  # 启用梯度检查点以优化显存
+    compile_model: bool = False  # 是否使用 torch.compile 优化模型
+    compile_mode: str = "max-autotune"  # Torch 编译模式
+    device: str | None = None  # 模型使用的设备（None = 自动检测）
 
-    # Optimizer settings: see openpi `AdamW`
-    optimizer_lr: float = 2.5e-5  # see openpi `CosineDecaySchedule: peak_lr`
+    # 优化器设置：参见 openpi `AdamW`
+    optimizer_lr: float = 2.5e-5  # 参见 openpi `CosineDecaySchedule: peak_lr`
     optimizer_betas: tuple[float, float] = (0.9, 0.95)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 0.01
     optimizer_grad_clip_norm: float = 1.0
 
-    # Scheduler settings: see openpi `CosineDecaySchedule`
-    # Note: These will auto-scale if --steps < scheduler_decay_steps
-    # For example, --steps=3000 will scale warmup to 100 and decay to 3000
+    # 调度器设置：参见 openpi `CosineDecaySchedule`
+    # 注意：如果 --steps < scheduler_decay_steps，这些值会自动缩放
+    # 例如，--steps=3000 会将 warmup 缩放为 100，将衰减缩放为 3000
     scheduler_warmup_steps: int = 1_000
     scheduler_decay_steps: int = 30_000
     scheduler_decay_lr: float = 2.5e-6
@@ -102,7 +102,7 @@ class PI0FastConfig(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        # Validate configuration
+        # 校验配置
         if self.n_action_steps > self.chunk_size:
             raise ValueError(
                 f"n_action_steps ({self.n_action_steps}) cannot be greater than chunk_size ({self.chunk_size})"
@@ -115,26 +115,26 @@ class PI0FastConfig(PreTrainedConfig):
             raise ValueError(f"Invalid dtype: {self.dtype}")
 
     def validate_features(self) -> None:
-        """Validate and set up input/output features."""
+        """校验并设置输入/输出特征。"""
         for i in range(self.empty_cameras):
             key = OBS_IMAGES + f".empty_camera_{i}"
             empty_camera = PolicyFeature(
                 type=FeatureType.VISUAL,
-                shape=(3, *self.image_resolution),  # Use configured image resolution
+                shape=(3, *self.image_resolution),  # 使用配置的图像分辨率
             )
             self.input_features[key] = empty_camera
 
         if OBS_STATE not in self.input_features:
             state_feature = PolicyFeature(
                 type=FeatureType.STATE,
-                shape=(self.max_state_dim,),  # Padded to max_state_dim
+                shape=(self.max_state_dim,),  # 填充到 max_state_dim
             )
             self.input_features[OBS_STATE] = state_feature
 
         if ACTION not in self.output_features:
             action_feature = PolicyFeature(
                 type=FeatureType.ACTION,
-                shape=(self.max_action_dim,),  # Padded to max_action_dim
+                shape=(self.max_action_dim,),  # 填充到 max_action_dim
             )
             self.output_features[ACTION] = action_feature
 

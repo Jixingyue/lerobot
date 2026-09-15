@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Rank utilities and post-`prepare()` sharding finalization."""
+"""Rank 工具以及 `prepare()` 之后的分片收尾。"""
 
 import logging
 from typing import TYPE_CHECKING
@@ -26,34 +26,33 @@ if TYPE_CHECKING:
 
 
 def is_main_process() -> bool:
-    """True on the process that owns rank-0-only side effects (file writes, uploads, logging).
+    """在拥有仅限 rank 0 的副作用（文件写入、上传、日志记录）的进程上为 True。
 
-    Torch-native on purpose: persistence code must not depend on an `Accelerator` handle —
-    `_save_pretrained` and the hub publishers run in contexts that have none. Outside
-    distributed runs every process is the main process.
+    有意使用 Torch 原生实现：持久化代码不能依赖 `Accelerator` 句柄 ——
+    `_save_pretrained` 和 hub 发布器运行的上下文中没有它。在非分布式
+    运行中，每个进程都是主进程。
 
     Returns:
-        bool: True when this process is rank 0 or no process group is initialized.
+        bool: 当本进程是 rank 0 或未初始化进程组时为 True。
     """
     return not dist.is_initialized() or dist.get_rank() == 0
 
 
 def strip_accelerate_cp_hooks(model: nn.Module) -> int:
-    """Remove accelerate's context-parallel forward-pre-hooks from every module.
+    """从每个模块上移除 accelerate 的上下文并行 forward-pre-hook。
 
-    When `cp_size > 1` is declared, `accelerator.prepare()` unconditionally attaches hooks that
-    silently replace any `attention_mask` kwarg of `*self_attn` modules with `is_causal=True`
-    (`accelerate.big_modeling._attach_context_parallel_hooks`) — mask corruption for policies
-    with non-causal attention. LeRobot implements CP itself and never enters accelerate's CP
-    context, so these hooks are pure hazard. Deterministically identified by their defining
-    module; a version canary pins that identity.
+    当声明了 `cp_size > 1` 时，`accelerator.prepare()` 会无条件地附加 hook，
+    将 `*self_attn` 模块的任何 `attention_mask` kwarg 静默替换为 `is_causal=True`
+    （`accelerate.big_modeling._attach_context_parallel_hooks`）—— 对于使用非因果
+    注意力的策略，这会破坏 mask。LeRobot 自己实现 CP，从不进入 accelerate 的 CP
+    上下文，因此这些 hook 纯属隐患。可通过其定义模块确定性地识别；
+    版本金丝雀固定了该标识。
 
     Args:
-        model (nn.Module): The prepared model to strip the hooks from (all submodules are
-            visited).
+        model (nn.Module): 要移除 hook 的已 prepare 模型（会访问所有子模块）。
 
     Returns:
-        int: The number of hooks removed.
+        int: 移除的 hook 数量。
     """
     removed = 0
     for module in model.modules():
@@ -66,19 +65,18 @@ def strip_accelerate_cp_hooks(model: nn.Module) -> int:
 
 
 def finalize_sharded_policy(policy: nn.Module, parallel_dims: "ParallelDims") -> None:
-    """Sharding correctness protocol, applied once, immediately after `accelerator.prepare()`.
+    """分片正确性协议，在 `accelerator.prepare()` 之后立即应用一次。
 
-    1. Strip accelerate's CP mask hooks (only attached when cp > 1 was declared).
-    2. Register the policy's non-`forward` entry points (`_fsdp_forward_methods`) so FSDP2
-       unshards parameters around `select_action` & co. — without this, any inference-style
-       call on a sharded policy crashes on mixed Tensor/DTensor.
+    1. 移除 accelerate 的 CP mask hook（仅在声明了 cp > 1 时才附加）。
+    2. 注册策略的非 `forward` 入口点（`_fsdp_forward_methods`），使 FSDP2
+       在 `select_action` 等方法周围取消分片参数 —— 没有它，对分片策略的
+       任何推理式调用都会因混合 Tensor/DTensor 而崩溃。
 
-    No-op for DDP/single-process runs.
+    对 DDP/单进程运行为空操作。
 
     Args:
-        policy (nn.Module): The policy as returned by `accelerator.prepare()`.
-        parallel_dims (ParallelDims): The run's resolved topology; decides whether the protocol
-            applies.
+        policy (nn.Module): `accelerator.prepare()` 返回的策略。
+        parallel_dims (ParallelDims): 本次运行解析后的拓扑；决定是否应用该协议。
     """
     if not parallel_dims.is_sharded:
         return

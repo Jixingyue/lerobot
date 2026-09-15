@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Reinforcement learning modules.
+"""强化学习模块。
 
-Distributed actor / learner entry points (``actor``, ``learner``,
-``learner_service``) require ``pip install 'lerobot[hilserl]'``. Algorithms,
-buffer, data sources and trainer are gRPC-free and usable standalone.
+分布式 actor / learner 入口（``actor``、``learner``、
+``learner_service``）需要 ``pip install 'lerobot[hilserl]'``。算法、
+缓冲区、数据源和训练器不依赖 gRPC，可独立使用。
 """
 
 from .algorithms.base import RLAlgorithm as RLAlgorithm

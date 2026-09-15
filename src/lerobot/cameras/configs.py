@@ -18,7 +18,7 @@ import abc
 from dataclasses import dataclass
 from enum import Enum
 
-import draccus  # type: ignore  # TODO: add type stubs for draccus
+import draccus  # type: ignore  # TODO: 为 draccus 添加类型存根
 
 
 class ColorMode(str, Enum):
@@ -41,7 +41,7 @@ class Cv2Rotation(int, Enum):
         raise ValueError(f"`rotation` is expected to be in {list(cls)}, but {value} is provided.")
 
 
-# Subset from https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html
+# 来自 https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html 的子集
 class Cv2Backends(int, Enum):
     ANY = 0
     V4L2 = 200
@@ -57,7 +57,7 @@ class Cv2Backends(int, Enum):
 
 
 @dataclass(kw_only=True)
-class CameraConfig(draccus.ChoiceRegistry, abc.ABC):  # type: ignore  # TODO: add type stubs for draccus
+class CameraConfig(draccus.ChoiceRegistry, abc.ABC):  # type: ignore  # TODO: 为 draccus 添加类型存根
     fps: int | None = None
     width: int | None = None
     height: int | None = None

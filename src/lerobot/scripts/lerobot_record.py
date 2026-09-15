@@ -13,13 +13,13 @@
 # limitations under the License.
 
 """
-Records a dataset via teleoperation.  This is a pure data-collection
-tool — no policy inference.  For deploying trained policies, use
-``lerobot-rollout`` instead.
+通过遥操作（teleoperation）录制数据集。这是一个纯粹的数据采集
+工具——不包含任何策略推理。如需部署训练好的策略，请改用
+``lerobot-rollout``。
 
-Requires: pip install 'lerobot[core_scripts]'  (includes dataset + hardware + viz extras)
+需要：pip install 'lerobot[core_scripts]'  （包含 dataset、hardware 和 viz 附加依赖）
 
-Example:
+示例：
 
 ```shell
 lerobot-record \\
@@ -38,10 +38,10 @@ lerobot-record \\
     --display_data=true
 ```
 
-To stream the data to Foxglove instead of Rerun, add ``--display_mode=foxglove`` (then connect the
-Foxglove app to ``ws://127.0.0.1:8765``; override the port with ``--display_port=<port>``).
+如果要将数据流式传输到 Foxglove 而不是 Rerun，请添加 ``--display_mode=foxglove``（然后将
+Foxglove 应用连接到 ``ws://127.0.0.1:8765``；可通过 ``--display_port=<port>`` 覆盖端口）。
 
-Example recording with bimanual so100:
+使用双臂 so100 录制的示例：
 ```shell
 lerobot-record \\
   --robot.type=bi_so_follower \\
@@ -67,7 +67,7 @@ lerobot-record \\
   --dataset.encoder_threads=2
 ```
 
-Example recording with custom video encoding parameters:
+使用自定义视频编码参数录制的示例：
 ```shell
 lerobot-record \\
     --robot.type=so100_follower \\
@@ -171,22 +171,22 @@ from lerobot.utils.visualization_utils import (
 class RecordConfig:
     robot: RobotConfig
     dataset: DatasetRecordConfig
-    # Teleoperator to control the robot (required)
+    # 用于控制机器人的遥操作器（必填）
     teleop: TeleoperatorConfig | None = None
-    # Display all cameras on screen
+    # 在屏幕上显示所有相机画面
     display_data: bool = False
-    # Visualization backend used when display_data is True: "rerun" or "foxglove".
+    # display_data 为 True 时使用的可视化后端："rerun" 或 "foxglove"。
     display_mode: str = "rerun"
-    # For "rerun": IP of a remote server to send to. For "foxglove": interface to bind the WebSocket
-    # server to (127.0.0.1 for local only, 0.0.0.0 for all interfaces).
+    # 对于 "rerun"：要发送到的远程服务器 IP。对于 "foxglove"：WebSocket
+    # 服务器绑定的网卡接口（127.0.0.1 表示仅本地，0.0.0.0 表示所有接口）。
     display_ip: str | None = None
-    # For "rerun": port of the remote server. For "foxglove": port to bind the WebSocket server to.
+    # 对于 "rerun"：远程服务器的端口。对于 "foxglove"：WebSocket 服务器绑定的端口。
     display_port: int | None = None
-    # Whether to display compressed (JPEG) images instead of raw frames
+    # 是否显示压缩（JPEG）图像而不是原始帧
     display_compressed_images: bool = False
-    # Use vocal synthesis to read events.
+    # 使用语音合成播报事件。
     play_sounds: bool = True
-    # Resume recording on an existing dataset.
+    # 在已有数据集上继续录制。
     resume: bool = False
 
     def __post_init__(self):
@@ -231,13 +231,13 @@ def record_loop(
     fps: int,
     teleop_action_processor: RobotProcessorPipeline[
         tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs after teleop
+    ],  # 在遥操作器之后运行
     robot_action_processor: RobotProcessorPipeline[
         tuple[RobotAction, RobotObservation], RobotAction
-    ],  # runs before robot
+    ],  # 在机器人之前运行
     robot_observation_processor: RobotProcessorPipeline[
         RobotObservation, RobotObservation
-    ],  # runs after robot
+    ],  # 在机器人之后运行
     dataset: LeRobotDataset | None = None,
     teleop: Teleoperator | list[Teleoperator] | None = None,
     control_time_s: int | None = None,
@@ -247,14 +247,14 @@ def record_loop(
     display_compressed_images: bool = False,
     timer: CycleTimer | None = None,
 ):
-    """Drive the robot from the teleoperator at *fps*, optionally recording each frame.
+    """以 *fps* 的频率由遥操作器驱动机器人，并可选择录制每一帧。
 
-    *timer* lets a caller that runs several phases — :func:`record` records one episode
-    per call, with an unrecorded reset phase in between — keep one
-    :class:`~lerobot.utils.cycle_timer.CycleTimer` across all of them, so the cadence
-    statistics span the whole session and are reported per episode.  Without it each
-    call gets a private timer: identical pacing and identical slow-loop warnings, just
-    no end-of-run summary, since a single phase has no run to summarise.
+    *timer* 让运行多个阶段的调用方能够在所有阶段之间共用同一个
+    :class:`~lerobot.utils.cycle_timer.CycleTimer`——:func:`record` 每次调用
+    录制一个 episode，两次调用之间还有一个不录制的重置阶段——从而使节拍
+    统计覆盖整个会话，并按 episode 报告。如果不提供，每次调用都会获得一个
+    私有的计时器：节奏和慢循环警告完全相同，只是没有运行结束时的汇总，
+    因为单个阶段不存在可供汇总的完整运行。
     """
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -291,8 +291,8 @@ def record_loop(
     timestamp = 0
     start_episode_t = time.perf_counter()
     while timestamp < control_time_s:
-        # Checked before `tick()`: this iteration is not a control tick, so it should not
-        # be timed as one.
+        # 在 `tick()` 之前检查：本次迭代不是一个控制节拍，因此不应
+        # 将其计入节拍计时。
         if events["exit_early"]:
             events["exit_early"] = False
             break
@@ -300,24 +300,24 @@ def record_loop(
         timer.tick()
 
         with timer.section("observe"):
-            # Get robot observation
+            # 获取机器人观测
             obs = robot.get_observation()
 
         with timer.section("process_obs"):
-            # Applies a pipeline to the raw robot observation, default is IdentityProcessor
+            # 对原始机器人观测应用流水线，默认为 IdentityProcessor
             obs_processed = robot_observation_processor(obs)
 
             if dataset is not None:
                 observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
 
         with timer.section("teleop"):
-            # Get action from teleop
+            # 从遥操作器获取动作
             if isinstance(teleop, Teleoperator):
                 act = teleop.get_action()
                 if robot.name == "unitree_g1":
                     teleop.send_feedback(obs)
 
-                # Applies a pipeline to the raw teleop action, default is IdentityProcessor
+                # 对原始遥操作动作应用流水线，默认为 IdentityProcessor
                 act_processed_teleop = teleop_action_processor((act, obs))
                 action_values = act_processed_teleop
                 robot_action_to_send = robot_action_processor((act_processed_teleop, obs))
@@ -341,22 +341,23 @@ def record_loop(
                         "The robot won't be at its rest position at the start of the next episode."
                     )
 
-        # Nothing to send and nothing to record, but the phase still has to be paced and
-        # still has to end: `continue`ing straight past the tail of the loop body used to
-        # spin at full CPU speed on a `control_time_s` that never advanced.
+        # 没有需要发送的内容，也没有需要录制的内容，但该阶段仍然需要保持节拍，
+        # 也仍然需要结束：过去直接 `continue` 跳过循环体剩余部分的做法，会在
+        # `control_time_s` 始终不推进时以满 CPU 速度空转。
         if robot_action_to_send is None:
             timer.wait()
             timestamp = time.perf_counter() - start_episode_t
             continue
 
         with timer.section("send"):
-            # Send action to robot
-            # Action can eventually be clipped using `max_relative_target`,
-            # so action actually sent is saved in the dataset. action = postprocessor.process(action)
-            # TODO(steven, pepijn, adil): we should use a pipeline step to clip the action, so the sent action is the action that we input to the robot.
+            # 向机器人发送动作
+            # 动作最终可能会通过 `max_relative_target` 被裁剪，
+            # 因此实际发送的动作会被保存到数据集中。action = postprocessor.process(action)
+            # TODO(steven, pepijn, adil)：我们应当使用一个流水线步骤来裁剪动作，
+            # 从而使发送的动作就是我们输入给机器人的动作。
             _sent_action = robot.send_action(robot_action_to_send)
 
-        # Write to dataset
+        # 写入数据集
         if dataset is not None:
             with timer.section("record"):
                 action_frame = build_dataset_frame(dataset.features, action_values, prefix=ACTION)
@@ -399,7 +400,7 @@ def record(
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
 
-    # Fall back to identity pipelines when the caller doesn't supply processors.
+    # 当调用方未提供处理器时，回退到恒等（identity）流水线。
     if (
         teleop_action_processor is None
         or robot_action_processor is None
@@ -415,7 +416,7 @@ def record(
             pipeline=teleop_action_processor,
             initial_features=create_initial_features(
                 action=robot.action_features
-            ),  # TODO(steven, pepijn): in future this should be come from teleop or policy
+            ),  # TODO(steven, pepijn)：将来这应当来自遥操作器或策略
             use_videos=cfg.dataset.video,
         ),
         aggregate_pipeline_dataset_features(
@@ -427,10 +428,10 @@ def record(
 
     dataset = None
     listener = None
-    # One timer for the whole session, so its statistics describe the recording rather
-    # than one episode's slice of it.  The reset phases below deliberately run on their
-    # own private timers: they write no frames, so folding their ticks in would dilute
-    # every number that answers "did I record at `fps`?".
+    # 整个会话共用一个计时器，这样它的统计描述的是整个录制过程，
+    # 而不是其中某一个 episode 的片段。下面的重置阶段特意使用各自
+    # 私有的计时器运行：它们不写入任何帧，因此把它们的节拍折算进来
+    # 会稀释所有回答“我是否按 `fps` 录制？”的数值。
     timer = CycleTimer(cfg.dataset.fps)
 
     try:
@@ -452,7 +453,7 @@ def record(
             )
             sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
         else:
-            # Reject eval_ prefix — for policy evaluation use lerobot-rollout
+            # 拒绝 eval_ 前缀——策略评估请使用 lerobot-rollout
             repo_name = cfg.dataset.repo_id.split("/", 1)[-1]
             if repo_name.startswith("eval_"):
                 raise ValueError(
@@ -477,8 +478,8 @@ def record(
                 encoder_queue_maxsize=cfg.dataset.encoder_queue_maxsize,
             )
 
-        # Connect the teleoperator before the robot so the robot isn't left idle (and possibly
-        # tripping a firmware watchdog) during teleop init. Matches lerobot_teleoperate.py.
+        # 先连接遥操作器，再连接机器人，这样在遥操作器初始化期间机器人不会
+        # 一直处于空闲状态（并可能触发固件看门狗）。与 lerobot_teleoperate.py 一致。
         if teleop is not None:
             teleop.connect()
         robot.connect()
@@ -512,8 +513,8 @@ def record(
                     timer=timer,
                 )
 
-                # Execute a few seconds without recording to give time to manually reset the environment
-                # Skip reset for the last episode to be recorded
+                # 在不录制的情况下运行几秒钟，留出时间手动重置环境
+                # 对最后一个待录制的 episode 跳过重置
                 if not events["stop_recording"] and (
                     (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
                 ):
@@ -545,16 +546,16 @@ def record(
 
                 dataset.save_episode()
                 recorded_episodes += 1
-                # Close the window on the episode just saved.  The digest is emitted on
-                # the next episode's first tick, so the reset phase, `save_episode` and
-                # the spoken prompts in between are excluded from the cadence instead of
-                # being charged to whichever episode they sit next to.  `restart()` then
-                # exempts that first tick, whose cameras have been idle for seconds.
+                # 在此关闭刚刚保存的 episode 的统计窗口。摘要会在下一个
+                # episode 的第一个节拍时发出，因此重置阶段、`save_episode`
+                # 以及其间的语音提示都会被排除在节拍统计之外，而不会被算到
+                # 它们恰好相邻的某个 episode 头上。随后 `restart()` 会把
+                # 第一个节拍也豁免掉，因为那时相机已经空闲了数秒。
                 timer.log_episode_summary(f"episode {episode_index}")
                 timer.restart()
     finally:
-        # First, and in `finally`: ^C is how most recording sessions end, and the summary
-        # is most useful before the video encoding and the hub upload scroll it away.
+        # 首先（并且放在 `finally` 中）：大多数录制会话都是通过 ^C 结束的，
+        # 而汇总在视频编码和 hub 上传把它刷走之前最有用。
         timer.log_run_summary()
 
         log_say("Stop recording", cfg.play_sounds, blocking=True)

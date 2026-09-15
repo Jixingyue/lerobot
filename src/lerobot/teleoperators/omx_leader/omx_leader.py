@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 class OmxLeader(Teleoperator):
     """
-    - [OMX](https://github.com/ROBOTIS-GIT/open_manipulator),
-        expansion, developed by Woojin Wie and Junha Cha from [ROBOTIS](https://ai.robotis.com/)
+    - [OMX](https://github.com/ROBOTIS-GIT/open_manipulator)，
+        扩展版本，由 [ROBOTIS](https://ai.robotis.com/) 的 Woojin Wie 和 Junha Cha 开发
     """
 
     config_class = OmxLeaderConfig
@@ -117,10 +117,9 @@ class OmxLeader(Teleoperator):
         self.bus.configure_motors()
         for motor in self.bus.motors:
             if motor != "gripper":
-                # Use 'extended position mode' for all motors except gripper, because in joint mode the servos
-                # can't rotate more than 360 degrees (from 0 to 4095) And some mistake can happen while
-                # assembling the arm, you could end up with a servo with a position 0 or 4095 at a crucial
-                # point
+                # 除夹爪外，所有电机都使用“扩展位置模式”，因为在关节模式下舵机无法旋转超过
+                # 360 度（从 0 到 4095），而且组装机械臂时可能会出现一些错误，导致舵机在关键
+                # 点位上处于 0 或 4095 的位置
                 self.bus.write("Operating_Mode", motor, OperatingMode.EXTENDED_POSITION.value)
 
             if motor == "gripper":
@@ -128,16 +127,16 @@ class OmxLeader(Teleoperator):
             else:
                 self.bus.write("Drive_Mode", motor, DriveMode.NON_INVERTED.value)
 
-        # Use 'position control current based' for gripper to be limited by the limit of the current.
-        # For the follower gripper, it means it can grasp an object without forcing too much even tho,
-        # its goal position is a complete grasp (both gripper fingers are ordered to join and reach a touch).
-        # For the leader gripper, it means we can use it as a physical trigger, since we can force with our finger
-        # to make it move, and it will move back to its original target position when we release the force.
+        # 夹爪使用基于电流的“位置控制”，使其受电流限制约束。
+        # 对于从动臂夹爪，这意味着即使其目标位置是完全抓取（两个夹爪手指被命令合拢并接触），
+        # 它在抓取物体时也不会过度用力。
+        # 对于主臂夹爪，这意味着我们可以将其用作物理触发器，因为我们可以用手指施力让它移动，
+        # 并在松开力时它会回到原来的目标位置。
         self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value)
         self.bus.write("Current_Limit", "gripper", 100)
         self.bus.write("Goal_Current", "gripper", 100)
         self.bus.write("Homing_Offset", "gripper", 100)
-        # Set gripper's goal pos in current position mode so that we can use it as a trigger.
+        # 在当前位置模式下设置夹爪的目标位置，以便将其用作触发器。
         self.bus.enable_torque("gripper")
         if self.is_calibrated:
             self.bus.write("Goal_Position", "gripper", self.config.gripper_open_pos)
@@ -158,7 +157,7 @@ class OmxLeader(Teleoperator):
         return action
 
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        # TODO(rcadene, aliberts): Implement force feedback
+        # TODO(rcadene, aliberts): 实现力反馈
         raise NotImplementedError
 
     @check_if_not_connected

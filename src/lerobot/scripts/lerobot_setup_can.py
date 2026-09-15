@@ -13,26 +13,26 @@
 # limitations under the License.
 
 """
-Setup and debug CAN interfaces for Damiao motors (e.g., OpenArms).
+为达妙（Damiao）电机（例如 OpenArms）配置和调试 CAN 接口。
 
-Examples:
+示例：
 
-Setup CAN interfaces with CAN FD:
+使用 CAN FD 配置 CAN 接口：
 ```shell
 lerobot-setup-can --mode=setup --interfaces=can0,can1,can2,can3
 ```
 
-Test motors on a single interface:
+测试单个接口上的电机：
 ```shell
 lerobot-setup-can --mode=test --interfaces=can0
 ```
 
-Test motors on all interfaces:
+测试所有接口上的电机：
 ```shell
 lerobot-setup-can --mode=test --interfaces=can0,can1,can2,can3
 ```
 
-Speed test:
+速度测试：
 ```shell
 lerobot-setup-can --mode=speed --interfaces=can0
 ```
@@ -62,7 +62,7 @@ MOTOR_NAMES = {
 @dataclass
 class CANSetupConfig:
     mode: str = "test"
-    interfaces: str = "can0"  # Comma-separated, e.g. "can0,can1,can2,can3"
+    interfaces: str = "can0"  # 逗号分隔，例如 "can0,can1,can2,can3"
     bitrate: int = 1000000
     data_bitrate: int = 5000000
     use_fd: bool = True
@@ -75,7 +75,7 @@ class CANSetupConfig:
 
 
 def check_interface_status(interface: str) -> tuple[bool, str, bool]:
-    """Check if CAN interface is UP and configured."""
+    """检查 CAN 接口是否处于 UP 状态并已完成配置。"""
     try:
         result = subprocess.run(["ip", "link", "show", interface], capture_output=True, text=True)  # nosec B607
         if result.returncode != 0:
@@ -94,7 +94,7 @@ def check_interface_status(interface: str) -> tuple[bool, str, bool]:
 
 
 def setup_interface(interface: str, bitrate: int, data_bitrate: int, use_fd: bool) -> bool:
-    """Configure a CAN interface."""
+    """配置 CAN 接口。"""
     try:
         subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=False, capture_output=True)  # nosec B607
 
@@ -121,7 +121,7 @@ def setup_interface(interface: str, bitrate: int, data_bitrate: int, use_fd: boo
 
 
 def test_motor(bus, motor_id: int, timeout: float, use_fd: bool):
-    """Test a single motor and return responses."""
+    """测试单个电机并返回响应。"""
     import can
 
     enable_msg = can.Message(
@@ -152,7 +152,7 @@ def test_motor(bus, motor_id: int, timeout: float, use_fd: bool):
     )
     try:
         bus.send(disable_msg)
-        bus.recv(timeout=0.1)  # Clear any pending responses
+        bus.recv(timeout=0.1)  # 清除所有待处理的响应
     except Exception:
         print(f"Error sending message to motor 0x{motor_id:02X}")
 
@@ -160,7 +160,7 @@ def test_motor(bus, motor_id: int, timeout: float, use_fd: bool):
 
 
 def test_interface(cfg: CANSetupConfig, interface: str):
-    """Test all motors on a CAN interface."""
+    """测试 CAN 接口上的所有电机。"""
     import can
 
     is_up, status, _ = check_interface_status(interface)
@@ -211,7 +211,7 @@ def test_interface(cfg: CANSetupConfig, interface: str):
 
 
 def speed_test(cfg: CANSetupConfig, interface: str):
-    """Test communication speed with motors."""
+    """测试与电机的通信速度。"""
     import can
 
     is_up, status, _ = check_interface_status(interface)
@@ -271,7 +271,7 @@ def speed_test(cfg: CANSetupConfig, interface: str):
 
 
 def run_setup(cfg: CANSetupConfig):
-    """Setup CAN interfaces."""
+    """配置 CAN 接口。"""
     print("=" * 50)
     print("CAN Interface Setup")
     print("=" * 50)
@@ -296,7 +296,7 @@ def run_setup(cfg: CANSetupConfig):
 
 
 def run_test(cfg: CANSetupConfig):
-    """Test motors on CAN interfaces."""
+    """测试 CAN 接口上的电机。"""
     print("=" * 50)
     print("CAN Motor Test")
     print("=" * 50)
@@ -326,7 +326,7 @@ def run_test(cfg: CANSetupConfig):
 
 
 def run_speed(cfg: CANSetupConfig):
-    """Run speed tests on CAN interfaces."""
+    """对 CAN 接口运行速度测试。"""
     print("=" * 50)
     print("CAN Speed Test")
     print("=" * 50)

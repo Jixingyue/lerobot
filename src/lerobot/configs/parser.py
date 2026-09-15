@@ -42,16 +42,16 @@ F = TypeVar("F", bound=Callable[..., object])
 PATH_KEY = "path"
 PLUGIN_DISCOVERY_SUFFIX = "discover_packages_path"
 
-# Storage for path args extracted from YAML/JSON config files, so that
-# get_path_arg() can find them even when they weren't passed via CLI.
+# 用于存储从 YAML/JSON 配置文件中提取的 path 参数，这样即使它们
+# 没有通过 CLI 传入，get_path_arg() 也能找到它们。
 _config_path_args: dict[str, str] = {}
 
-# Storage for non-path YAML overrides so validate() can pass them to from_pretrained.
+# 用于存储非 path 的 YAML 覆盖项，以便 validate() 将它们传递给 from_pretrained。
 _config_yaml_overrides: dict[str, list[str]] = {}
 
 
 def _flatten_to_cli_args(d: dict, prefix: str = "") -> list[str]:
-    """Recursively flatten a nested dict to CLI-style args (e.g. {"lr": 1e-4} -> ["--lr=0.0001"])."""
+    """将嵌套字典递归展平为 CLI 风格的参数（例如 {"lr": 1e-4} -> ["--lr=0.0001"]）。"""
     args = []
     for key, value in d.items():
         if key in (PATH_KEY, draccus.CHOICE_TYPE_KEY):
@@ -67,12 +67,12 @@ def _flatten_to_cli_args(d: dict, prefix: str = "") -> list[str]:
 
 
 def get_cli_overrides(field_name: str, args: Sequence[str] | None = None) -> list[str] | None:
-    """Parses arguments from cli at a given nested attribute level.
+    """在指定的嵌套属性层级解析来自 CLI 的参数。
 
-    For example, supposing the main script was called with:
+    例如，假设主脚本的调用方式为：
     python myscript.py --arg1=1 --arg2.subarg1=abc --arg2.subarg2=some/path
 
-    If called during execution of myscript.py, get_cli_overrides("arg2") will return:
+    如果在 myscript.py 执行期间调用，get_cli_overrides("arg2") 将返回：
     ["--subarg1=abc" "--subarg2=some/path"]
     """
     if args is None:
@@ -108,19 +108,19 @@ def parse_arg(arg_name: str, args: Sequence[str] | None = None) -> str | None:
 
 
 def parse_plugin_args(plugin_arg_suffix: str, args: Sequence[str]) -> dict[str, str]:
-    """Parse plugin-related arguments from command-line arguments.
+    """从命令行参数中解析插件相关的参数。
 
-    This function extracts arguments from command-line arguments that match a specified suffix pattern.
-    It accepts arguments in the formats '--key=value' and '--key value' and returns them as a dictionary.
+    此函数从命令行参数中提取匹配指定后缀模式的参数。
+    它接受 '--key=value' 和 '--key value' 格式的参数，并以字典形式返回。
 
     Args:
-        plugin_arg_suffix (str): The suffix to identify plugin-related arguments.
-        cli_args (Sequence[str]): A sequence of command-line arguments to parse.
+        plugin_arg_suffix (str): 用于识别插件相关参数的后缀。
+        cli_args (Sequence[str]): 要解析的命令行参数序列。
 
     Returns:
-        dict: A dictionary containing the parsed plugin arguments where:
-            - Keys are the argument names (with '--' prefix removed if present)
-            - Values are the corresponding argument values
+        dict: 包含解析后的插件参数的字典，其中：
+            - 键是参数名（如果存在 '--' 前缀则移除）
+            - 值是对应的参数值
 
     Example:
         >>> args = ["--env.discover_packages_path=my_package", "--other_arg=value"]
@@ -144,30 +144,29 @@ def parse_plugin_args(plugin_arg_suffix: str, args: Sequence[str]) -> dict[str, 
 
 
 class PluginLoadError(Exception):
-    """Raised when a plugin fails to load."""
+    """当插件加载失败时抛出。"""
 
 
 def load_plugin(plugin_path: str) -> None:
-    """Load and initialize a plugin from a given Python package path.
+    """从给定的 Python 包路径加载并初始化插件。
 
-    This function attempts to load a plugin by importing its package and any submodules.
-    Plugin registration is expected to happen during package initialization, i.e. when
-    the package is imported the gym environment should be registered and the config classes
-    registered with their parents using the `register_subclass` decorator.
+    此函数通过导入插件的包及其所有子模块来尝试加载插件。
+    插件注册预期发生在包初始化期间，即当包被导入时，gym 环境
+    应该被注册，配置类应该使用 `register_subclass` 装饰器注册到其父类。
 
     Args:
-        plugin_path (str): The Python package path to the plugin (e.g. "mypackage.plugins.myplugin")
+        plugin_path (str): 插件的 Python 包路径（例如 "mypackage.plugins.myplugin"）
 
     Raises:
-        PluginLoadError: If the plugin cannot be loaded due to import errors or if the package path is invalid.
+        PluginLoadError: 如果由于导入错误或包路径无效而无法加载插件。
 
     Examples:
-        >>> load_plugin("external_plugin.core")  # Loads plugin from external package
+        >>> load_plugin("external_plugin.core")  # 从外部包加载插件
 
     Notes:
-        - The plugin package should handle its own registration during import
-        - All submodules in the plugin package will be imported
-        - Implementation follows the plugin discovery pattern from Python packaging guidelines
+        - 插件包应在导入期间处理自身的注册
+        - 插件包中的所有子模块都会被导入
+        - 实现遵循 Python 打包指南中的插件发现模式
 
     See Also:
         https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/
@@ -209,11 +208,11 @@ def get_type_arg(field_name: str, args: Sequence[str] | None = None) -> str | No
 def _register_scoped_actions(
     wrapper: Wrapper, parser: SuppressingArgumentParser, cli_args: Sequence[str]
 ) -> None:
-    """Like draccus's own Wrapper.register_actions, but for a ChoiceType field only recurses into
-    the already-selected subclass (per CLI `.type` args), instead of every registered choice.
+    """类似于 draccus 自身的 Wrapper.register_actions，但对于 ChoiceType 字段，
+    只递归进入已选择的子类（根据 CLI 的 `.type` 参数），而不是每个已注册的选项。
 
-    This mirrors draccus 0.11.x's internal wrapper traversal because its public parser eagerly registers
-    every choice before parsing the command line. Keep this in sync when updating draccus.
+    这镜像了 draccus 0.11.x 内部的 wrapper 遍历逻辑，因为其公共解析器会在解析命令行之前
+    急切地注册每个选项。更新 draccus 时请保持同步。
     """
     if isinstance(wrapper, ChoiceWrapper):
         group = parser.add_argument_group(title=wrapper.title, description=wrapper.description)
@@ -253,8 +252,8 @@ def _register_scoped_actions(
 
 
 def print_scoped_help(config_class: type, cli_args: Sequence[str]) -> None:
-    """Prints --help output scoped to the choices already resolved on the CLI (e.g. --env.type=pusht),
-    instead of draccus's default of expanding every registered subclass of every ChoiceType field."""
+    """打印范围限定到 CLI 上已解析选项（例如 --env.type=pusht）的 --help 输出，
+    而不是 draccus 默认的展开每个 ChoiceType 字段的所有已注册子类。"""
     parser = SuppressingArgumentParser(formatter_class=SimpleHelpFormatter)
     parser.add_argument(
         f"--{draccus.utils.CONFIG_ARG}", type=str, help="Path for a config file to parse with draccus"
@@ -286,20 +285,19 @@ def filter_arg(field_to_filter: str, args: Sequence[str] | None = None) -> list[
 
 def filter_path_args(fields_to_filter: str | list[str], args: Sequence[str] | None = None) -> list[str]:
     """
-    Filters command-line arguments related to fields with specific path arguments.
+    过滤与带有特定 path 参数的字段相关的命令行参数。
 
     Args:
-        fields_to_filter (str | list[str]): A single str or a list of str whose arguments need to be filtered.
-        args (Sequence[str] | None): The sequence of command-line arguments to be filtered.
-            Defaults to None.
+        fields_to_filter (str | list[str]): 需要过滤其参数的单个字符串或字符串列表。
+        args (Sequence[str] | None): 要过滤的命令行参数序列。
+            默认为 None。
 
     Returns:
-        list[str]: A filtered list of arguments, with arguments related to the specified
-        fields removed.
+        list[str]: 过滤后的参数列表，与指定字段相关的参数已被移除。
 
     Raises:
-        ArgumentError: If both a path argument (e.g., `--field_name.path`) and a type
-            argument (e.g., `--field_name.type`) are specified for the same field.
+        ArgumentError: 如果同一字段同时指定了 path 参数（例如 `--field_name.path`）
+            和 type 参数（例如 `--field_name.type`）。
     """
     if isinstance(fields_to_filter, str):
         fields_to_filter = [fields_to_filter]
@@ -335,12 +333,12 @@ def filter_path_args(fields_to_filter: str | list[str], args: Sequence[str] | No
 
 
 def extract_path_fields_from_config(config_path: str, path_fields: list[str]) -> str:
-    """Extract `path` fields from a YAML/JSON config before draccus processes it.
+    """在 draccus 处理之前，从 YAML/JSON 配置中提取 `path` 字段。
 
-    When a user specifies e.g. ``policy.path: lerobot/smolvla_base`` in a YAML config,
-    draccus will fail because ``path`` is not a valid field on policy config classes.
-    This function extracts those path values, stores them in ``_config_path_args`` for
-    later retrieval by ``get_path_arg()``, and returns a cleaned temp config file path.
+    当用户在 YAML 配置中指定例如 ``policy.path: lerobot/smolvla_base`` 时，
+    draccus 会失败，因为 ``path`` 不是策略配置类的有效字段。
+    此函数提取这些 path 值，将它们存储在 ``_config_path_args`` 中供
+    ``get_path_arg()`` 稍后检索，并返回清理后的临时配置文件路径。
     """
     config_file = Path(config_path)
     suffix = config_file.suffix.lower()
@@ -370,7 +368,7 @@ def extract_path_fields_from_config(config_path: str, path_fields: list[str]) ->
     if not modified:
         return config_path
 
-    # Write cleaned config to a temp file
+    # 将清理后的配置写入临时文件
     with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
         if suffix in (".yaml", ".yml"):
             yaml.dump(config_data, tmp, default_flow_style=False)
@@ -381,13 +379,12 @@ def extract_path_fields_from_config(config_path: str, path_fields: list[str]) ->
 
 def wrap(config_path: Path | None = None) -> Callable[[F], F]:
     """
-    HACK: Similar to draccus.wrap but does three additional things:
-        - Will remove '.path' arguments from CLI in order to process them later on.
-        - If a 'config_path' is passed and the main config class has a 'from_pretrained' method, will
-          initialize it from there to allow to fetch configs from the hub directly
-        - Will load plugins specified in the CLI arguments. These plugins will typically register
-            their own subclasses of config classes, so that draccus can find the right class to instantiate
-            from the CLI '.type' arguments
+    HACK：类似于 draccus.wrap，但额外做了三件事：
+        - 会从 CLI 中移除 '.path' 参数，以便稍后处理。
+        - 如果传入了 'config_path' 且主配置类有 'from_pretrained' 方法，
+          会从那里初始化它，以允许直接从 hub 获取配置
+        - 会加载 CLI 参数中指定的插件。这些插件通常会注册自己的配置类子类，
+          这样 draccus 就能根据 CLI 的 '.type' 参数找到要实例化的正确类
     """
 
     def wrapper_outer(fn: F) -> F:
@@ -405,7 +402,7 @@ def wrap(config_path: Path | None = None) -> Callable[[F], F]:
                     try:
                         load_plugin(plugin_path)
                     except PluginLoadError as e:
-                        # add the relevant CLI arg to the error message
+                        # 将相关的 CLI 参数添加到错误消息中
                         raise PluginLoadError(f"{e}\nFailed plugin CLI Arg: {plugin_cli_arg}") from e
                     cli_args = filter_arg(plugin_cli_arg, cli_args)
                 if "--help" in cli_args or "-h" in cli_args:
@@ -415,7 +412,7 @@ def wrap(config_path: Path | None = None) -> Callable[[F], F]:
                 if has_method(argtype, "__get_path_fields__"):
                     path_fields = argtype.__get_path_fields__()
                     cli_args = filter_path_args(path_fields, cli_args)
-                    # Also extract path fields from the YAML/JSON config file
+                    # 同时从 YAML/JSON 配置文件中提取 path 字段
                     if config_path_cli:
                         config_path_cli = extract_path_fields_from_config(config_path_cli, path_fields)
                 try:

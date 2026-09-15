@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Interactive rollout session: chat-style stdin commands for ``lerobot-rollout``.
+"""交互式 rollout 会话：``lerobot-rollout`` 的聊天式 stdin 命令。
 
-Enabled with ``--interactive=true``, this module lets the operator drive a rollout from the terminal
-(``/help`` lists the commands) while hardware and policy stay connected and warm.  It adds only the
-CLI front-end — stdin reading, command parsing, terminal output, and log muting.  Real shutdown
-signals (SIGINT/SIGTERM) propagate through the session's :class:`LinkedEvent` parent, so Ctrl-C
-behaves exactly as in non-interactive runs.
+通过 ``--interactive=true`` 启用后，本模块允许操作者从终端驱动 rollout
+（``/help`` 列出所有命令），同时硬件和策略保持连接和热状态。它只添加
+CLI 前端——stdin 读取、命令解析、终端输出和日志静音。真正的关闭
+信号（SIGINT/SIGTERM）通过会话的 :class:`LinkedEvent` 父事件传播，
+因此 Ctrl-C 的行为与非交互运行完全一致。
 """
 
 from __future__ import annotations
@@ -48,16 +48,17 @@ _BANNER_RULE = "─" * 60
 
 @contextlib.contextmanager
 def _mute_system_output() -> Iterator[None]:
-    """Suppress log records below ERROR and Python warnings, process-wide.
+    """在整个进程范围内抑制低于 ERROR 级别的日志记录和 Python 警告。
 
-    Routine system logs would contend with the chat prompt.  ``logging.disable`` gates records
-    before handler dispatch, so non-propagating library loggers and loggers created mid-session are
-    covered too (as are file handlers); ERROR and above still get through, so failures stay visible.
+    常规系统日志会与聊天提示符争抢输出。``logging.disable`` 在
+    处理器分发之前就拦截记录，因此不传播的库日志器和会话中途
+    创建的日志器也会被覆盖（文件处理器同样如此）；ERROR 及以上
+    级别仍能通过，因此故障依然可见。
     """
     previous_disable = logging.root.manager.disable
     logging.disable(logging.WARNING)
     try:
-        # catch_warnings also restores the mutation counter and showwarning, unlike a filters snapshot.
+        # 与过滤器快照不同，catch_warnings 还会恢复变更计数器和 showwarning。
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             yield
@@ -67,29 +68,29 @@ def _mute_system_output() -> Iterator[None]:
 
 @dataclass(frozen=True)
 class InteractiveCommand:
-    """A parsed ``/name args`` line from the interactive prompt."""
+    """从交互式提示符解析出的 ``/name args`` 行。"""
 
     name: str
     args: str = ""
 
 
 def _format_task(task: str) -> str:
-    """Render a task string for the operator, naming the empty case explicitly."""
+    """为操作者渲染任务字符串，显式标注空任务的情况。"""
     return repr(task) if task else "(none — set one with /subtask <text>)"
 
 
 def _strip_quotes(text: str) -> str:
-    """Drop one layer of matching surrounding quotes from a command argument."""
+    """从命令参数中去掉一层成对的外围引号。"""
     if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
         return text[1:-1]
     return text
 
 
 def parse_command(line: str) -> InteractiveCommand | None:
-    """Parse an input line into an :class:`InteractiveCommand`.
+    """将输入行解析为 :class:`InteractiveCommand`。
 
-    Commands are ``/name`` optionally followed by free-text arguments.  Returns ``None`` for lines
-    that are not commands (no leading ``/`` or a bare ``/``).
+    命令是 ``/name``，后面可选跟自由文本参数。对于不是命令的行
+    （没有前导 ``/`` 或只有一个裸 ``/``）返回 ``None``。
     """
     line = line.strip()
     if not line.startswith("/"):
@@ -102,16 +103,17 @@ def parse_command(line: str) -> InteractiveCommand | None:
 
 
 class InteractiveSession:
-    """Drive a rollout from chat-style stdin commands.
+    """通过聊天式 stdin 命令驱动 rollout。
 
-    A thin terminal front-end over :class:`RolloutController`, exposed as :attr:`controller` for
-    tests and embedders: the stdin listener parses lines into commands that call the controller's
-    thread-safe methods, and controller events are rendered back as terminal output.
+    这是 :class:`RolloutController` 之上的一个轻量终端前端，
+    以 :attr:`controller` 的形式暴露给测试和嵌入使用者：
+    stdin 监听器将行解析为命令并调用控制器的线程安全方法，
+    控制器事件则被渲染回终端输出。
 
-    Commands are last-write-wins: ``/reset`` and ``/stop`` cancel a pending ``/start``.  EOF on the
-    command stream stops the session (nothing is left to command the robot with), so piped scripts
-    must keep stdin open for the intended duration, e.g.
-    ``(printf '/start\\n'; sleep 60; printf '/stop\\n') | lerobot-rollout ... --interactive=true``.
+    命令采用最后写入优先：``/reset`` 和 ``/stop`` 会取消待处理的 ``/start``。
+    命令流上的 EOF 会停止会话（再没有东西可以指挥机器人了），
+    因此管道脚本必须在预期时长内保持 stdin 打开，例如
+    ``(printf '/start\\n'; sleep 60; printf '/stop\\n') | lerobot-rollout ... --interactive=true``。
     """
 
     def __init__(
@@ -125,7 +127,7 @@ class InteractiveSession:
         self._play_sounds = ctx.runtime.cfg.play_sounds
         self._listener = StdinCommandListener(self._handle_line, on_eof=self._handle_eof, stream=input_stream)
 
-        # name -> (handler, argument hint, help line); /help and the banner render from this table.
+        # name -> (处理器, 参数提示, 帮助行)；/help 和横幅都从此表渲染。
         self._commands: dict[str, tuple[Callable[[InteractiveCommand], None], str, str]] = {
             "start": (self._cmd_start, "", "start (or restart) the policy control loop"),
             "subtask": (self._cmd_subtask, " <text>", "set the instruction the policy follows"),
@@ -142,9 +144,9 @@ class InteractiveSession:
 
     @contextlib.contextmanager
     def _route_cadence_reports(self) -> Iterator[None]:
-        """Send the control loop's cadence summaries to the chat stream, not the muted log.
+        """将控制循环的节奏摘要发送到聊天流，而不是被静音的日志。
 
-        Boundary-only output, printed on the serve thread; scoped like :func:`_mute_system_output`.
+        仅在边界处输出，在 serve 线程上打印；作用域与 :func:`_mute_system_output` 相同。
         """
         previous = self._runtime.cadence_report
         self._runtime.cadence_report = self._print
@@ -154,7 +156,7 @@ class InteractiveSession:
             self._runtime.cadence_report = previous
 
     def run(self) -> None:
-        """Run the session until ``/stop``, EOF, engine failure, or a shutdown signal."""
+        """运行会话，直到 ``/stop``、EOF、引擎失败或关闭信号。"""
         try:
             with _mute_system_output(), self._route_cadence_reports():
                 self._print(self._render_banner())
@@ -164,11 +166,11 @@ class InteractiveSession:
                 finally:
                     self._listener.stop()
         finally:
-            # Outside the muting context, so the announcement and teardown logs are visible again.
+            # 在静音上下文之外，因此结束通告和清理日志重新可见。
             log_say("Interactive session ended", self._play_sounds)
 
     # ------------------------------------------------------------------
-    # Controller events (fired on the serve thread) -> terminal output
+    # 控制器事件（在 serve 线程上触发）-> 终端输出
     # ------------------------------------------------------------------
 
     def _on_event(self, event: RolloutEvent, payload: QueryAnswer | None = None) -> None:
@@ -203,10 +205,10 @@ class InteractiveSession:
             self._report_failure("Rollout strategy failed (robot or recording error) — shutting down.")
 
     def _report_answer(self, answer: QueryAnswer) -> None:
-        """Render a resolved text query (an operator question or an autosteer turn)."""
+        """渲染已解答的文本查询（操作者的问题或 autosteer 回合）。"""
         if answer.kind is QueryKind.NEXT_SUBTASK:
             if answer.ok:
-                # The engine has already applied it via set_task; just announce.
+                # 引擎已经通过 set_task 应用了它；只需通告即可。
                 self._print(f"Autosteer subtask: {answer.answer!r}")
             else:
                 self._print(
@@ -219,7 +221,7 @@ class InteractiveSession:
             self._print(f"Could not answer {answer.question!r} — {answer.error}")
 
     def _report_failure(self, headline: str) -> None:
-        """Surface a fatal engine/strategy error despite the muted console logging."""
+        """尽管控制台日志已被静音，仍要将致命的引擎/策略错误呈现出来。"""
         self._print(headline)
         failure_traceback = self.controller.failure_traceback
         if failure_traceback:
@@ -228,7 +230,7 @@ class InteractiveSession:
             self._print("Re-run without --interactive=true to see the error output.")
 
     # ------------------------------------------------------------------
-    # Command handlers (called from the listener thread)
+    # 命令处理器（从监听器线程调用）
     # ------------------------------------------------------------------
 
     def _handle_line(self, line: str) -> None:
@@ -250,15 +252,15 @@ class InteractiveSession:
     def _cmd_start(self, cmd: InteractiveCommand) -> None:
         if self.controller.start():
             return
-        # start() also refuses while stopping or after a failure — don't mislabel an idle robot.
+        # start() 在停止过程中或失败之后也会拒绝——不要把空闲的机器人误标为运行中。
         if self.controller.running:
             self._print("Already running — /reset to pause first, or /stop to shut down.")
         else:
             self._print("Can't start — the session is stopping or has failed.")
 
     def _cmd_subtask(self, cmd: InteractiveCommand) -> None:
-        # Strip quotes before the emptiness check, so /subtask "" reports the task instead of
-        # silently applying the empty instruction.
+        # 在判空之前去掉引号，这样 /subtask "" 会报告当前任务，
+        # 而不是悄悄应用空指令。
         task = _strip_quotes(cmd.args)
         if not task:
             self._print(f"Current task: {_format_task(self.controller.task)}")
@@ -275,11 +277,11 @@ class InteractiveSession:
         elif task == self.controller.task:
             self._print(f"Task unchanged: {_format_task(task)}")
         else:
-            # set_task also refuses while stopping; "unchanged" would imply it was applied.
+            # set_task 在停止过程中也会拒绝；说"未改变"会暗示它已被应用。
             self._print("Can't change the task — the session is stopping.")
 
     def _cmd_vqa(self, cmd: InteractiveCommand) -> None:
-        # Strip quotes first, so /vqa "" prints the usage hint instead of queueing an empty question.
+        # 先去掉引号，这样 /vqa "" 会打印用法提示，而不是将一个空问题入队。
         question = _strip_quotes(cmd.args)
         if not question:
             self._print("Usage: /vqa <question> — e.g. /vqa is the cube inside the box?")
@@ -292,9 +294,9 @@ class InteractiveSession:
         elif result is AskResult.NOT_RUNNING:
             self._print("Not running — /start first so the policy has a live view to answer from.")
         elif result is AskResult.BUSY:
-            # Could be a previous /vqa or an autosteer query — the channel does not say which.
+            # 可能是之前的 /vqa 或 autosteer 查询——通道不会说明是哪一个。
             self._print("The policy is busy with another query — try again in a moment.")
-        else:  # a future AskResult variant must not be mislabeled as busy
+        else:  # 未来的 AskResult 变体不能被误标为 busy
             logger.error("Unhandled AskResult %r for /vqa", result)
             self._print(f"Could not queue the question ({result.value}).")
 
@@ -324,7 +326,7 @@ class InteractiveSession:
                 f"Autosteer on — goal {goal!r}. The policy picks its own subtasks; "
                 "each one is announced here. Take over with /subtask <text> or /autosteer off."
             )
-        else:  # a future AskResult variant must not be announced as success
+        else:  # 未来的 AskResult 变体不能被通告为成功
             logger.error("Unhandled AskResult %r for /autosteer", result)
             self._print(f"Could not start autosteer ({result.value}).")
 
@@ -341,7 +343,7 @@ class InteractiveSession:
         self._print(self._render_help())
 
     # ------------------------------------------------------------------
-    # Rendering
+    # 渲染
     # ------------------------------------------------------------------
 
     def _render_help(self) -> str:
@@ -363,10 +365,10 @@ class InteractiveSession:
 
     @staticmethod
     def _print(message: str) -> None:
-        """User-facing chat output; logging stays on stderr, replies on stdout.
+        """面向用户的聊天输出；日志保持在 stderr，回复输出到 stdout。
 
-        One ``write`` call per message, newline included: ``print()``'s separate message/newline
-        writes can interleave mid-line between the listener and serve threads.
+        每条消息一次 ``write`` 调用（包含换行符）：``print()`` 将消息和换行
+        分开写入，可能在监听器线程和 serve 线程之间于行中交错。
         """
         sys.stdout.write(message + "\n")
         sys.stdout.flush()

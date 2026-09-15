@@ -45,7 +45,7 @@ from .video_utils import (
 
 class LookBackError(Exception):
     """
-    Exception raised when trying to look back in the history of a Backtrackable object.
+    尝试在 Backtrackable 对象的历史记录中向后回看时抛出的异常。
     """
 
     pass
@@ -53,45 +53,45 @@ class LookBackError(Exception):
 
 class LookAheadError(Exception):
     """
-    Exception raised when trying to look ahead in the future of a Backtrackable object.
+    尝试在 Backtrackable 对象的未来记录中向前预看时抛出的异常。
     """
 
     pass
 
 
 class _ShardExhaustedError(Exception):
-    """Raised when a streaming dataset shard has no more items."""
+    """当流式数据集分片已没有更多条目时抛出。"""
 
 
 class Backtrackable[T]:
     """
-    Wrap any iterator/iterable so you can step back up to `history` items
-    and look ahead up to `lookahead` items.
+    包装任意迭代器/可迭代对象，使你最多可以向后回退 `history` 个
+    条目，并最多向前预看 `lookahead` 个条目。
 
-    This is useful for streaming datasets where you need to access previous and future items
-    but can't load the entire dataset into memory.
+    这对流式数据集很有用：你需要访问之前和未来的条目，
+    但又无法将整个数据集加载到内存中。
 
-    Example:
+    示例：
     -------
     ```python
     ds = load_dataset("c4", "en", streaming=True, split="train")
     rev = Backtrackable(ds, history=3, lookahead=2)
 
-    x0 = next(rev)  # forward
+    x0 = next(rev)  # 向前
     x1 = next(rev)
     x2 = next(rev)
 
-    # Look ahead
-    x3_peek = rev.peek_ahead(1)  # next item without moving cursor
-    x4_peek = rev.peek_ahead(2)  # two items ahead
+    # 向前预看
+    x3_peek = rev.peek_ahead(1)  # 下一个条目，不移动游标
+    x4_peek = rev.peek_ahead(2)  # 向前两个条目
 
-    # Look back
-    x1_again = rev.peek_back(1)  # previous item without moving cursor
-    x0_again = rev.peek_back(2)  # two items back
+    # 向后回看
+    x1_again = rev.peek_back(1)  # 上一个条目，不移动游标
+    x0_again = rev.peek_back(2)  # 向后两个条目
 
-    # Move backward
-    x1_back = rev.prev()  # back one step
-    next(rev)  # returns x2, continues forward from where we were
+    # 向后移动
+    x1_back = rev.prev()  # 向后退一步
+    next(rev)  # 返回 x2，从之前的位置继续向前
     ```
     """
 
@@ -114,23 +114,23 @@ class Backtrackable[T]:
         return self
 
     def __next__(self) -> T:
-        # If we've stepped back, consume from back buffer first
-        if self._cursor < 0:  # -1 means "last item", etc.
+        # 如果我们已经向后回退过，先从回退缓冲区取数据
+        if self._cursor < 0:  # -1 表示“上一个条目”，以此类推
             self._cursor += 1
             return self._back_buf[self._cursor]
 
-        # If we have items in the ahead buffer, use them first
+        # 如果预看缓冲区中有条目，优先使用它们
         item = self._ahead_buf.popleft() if self._ahead_buf else next(self._source)
 
-        # Add current item to back buffer and reset cursor
+        # 将当前条目加入回退缓冲区并重置游标
         self._back_buf.append(item)
         self._cursor = 0
         return item
 
     def prev(self) -> T:
         """
-        Step one item back in history and return it.
-        Raises IndexError if already at the oldest buffered item.
+        在历史记录中向后回退一个条目并返回它。
+        如果已经处于缓冲的最旧条目处，则抛出 IndexError。
         """
         if len(self._back_buf) + self._cursor <= 1:
             raise LookBackError("At start of history")
@@ -140,7 +140,7 @@ class Backtrackable[T]:
 
     def peek_back(self, n: int = 1) -> T:
         """
-        Look `n` items back (n=1 == previous item) without moving the cursor.
+        在不移动游标的情况下向后查看 `n` 个条目（n=1 即上一个条目）。
         """
         if n < 0 or n + 1 > len(self._back_buf) + self._cursor:
             raise LookBackError("peek_back distance out of range")
@@ -149,15 +149,15 @@ class Backtrackable[T]:
 
     def peek_ahead(self, n: int = 1) -> T:
         """
-        Look `n` items ahead (n=1 == next item) without moving the cursor.
-        Fills the ahead buffer if necessary.
+        在不移动游标的情况下向前预看 `n` 个条目（n=1 即下一个条目）。
+        必要时填充预看缓冲区。
         """
         if n < 1:
             raise LookAheadError("peek_ahead distance must be 1 or more")
         elif n > self._lookahead:
             raise LookAheadError("peek_ahead distance exceeds lookahead limit")
 
-        # Fill ahead buffer if we don't have enough items
+        # 如果条目数不够，则填充预看缓冲区
         while len(self._ahead_buf) < n:
             try:
                 item = next(self._source)
@@ -170,30 +170,30 @@ class Backtrackable[T]:
 
     def history(self) -> list[T]:
         """
-        Return a copy of the buffered history (most recent last).
-        The list length ≤ `history` argument passed at construction.
+        返回缓冲历史记录的副本（最新的在最后）。
+        列表长度 ≤ 构造时传入的 `history` 参数。
         """
         if self._cursor == 0:
             return list(self._back_buf)
 
-        # When cursor<0, slice so the order remains chronological
+        # 当 cursor<0 时进行切片，以保持时间先后顺序
         return list(self._back_buf)[: self._cursor or None]
 
     def can_peek_back(self, steps: int = 1) -> bool:
         """
-        Check if we can go back `steps` items without raising an IndexError.
+        检查是否可以向后回退 `steps` 个条目而不抛出 IndexError。
         """
         return steps < len(self._back_buf) + self._cursor
 
     def can_peek_ahead(self, steps: int = 1) -> bool:
         """
-        Check if we can peek ahead `steps` items.
-        This may involve trying to fill the ahead buffer.
+        检查是否可以向前预看 `steps` 个条目。
+        这可能会尝试填充预看缓冲区。
         """
         if self._lookahead > 0 and steps > self._lookahead:
             return False
 
-        # Try to fill ahead buffer to check if we can peek that far
+        # 尝试填充预看缓冲区，以检查能否预看到那么远
         try:
             while len(self._ahead_buf) < steps:
                 if self._lookahead > 0 and len(self._ahead_buf) >= self._lookahead:
@@ -206,25 +206,26 @@ class Backtrackable[T]:
 
 
 class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
-    """LeRobotDataset with streaming capabilities.
+    """具备流式能力的 LeRobotDataset。
 
-    This class extends LeRobotDataset to add streaming functionality, allowing data to be streamed
-    rather than loaded entirely into memory. This is especially useful for large datasets that may
-    not fit in memory or when you want to quickly explore a dataset without downloading it completely.
+    本类扩展了 LeRobotDataset，增加了流式功能，允许以流式方式
+    获取数据，而不是将数据全部加载到内存中。这对于因数据集过大
+    而无法放入内存，或希望在不完整下载数据集的情况下快速浏览
+    数据集时尤其有用。
 
-    The key innovation is using a Backtrackable iterator that maintains a bounded buffer of recent
-    items, allowing us to access previous frames for delta timestamps without loading the entire
-    dataset into memory.
+    关键创新在于使用 Backtrackable 迭代器，它维护一个有界的
+    近期条目缓冲区，使我们无需将整个数据集加载到内存即可
+    访问用于增量时间戳的历史帧。
 
-    Example:
-        Basic usage:
+    示例：
+        基本用法：
         ```python
         from lerobot.common.datasets.streaming_dataset import StreamingLeRobotDataset
 
-        # Create a streaming dataset with delta timestamps
+        # 创建一个带增量时间戳的流式数据集
         delta_timestamps = {
-            "observation.image": [-1.0, -0.5, 0.0],  # 1 sec ago, 0.5 sec ago, current
-            "action": [0.0, 0.1, 0.2],  # current, 0.1 sec future, 0.2 sec future
+            "observation.image": [-1.0, -0.5, 0.0],  # 1 秒前、0.5 秒前、当前
+            "action": [0.0, 0.1, 0.2],  # 当前、0.1 秒后、0.2 秒后
         }
 
         dataset = StreamingLeRobotDataset(
@@ -234,10 +235,10 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             buffer_size=1000,
         )
 
-        # Iterate over the dataset
+        # 遍历数据集
         for i, item in enumerate(dataset):
             print(f"Sample {i}: Episode {item['episode_index']} Frame {item['frame_index']}")
-            # item will contain stacked frames according to delta_timestamps
+            # item 将包含根据 delta_timestamps 堆叠的帧
             if i >= 10:
                 break
         ```
@@ -265,34 +266,34 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         repo_type: Literal["dataset", "bucket"] = "dataset",
         token: str | bool | None = None,
     ):
-        """Initialize a StreamingLeRobotDataset.
+        """初始化一个 StreamingLeRobotDataset。
 
         Args:
-            repo_id (str): This is the repo id that will be used to fetch the dataset.
-            root (Path | None, optional): Local directory to use for local datasets. In bucket mode,
-                this is an optional local metadata-cache directory; parquet and video data remain remote.
-                When omitted, Hub metadata is resolved through the cache under ``$HF_LEROBOT_HOME/hub``.
-            episodes (list[int] | None, optional): If specified, this will only load episodes specified by
-                their episode_index in this list.
-            image_transforms (Callable | None, optional): Transform to apply to image data.
-            tolerance_s (float, optional): Tolerance in seconds for timestamp matching.
-            revision (str, optional): Git revision id (branch name, tag, or commit hash).
-            force_cache_sync (bool, optional): Flag to sync and refresh local files first.
-            streaming (bool, optional): Whether to stream the dataset or load it all. Defaults to True.
-            buffer_size (int, optional): Buffer size for shuffling when streaming. Defaults to 1000.
-            max_num_shards (int, optional): Number of shards to re-shard the input dataset into. Defaults to 16.
-            seed (int, optional): Reproducibility random seed.
-            rng (np.random.Generator | None, optional): Random number generator.
-            shuffle (bool, optional): Whether to shuffle the dataset across exhaustions. Defaults to True.
-            depth_output_unit (str, optional): Physical unit depth maps are dequantized to ("m" or "mm").
-                Defaults to "mm".
-            repo_type: "dataset" (default) or "bucket" to stream from an HF Storage Bucket
-                over ``hf://buckets/``.
-            token: Authentication token used while streaming this dataset from
-                the Hub. Pass a string token, ``True`` to require the locally
-                stored token, ``False`` to disable authentication, or ``None``
-                to use the Hugging Face Hub default. The token is not retained
-                on the dataset instance after initialization.
+            repo_id (str): 将用于获取数据集的 repo id。
+            root (Path | None, optional): 用于本地数据集的本地目录。在 bucket
+                模式下，这是可选的本地元数据缓存目录；parquet 和视频数据仍保留在远端。
+                省略时，Hub 元数据通过 ``$HF_LEROBOT_HOME/hub`` 下的缓存解析。
+            episodes (list[int] | None, optional): 若指定，则只加载本列表中以
+                episode_index 指定的 episode。
+            image_transforms (Callable | None, optional): 应用于图像数据的变换。
+            tolerance_s (float, optional): 时间戳匹配的容差（秒）。
+            revision (str, optional): Git 版本 id（分支名、标签或提交哈希）。
+            force_cache_sync (bool, optional): 优先同步并刷新本地文件的标志。
+            streaming (bool, optional): 是流式获取数据集还是全部加载。默认为 True。
+            buffer_size (int, optional): 流式模式下用于打乱的缓冲区大小。默认为 1000。
+            max_num_shards (int, optional): 将输入数据集重新分片后的分片数量。默认为 16。
+            seed (int, optional): 可复现性的随机种子。
+            rng (np.random.Generator | None, optional): 随机数生成器。
+            shuffle (bool, optional): 是否在多次遍历之间打乱数据集。默认为 True。
+            depth_output_unit (str, optional): 深度图反量化后的物理单位（"m" 或 "mm"）。
+                默认为 "mm"。
+            repo_type: "dataset"（默认）或 "bucket"，表示通过
+                ``hf://buckets/`` 从 HF Storage Bucket 流式获取。
+            token: 从 Hub 流式获取本数据集时使用的认证令牌。
+                可传入字符串令牌；``True`` 表示要求使用本地
+                存储的令牌；``False`` 表示禁用认证；``None``
+                表示使用 Hugging Face Hub 的默认行为。初始化之后，
+                令牌不会保留在数据集实例上。
         """
         super().__init__()
         if repo_type not in ("dataset", "bucket"):
@@ -317,13 +318,13 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         self._return_uint8 = return_uint8
         self._depth_output_unit = depth_output_unit
 
-        # We cache the video decoders to avoid re-initializing them at each frame (avoiding a ~10x slowdown)
+        # 缓存视频解码器，避免每一帧都重新初始化（可避免约 10 倍的减速）
         self.video_decoder_cache = None
 
         if self._requested_root is not None:
             self.root.mkdir(exist_ok=True, parents=True)
 
-        # Load metadata
+        # 加载元数据
         self.meta = LeRobotDatasetMetadata(
             self.repo_id,
             self._requested_root,
@@ -335,7 +336,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         self.root = self.meta.root
         self.revision = self.meta.revision
         self.meta.rescale_depth_stats(self._depth_output_unit)
-        # Check version
+        # 检查版本
         check_version_compatibility(self.repo_id, self.meta._version, CODEBASE_VERSION)
 
         self._depth_encoder_configs: dict[str, DepthEncoderConfig] = {
@@ -343,7 +344,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             for vid_key in self.meta.depth_keys
         }
 
-        # Input unit of each depth feature stored as raw images (dequantized separately from videos).
+        # 每个以原始图像形式存储的深度特征的输入单位（与视频分开反量化）。
         self._image_depth_units: dict[str, str | None] = {
             key: (self.meta.features[key].get("info") or {}).get("depth_unit")
             for key in self.meta.depth_keys
@@ -354,7 +355,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         self.delta_indices = None
 
         if delta_timestamps is not None:
-            self._validate_delta_timestamp_keys(delta_timestamps)  # raises ValueError if invalid
+            self._validate_delta_timestamp_keys(delta_timestamps)  # 无效时抛出 ValueError
             self.delta_timestamps = delta_timestamps
             self.delta_indices = get_delta_indices(self.delta_timestamps, self.fps)
 
@@ -395,7 +396,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
 
     @property
     def depth_output_unit(self) -> str:
-        """Physical unit (``"m"`` or ``"mm"``) depth maps are returned in on read."""
+        """读取时深度图所使用的物理单位（``"m"`` 或 ``"mm"``）。"""
         return self._depth_output_unit
 
     @staticmethod
@@ -410,15 +411,15 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         while True:
             yield rng.choice(elements)
 
-    # TODO(fracapuano): Implement multi-threaded prefetching to accelerate data loading.
-    # The current sequential iteration is a bottleneck. A producer-consumer pattern
-    # could be used with a ThreadPoolExecutor to run `make_frame` (especially video decoding)
-    # in parallel, feeding a queue from which this iterator will yield processed items.
+    # TODO(fracapuano): 实现多线程预取以加速数据加载。
+    # 当前的顺序迭代是一个瓶颈。可以采用生产者-消费者模式，
+    # 配合 ThreadPoolExecutor 并行运行 `make_frame`（尤其是视频解码），
+    # 将处理后的条目送入队列，本迭代器再从该队列中产出条目。
     def __iter__(self) -> Iterator[dict[str, torch.Tensor]]:
         if self.video_decoder_cache is None:
             self.video_decoder_cache = VideoDecoderCache()
 
-        # keep the same seed across exhaustions if shuffle is False, otherwise shuffle data across exhaustions
+        # 如果 shuffle 为 False，则在多次遍历之间保持相同的种子；否则在多次遍历之间打乱数据
         rng = np.random.default_rng(self.seed) if not self.shuffle else self.rng
 
         buffer_indices_generator = self._iter_random_indices(rng, self.buffer_size)
@@ -428,28 +429,28 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             for idx in range(self.num_shards)
         }
 
-        # This buffer is populated while iterating on the dataset's shards
-        # the logic is to add 2 levels of randomness:
-        # (1) sample one shard at random from the ones available, and
-        # (2) sample one frame from the shard sampled at (1)
+        # 该缓冲区在遍历数据集分片时填充，
+        # 其逻辑是引入两个层次的随机性：
+        # (1) 从可用分片中随机抽取一个分片，
+        # (2) 从第 (1) 步抽中的分片中随机抽取一帧
         frames_buffer = []
         while available_shards := list(idx_to_backtrack_dataset.keys()):
             shard_key = next(self._infinite_generator_over_elements(rng, available_shards))
-            backtrack_dataset = idx_to_backtrack_dataset[shard_key]  # selects which shard to iterate on
+            backtrack_dataset = idx_to_backtrack_dataset[shard_key]  # 选择要迭代的分片
 
             try:
                 for frame in self.make_frame(backtrack_dataset):
                     if len(frames_buffer) == self.buffer_size:
-                        i = next(buffer_indices_generator)  # samples a element from the buffer
+                        i = next(buffer_indices_generator)  # 从缓冲区中抽取一个元素
                         yield frames_buffer[i]
                         frames_buffer[i] = frame
                     else:
                         frames_buffer.append(frame)
-                    break  # random shard sampled, switch shard
+                    break  # 已随机抽过分片，切换分片
             except _ShardExhaustedError:
-                del idx_to_backtrack_dataset[shard_key]  # Remove exhausted shard, onto another shard
+                del idx_to_backtrack_dataset[shard_key]  # 移除已耗尽的分片，转去另一个分片
 
-        # Once shards are all exhausted, shuffle the buffer and yield the remaining frames
+        # 所有分片都耗尽后，打乱缓冲区并产出剩余的帧
         rng.shuffle(frames_buffer)
         yield from frames_buffer
 
@@ -460,16 +461,16 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             return 1, 1
 
         if not dynamic_bounds:
-            # Fix the windows
+            # 固定窗口
             lookback = LOOKBACK_BACKTRACKTABLE
             lookahead = LOOKAHEAD_BACKTRACKTABLE
         else:
-            # Dynamically adjust the windows based on the given delta_timesteps
+            # 根据给定的 delta_timesteps 动态调整窗口
             all_timestamps = sum(delta_timestamps.values(), [])
             lookback = min(all_timestamps) * self.fps
             lookahead = max(all_timestamps) * self.fps
 
-            # When lookback is >=0 it means no negative timesteps have been provided
+            # 当 lookback >= 0 时，说明没有提供负的时间步长
             lookback = 0 if lookback >= 0 else (lookback * -1)
 
         return lookback, lookahead
@@ -485,14 +486,14 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             return {
                 key: (
                     start_ts + torch.tensor(indices[key]) / self.fps
-                ).tolist()  # NOTE: why not delta_timestamps directly?
+                ).tolist()  # 注意：为什么不直接使用 delta_timestamps？
                 for key in self.delta_timestamps
             }
         else:
             return dict.fromkeys(self.meta.video_keys, [start_ts])
 
     def _make_padding_camera_frame(self, camera_key: str):
-        """Variable-shape padding frame for given camera keys, given in (H, W, C)"""
+        """给定相机键对应的可变形状填充帧，以 (H, W, C) 给出"""
         return torch.zeros(self.meta.info.features[camera_key]["shape"]).permute(-1, 0, 1)
 
     def _get_video_frame_padding_mask(
@@ -505,7 +506,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
 
         for video_key, timestamps in original_timestamps.items():
             if video_key not in video_frames:
-                continue  # only padding on video keys that are available
+                continue  # 只对可用的视频键进行填充
             frames = []
             mask = []
             padding_frame = self._make_padding_camera_frame(video_key)
@@ -523,20 +524,20 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         return padding_mask
 
     def make_frame(self, dataset_iterator: Backtrackable) -> Generator:
-        """Makes a frame starting from a dataset iterator"""
+        """从数据集迭代器开始构造一个帧"""
         try:
             item = next(dataset_iterator)
         except StopIteration as e:
-            # Translate exhaustion here, before PEP 479 turns it into an indistinguishable RuntimeError.
+            # 在这里转译耗尽异常，以免 PEP 479 将其变成无法区分的 RuntimeError。
             raise _ShardExhaustedError from e
         item = item_to_torch(item)
 
-        updates = []  # list of "updates" to apply to the item retrieved from hf_dataset (w/o camera features)
+        updates = []  # 要应用到从 hf_dataset 获取的条目上的“更新”列表（不含相机特征）
 
-        # Get episode index from the item
+        # 从条目中获取 episode 索引
         ep_idx = item["episode_index"]
 
-        # "timestamp" restarts from 0 for each episode, whereas we need a global timestep within the single .mp4 file (given by index/fps)
+        # "timestamp" 在每个 episode 都从 0 重新开始，而我们需要的是单个 .mp4 文件内的全局时间步（由 index/fps 给出）
         current_ts = item["index"] / self.fps
 
         episode_boundaries_ts = {
@@ -547,17 +548,17 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             for key in self.meta.video_keys
         }
 
-        # Apply delta querying logic if necessary
+        # 必要时应用增量查询逻辑
         if self.delta_indices is not None:
             query_result, padding = self._get_delta_frames(dataset_iterator, item)
             updates.append(query_result)
             updates.append(padding)
 
-        # Load video frames, when needed
+        # 需要时加载视频帧
         if len(self.meta.video_keys) > 0:
             original_timestamps = self._make_timestamps_from_indices(current_ts, self.delta_indices)
 
-            # Some timestamps might not result available considering the episode's boundaries
+            # 考虑到 episode 的边界，某些时间戳可能不可用
             query_timestamps = self._get_query_timestamps(
                 current_ts, self.delta_indices, episode_boundaries_ts
             )
@@ -571,7 +572,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             updates.append(video_frames)
 
             if self.delta_indices is not None:
-                # We always return the same number of frames. Unavailable frames are padded.
+                # 我们返回的帧数始终相同。不可用的帧会被填充。
                 padding_mask = self._get_video_frame_padding_mask(
                     video_frames, query_timestamps, original_timestamps
                 )
@@ -581,7 +582,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         for update in updates:
             result.update(update)
 
-        # Convert raw-image depth features to the output unit (video depth is already converted).
+        # 将原始图像深度特征转换为输出单位（视频深度已经转换过）。
         for key, stored_unit in self._image_depth_units.items():
             if key in result and stored_unit is not None and stored_unit != self._depth_output_unit:
                 result[key] = (
@@ -605,7 +606,7 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         for key in self.meta.video_keys:
             if query_indices is not None and key in query_indices:
                 timestamps = keys_to_timestamps[key]
-                # Clamp out timesteps outside of episode boundaries
+                # 将超出 episode 边界的时间步钳制到边界内
                 query_timestamps[key] = torch.clamp(
                     torch.tensor(timestamps), *episode_boundaries_ts[key]
                 ).tolist()
@@ -616,10 +617,10 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         return query_timestamps
 
     def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict:
-        """Note: When using data workers (e.g. DataLoader with num_workers>0), do not call this function
-        in the main process (e.g. by using a second Dataloader with num_workers=0). It will result in a
-        Segmentation Fault. This probably happens because a memory reference to the video loader is created in
-        the main process and a subprocess fails to access it.
+        """注意：当使用数据 worker 时（例如 num_workers>0 的 DataLoader），不要在主进程中
+        调用本函数（例如再使用一个 num_workers=0 的 DataLoader）。否则会导致
+        段错误（Segmentation Fault）。这很可能是因为视频加载器的内存引用是在
+        主进程中创建的，而子进程无法访问它。
         """
 
         item = {}
@@ -627,8 +628,8 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
             root = self.meta.url_root if self.streaming and not self.streaming_from_local else self.root
             video_path = f"{root}/{self.meta.get_video_file_path(ep_idx, video_key)}"
             if video_key in self.meta.depth_keys:
-                # Depth maps are 12-bit quantized and only decodable via pyav; dequantize back
-                # to physical units to match the non-streaming reader.
+                # 深度图是 12 位量化的，只能通过 pyav 解码；再反量化
+                # 回物理单位，以与非流式读取器保持一致。
                 frames = decode_video_frames(
                     video_path,
                     query_ts,
@@ -660,45 +661,45 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
         return item
 
     def _get_delta_frames(self, dataset_iterator: Backtrackable, current_item: dict):
-        # TODO(fracapuano): Modularize this function, refactor the code
-        """Get frames with delta offsets using the backtrackable iterator.
+        # TODO(fracapuano): 将本函数模块化，重构代码
+        """使用可回退迭代器获取带增量偏移的帧。
 
         Args:
-            current_item (dict): Current item from the iterator.
-            ep_idx (int): Episode index.
+            current_item (dict): 来自迭代器的当前条目。
+            ep_idx (int): Episode 索引。
 
         Returns:
-            tuple: (query_result, padding) - frames at delta offsets and padding info.
+            tuple: (query_result, padding) —— 增量偏移处的帧和填充信息。
         """
         current_episode_idx = current_item["episode_index"]
 
-        # Prepare results
+        # 准备结果
         query_result = {}
         padding = {}
 
         for key, delta_indices in self.delta_indices.items():
             if key in self.meta.video_keys:
-                continue  # visual frames are decoded separately
+                continue  # 视觉帧单独解码
 
             target_frames = []
             is_pad = []
 
-            # Create a results dictionary to store frames in processing order, then reconstruct original order for stacking
+            # 创建一个结果字典，按处理顺序存储帧，然后再重建原始顺序以便堆叠
             delta_results = {}
 
-            # Separate and sort deltas by difficulty (easier operations first)
+            # 按难度将增量分开并排序（先做较容易的操作）
             negative_deltas = sorted([d for d in delta_indices if d < 0], reverse=True)  # [-1, -2, -3, ...]
             positive_deltas = sorted([d for d in delta_indices if d > 0])  # [1, 2, 3, ...]
             zero_deltas = [d for d in delta_indices if d == 0]
 
-            # Process zero deltas (current frame)
+            # 处理零增量（当前帧）
             for delta in zero_deltas:
                 delta_results[delta] = (
                     current_item[key],
                     False,
                 )
 
-            # Process negative deltas in order of increasing difficulty
+            # 按难度递增的顺序处理负增量
             lookback_failed = False
 
             last_successful_frame = current_item[key]
@@ -725,9 +726,9 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
 
                 except LookBackError:
                     delta_results[delta] = (last_successful_frame, True)
-                    lookback_failed = True  # All subsequent negative deltas will also fail
+                    lookback_failed = True  # 后续所有负增量也都会失败
 
-            # Process positive deltas in order of increasing difficulty
+            # 按难度递增的顺序处理正增量
             lookahead_failed = False
             last_successful_frame = current_item[key]
 
@@ -752,17 +753,17 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
 
                 except LookAheadError:
                     delta_results[delta] = (last_successful_frame, True)
-                    lookahead_failed = True  # All subsequent positive deltas will also fail
+                    lookahead_failed = True  # 后续所有正增量也都会失败
 
-            # Reconstruct original order for stacking
+            # 重建原始顺序以便堆叠
             for delta in delta_indices:
                 frame, is_padded = delta_results[delta]
 
-                # add batch dimension for stacking
+                # 为堆叠添加批量维度
                 target_frames.append(frame)  # frame.unsqueeze(0))
                 is_pad.append(is_padded)
 
-            # Stack frames and add to results
+            # 堆叠帧并加入结果
             if target_frames:
                 query_result[key] = torch.stack(target_frames)
                 padding[f"{key}_is_pad"] = torch.BoolTensor(is_pad)
@@ -771,21 +772,21 @@ class StreamingLeRobotDataset(torch.utils.data.IterableDataset):
 
     def _validate_delta_timestamp_keys(self, delta_timestamps: dict[list[float]]) -> None:
         """
-        Validate that all keys in delta_timestamps correspond to actual features in the dataset.
+        校验 delta_timestamps 中的所有键都对应数据集中实际存在的特征。
 
         Raises:
-            ValueError: If any delta timestamp key doesn't correspond to a dataset feature.
+            ValueError: 当任意 delta timestamp 键不对应数据集特征时。
         """
         if delta_timestamps is None:
             return
 
-        # Get all available feature keys from the dataset metadata
+        # 从数据集元数据中获取所有可用的特征键
         available_features = set(self.meta.features.keys())
 
-        # Get all keys from delta_timestamps
+        # 获取 delta_timestamps 中的所有键
         delta_keys = set(delta_timestamps.keys())
 
-        # Find any keys that don't correspond to features
+        # 找出所有不对应特征的键
         invalid_keys = delta_keys - available_features
 
         if invalid_keys:

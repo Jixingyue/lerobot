@@ -23,39 +23,39 @@ __all__ = ["OpenCVCameraConfig", "ColorMode", "Cv2Rotation", "Cv2Backends"]
 @CameraConfig.register_subclass("opencv")
 @dataclass
 class OpenCVCameraConfig(CameraConfig):
-    """Configuration class for OpenCV-based camera devices or video files.
+    """基于 OpenCV 的相机设备或视频文件的配置类。
 
-    This class provides configuration options for cameras accessed through OpenCV,
-    supporting both physical camera devices and video files. It includes settings
-    for resolution, frame rate, color mode, and image rotation.
+    该类为通过 OpenCV 访问的相机提供配置选项，
+    支持物理相机设备和视频文件。它包含
+    分辨率、帧率、颜色模式和图像旋转的设置。
 
-    Example configurations:
+    配置示例：
     ```python
-    # Basic configurations
+    # 基本配置
     OpenCVCameraConfig(0, 30, 1280, 720)   # 1280x720 @ 30FPS
     OpenCVCameraConfig(/dev/video4, 60, 640, 480)   # 640x480 @ 60FPS
 
-    # Advanced configurations with FOURCC format
-    OpenCVCameraConfig(128422271347, 30, 640, 480, rotation=Cv2Rotation.ROTATE_90, fourcc="MJPG")     # With 90° rotation and MJPG format
-    OpenCVCameraConfig(0, 30, 1280, 720, fourcc="YUYV")     # With YUYV format
+    # 带 FOURCC 格式的高级配置
+    OpenCVCameraConfig(128422271347, 30, 640, 480, rotation=Cv2Rotation.ROTATE_90, fourcc="MJPG")     # 带 90° 旋转和 MJPG 格式
+    OpenCVCameraConfig(0, 30, 1280, 720, fourcc="YUYV")     # 带 YUYV 格式
     ```
 
-    Attributes:
-        index_or_path: Either an integer representing the camera device index,
-                      or a Path object pointing to a video file.
-        fps: Requested frames per second for the color stream.
-        width: Requested frame width in pixels for the color stream.
-        height: Requested frame height in pixels for the color stream.
-        color_mode: Color mode for image output (RGB or BGR). Defaults to RGB.
-        rotation: Image rotation setting (0°, 90°, 180°, or 270°). Defaults to no rotation.
-        warmup_s: Time reading frames before returning from connect (in seconds)
-        fourcc: FOURCC code for video format (e.g., "MJPG", "YUYV", "I420"). Defaults to None (auto-detect).
-        backend: OpenCV backend identifier (https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html). Defaults to ANY.
+    属性：
+        index_or_path: 表示相机设备索引的整数，
+                      或指向视频文件的 Path 对象。
+        fps: 请求的彩色流每秒帧数。
+        width: 请求的彩色流帧宽度（像素）。
+        height: 请求的彩色流帧高度（像素）。
+        color_mode: 图像输出的颜色模式（RGB 或 BGR）。默认为 RGB。
+        rotation: 图像旋转设置（0°、90°、180° 或 270°）。默认不旋转。
+        warmup_s: connect 返回前读取帧的时间（秒）
+        fourcc: 视频格式的 FOURCC 代码（如 "MJPG"、"YUYV"、"I420"）。默认为 None（自动检测）。
+        backend: OpenCV 后端标识符 (https://docs.opencv.org/3.4/d4/d15/group__videoio__flags__base.html)。默认为 ANY。
 
-    Note:
-        - Only 3-channel color output (RGB/BGR) is currently supported.
-        - FOURCC codes must be 4-character strings (e.g., "MJPG", "YUYV"). Some common FOUCC codes: https://learn.microsoft.com/en-us/windows/win32/medfound/video-fourccs#fourcc-constants
-        - Setting FOURCC can help achieve higher frame rates on some cameras.
+    注意：
+        - 目前仅支持 3 通道彩色输出（RGB/BGR）。
+        - FOURCC 代码必须是 4 字符字符串（如 "MJPG"、"YUYV"）。一些常见的 FOURCC 代码：https://learn.microsoft.com/en-us/windows/win32/medfound/video-fourccs#fourcc-constants
+        - 设置 FOURCC 有助于在某些相机上获得更高的帧率。
     """
 
     index_or_path: int | Path

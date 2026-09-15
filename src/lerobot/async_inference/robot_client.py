@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Example command:
+示例命令：
 ```shell
 python src/lerobot/async_inference/robot_client.py \
     --robot.type=so100_follower \
@@ -50,10 +50,10 @@ import torch
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.zmq.configuration_zmq import ZMQCameraConfig  # noqa: F401
 
-# `lerobot.cameras.realsense` imports pyrealsense2 eagerly whenever the package is merely
-# installed, and on some platforms it is installed but not loadable (e.g. a Jetson wheel built
-# against a newer glibc). Probe the dependency itself rather than the camera module, so a missing
-# realsense only costs us that camera type, while any other import error still surfaces.
+# `lerobot.cameras.realsense` 只要包已安装就会立即导入 pyrealsense2，
+# 而在某些平台上该包虽然已安装但无法加载（例如针对较新 glibc 构建的 Jetson wheel）。
+# 因此直接探测依赖本身而不是相机模块，这样缺少 realsense 只会让我们失去该相机类型，
+# 而其他任何导入错误仍会暴露出来。
 try:
     import pyrealsense2  # noqa: F401
 except ImportError as e:
@@ -98,19 +98,19 @@ class RobotClient:
     logger = get_logger(prefix)
 
     def __init__(self, config: RobotClientConfig):
-        """Initialize RobotClient with unified configuration.
+        """使用统一的配置初始化 RobotClient。
 
         Args:
-            config: RobotClientConfig containing all configuration parameters
+            config: 包含所有配置参数的 RobotClientConfig
         """
-        # Store configuration
+        # 保存配置
         self.config = config
         self.robot = make_robot_from_config(config.robot)
         self.robot.connect()
 
         lerobot_features = map_robot_keys_to_lerobot_features(self.robot)
 
-        # Use environment variable if server_address is not provided in config
+        # 如果配置中未提供 server_address，则使用环境变量
         self.server_address = config.server_address
 
         self.policy_config = RemotePolicyConfig(
@@ -128,7 +128,7 @@ class RobotClient:
 
         self.shutdown_event = threading.Event()
 
-        # Initialize client side variables
+        # 初始化客户端变量
         self.latest_action_lock = threading.Lock()
         self.latest_action = -1
         self.action_chunk_size = -1
@@ -136,33 +136,33 @@ class RobotClient:
         self._chunk_size_threshold = config.chunk_size_threshold
 
         self.action_queue = Queue()
-        self.action_queue_lock = threading.Lock()  # Protect queue operations
+        self.action_queue_lock = threading.Lock()  # 保护队列操作
         self.action_queue_size = []
-        self.start_barrier = threading.Barrier(2)  # 2 threads: action receiver, control loop
+        self.start_barrier = threading.Barrier(2)  # 2 个线程：动作接收器、控制循环
 
-        # FPS measurement
+        # FPS 测量
         self.fps_tracker = FPSTracker(target_fps=self.config.fps)
 
         self.logger.info("Robot connected and ready")
 
-        # Use an event for thread-safe coordination
+        # 使用事件进行线程安全的协调
         self.must_go = threading.Event()
-        self.must_go.set()  # Initially set - observations qualify for direct processing
+        self.must_go.set()  # 初始为已设置状态——观测符合直接处理的条件
 
     @property
     def running(self):
         return not self.shutdown_event.is_set()
 
     def start(self):
-        """Start the robot client and connect to the policy server"""
+        """启动机器人客户端并连接到策略服务器"""
         try:
-            # client-server handshake
+            # 客户端-服务器握手
             start_time = time.perf_counter()
             self.stub.Ready(services_pb2.Empty())
             end_time = time.perf_counter()
             self.logger.debug(f"Connected to policy server in {end_time - start_time:.4f}s")
 
-            # send policy instructions
+            # 发送策略指令
             policy_config_bytes = pickle.dumps(self.policy_config)
             policy_setup = services_pb2.PolicySetup(data=policy_config_bytes)
 
@@ -184,7 +184,7 @@ class RobotClient:
             return False
 
     def stop(self):
-        """Stop the robot client"""
+        """停止机器人客户端"""
         self.shutdown_event.set()
 
         self.robot.disconnect()
@@ -197,8 +197,8 @@ class RobotClient:
         self,
         obs: TimedObservation,
     ) -> bool:
-        """Send observation to the policy server.
-        Returns True if the observation was sent successfully, False otherwise."""
+        """向策略服务器发送观测。
+        如果观测发送成功则返回 True，否则返回 False。"""
         if not self.running:
             raise RuntimeError("Client not running. Run RobotClient.start() before sending observations.")
 
@@ -239,9 +239,9 @@ class RobotClient:
         incoming_actions: list[TimedAction],
         aggregate_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
     ):
-        """Finds the same timestep actions in the queue and aggregates them using the aggregate_fn"""
+        """查找队列中相同时间步的动作，并使用 aggregate_fn 对它们进行聚合"""
         if aggregate_fn is None:
-            # default aggregate function: take the latest action
+            # 默认聚合函数：取最新的动作
             def aggregate_fn(x1, x2):
                 return x2
 
@@ -255,17 +255,17 @@ class RobotClient:
             with self.latest_action_lock:
                 latest_action = self.latest_action
 
-            # New action is older than the latest action in the queue, skip it
+            # 新动作比队列中最新的动作更旧，跳过它
             if new_action.get_timestep() <= latest_action:
                 continue
 
-            # If the new action's timestep is not in the current action queue, add it directly
+            # 如果新动作的时间步不在当前动作队列中，则直接添加它
             elif new_action.get_timestep() not in current_action_queue:
                 future_action_queue.put(new_action)
                 continue
 
-            # If the new action's timestep is in the current action queue, aggregate it
-            # TODO: There is probably a way to do this with broadcasting of the two action tensors
+            # 如果新动作的时间步在当前动作队列中，则对其进行聚合
+            # TODO: 可能有一种方法可以通过对两个动作张量进行广播来实现这一点
             future_action_queue.put(
                 TimedAction(
                     timestamp=new_action.get_timestamp(),
@@ -280,31 +280,31 @@ class RobotClient:
             self.action_queue = future_action_queue
 
     def receive_actions(self, verbose: bool = False):
-        """Receive actions from the policy server"""
-        # Wait at barrier for synchronized start
+        """从策略服务器接收动作"""
+        # 在屏障（barrier）处等待同步启动
         self.start_barrier.wait()
         self.logger.info("Action receiving thread starting")
 
         while self.running:
             try:
-                # Use StreamActions to get a stream of actions from the server
+                # 使用 StreamActions 从服务器获取动作流
                 actions_chunk = self.stub.GetActions(services_pb2.Empty())
                 if len(actions_chunk.data) == 0:
-                    continue  # received `Empty` from server, wait for next call
+                    continue  # 从服务器收到 `Empty`，等待下一次调用
 
                 receive_time = time.time()
 
-                # Deserialize bytes back into list[TimedAction]
+                # 将字节反序列化回 list[TimedAction]
                 deserialize_start = time.perf_counter()
                 timed_actions = pickle.loads(actions_chunk.data)  # nosec
                 deserialize_time = time.perf_counter() - deserialize_start
 
-                # Log device type of received actions
+                # 记录接收到的动作的设备类型
                 if len(timed_actions) > 0:
                     received_device = timed_actions[0].get_action().device.type
                     self.logger.debug(f"Received actions on device: {received_device}")
 
-                # Move actions to client_device (e.g., for downstream planners that need GPU)
+                # 将动作移动到 client_device（例如供需要 GPU 的下游规划器使用）
                 client_device = self.config.client_device
                 if client_device != "cpu":
                     for timed_action in timed_actions:
@@ -316,19 +316,19 @@ class RobotClient:
 
                 self.action_chunk_size = max(self.action_chunk_size, len(timed_actions))
 
-                # Calculate network latency if we have matching observations
+                # 如果有匹配的观测，则计算网络延迟
                 if len(timed_actions) > 0 and verbose:
                     with self.latest_action_lock:
                         latest_action = self.latest_action
 
                     self.logger.debug(f"Current latest action: {latest_action}")
 
-                    # Get queue state before changes
+                    # 获取变更前的队列状态
                     old_size, old_timesteps = self._inspect_action_queue()
                     if not old_timesteps:
-                        old_timesteps = [latest_action]  # queue was empty
+                        old_timesteps = [latest_action]  # 队列为空
 
-                    # Log incoming actions
+                    # 记录传入的动作
                     incoming_timesteps = [a.get_timestep() for a in timed_actions]
 
                     first_action_timestep = timed_actions[0].get_timestep()
@@ -342,15 +342,15 @@ class RobotClient:
                         f"Deserialization time: {deserialize_time * 1000:.2f}ms"
                     )
 
-                # Update action queue
+                # 更新动作队列
                 start_time = time.perf_counter()
                 self._aggregate_action_queues(timed_actions, self.config.aggregate_fn)
                 queue_update_time = time.perf_counter() - start_time
 
-                self.must_go.set()  # after receiving actions, next empty queue triggers must-go processing!
+                self.must_go.set()  # 接收到动作后，下一次队列为空将触发 must-go 处理！
 
                 if verbose:
-                    # Get queue state after changes
+                    # 获取变更后的队列状态
                     new_size, new_timesteps = self._inspect_action_queue()
 
                     with self.latest_action_lock:
@@ -372,7 +372,7 @@ class RobotClient:
                 self.logger.error(f"Error receiving actions: {e}")
 
     def actions_available(self):
-        """Check if there are actions available in the queue"""
+        """检查队列中是否有可用的动作"""
         with self.action_queue_lock:
             return not self.action_queue.empty()
 
@@ -381,13 +381,13 @@ class RobotClient:
         return action
 
     def control_loop_action(self, verbose: bool = False) -> dict[str, Any]:
-        """Reading and performing actions in local queue"""
+        """读取并执行本地队列中的动作"""
 
-        # Lock only for queue operations
+        # 仅对队列操作加锁
         get_start = time.perf_counter()
         with self.action_queue_lock:
             self.action_queue_size.append(self.action_queue.qsize())
-            # Get action from queue
+            # 从队列中获取动作
             timed_action = self.action_queue.get_nowait()
         get_end = time.perf_counter() - get_start
 
@@ -414,13 +414,13 @@ class RobotClient:
         return _performed_action
 
     def _ready_to_send_observation(self):
-        """Flags when the client is ready to send an observation"""
+        """标记客户端何时准备好发送观测"""
         with self.action_queue_lock:
             return self.action_queue.qsize() / self.action_chunk_size <= self._chunk_size_threshold
 
     def control_loop_observation(self, task: str, verbose: bool = False) -> RawObservation:
         try:
-            # Get serialized observation bytes from the function
+            # 获取序列化后的观测字节
             start_time = time.perf_counter()
 
             raw_observation: RawObservation = self.robot.get_observation()
@@ -430,14 +430,14 @@ class RobotClient:
                 latest_action = self.latest_action
 
             observation = TimedObservation(
-                timestamp=time.time(),  # need time.time() to compare timestamps across client and server
+                timestamp=time.time(),  # 需要 time.time() 来比较客户端和服务器之间的时间戳
                 observation=raw_observation,
                 timestep=max(latest_action, 0),
             )
 
             obs_capture_time = time.perf_counter() - start_time
 
-            # If there are no actions left in the queue, the observation must go through processing!
+            # 如果队列中没有剩余动作，该观测必须经过处理！
             with self.action_queue_lock:
                 observation.must_go = self.must_go.is_set() and self.action_queue.empty()
                 current_queue_size = self.action_queue.qsize()
@@ -446,11 +446,11 @@ class RobotClient:
 
             self.logger.debug(f"QUEUE SIZE: {current_queue_size} (Must go: {observation.must_go})")
             if observation.must_go:
-                # must-go event will be set again after receiving actions
+                # must-go 事件将在接收到动作后再次被设置
                 self.must_go.clear()
 
             if verbose:
-                # Calculate comprehensive FPS metrics
+                # 计算综合 FPS 指标
                 fps_metrics = self.fps_tracker.calculate_fps_metrics(observation.get_timestamp())
 
                 self.logger.info(
@@ -469,8 +469,8 @@ class RobotClient:
             self.logger.error(f"Error in observation sender: {e}")
 
     def control_loop(self, task: str, verbose: bool = False) -> tuple[Observation, Action]:
-        """Combined function for executing actions and streaming observations"""
-        # Wait at barrier for synchronized start
+        """用于执行动作和流式传输观测的组合函数"""
+        # 在屏障（barrier）处等待同步启动
         self.start_barrier.wait()
         self.logger.info("Control loop thread starting")
 
@@ -479,16 +479,16 @@ class RobotClient:
 
         while self.running:
             control_loop_start = time.perf_counter()
-            """Control loop: (1) Performing actions, when available"""
+            """控制循环：(1) 在动作可用时执行动作"""
             if self.actions_available():
                 _performed_action = self.control_loop_action(verbose)
 
-            """Control loop: (2) Streaming observations to the remote policy server"""
+            """控制循环：(2) 向远程策略服务器流式传输观测"""
             if self._ready_to_send_observation():
                 _captured_observation = self.control_loop_observation(task, verbose)
 
             self.logger.debug(f"Control loop (ms): {(time.perf_counter() - control_loop_start) * 1000:.2f}")
-            # Dynamically adjust sleep time to maintain the desired control frequency
+            # 动态调整睡眠时间以维持期望的控制频率
             time.sleep(max(0, self.config.environment_dt - (time.perf_counter() - control_loop_start)))
 
         return _captured_observation, _performed_action
@@ -498,7 +498,7 @@ class RobotClient:
 def async_client(cfg: RobotClientConfig):
     logging.info(pformat(asdict(cfg)))
 
-    # TODO: Assert if checking robot support is still needed with the plugin system
+    # TODO: 确认在使用插件系统的情况下是否仍需要检查机器人支持
     # if cfg.robot.type not in SUPPORTED_ROBOTS:
     #     raise ValueError(f"Robot {cfg.robot.type} not yet supported!")
 
@@ -507,14 +507,14 @@ def async_client(cfg: RobotClientConfig):
     if client.start():
         client.logger.info("Starting action receiver thread...")
 
-        # Create and start action receiver thread
+        # 创建并启动动作接收线程
         action_receiver_thread = threading.Thread(target=client.receive_actions, daemon=True)
 
-        # Start action receiver thread
+        # 启动动作接收线程
         action_receiver_thread.start()
 
         try:
-            # The main thread runs the control loop
+            # 主线程运行控制循环
             client.control_loop(task=cfg.task)
 
         finally:
@@ -527,4 +527,4 @@ def async_client(cfg: RobotClientConfig):
 
 if __name__ == "__main__":
     register_third_party_plugins()
-    async_client()  # run the client
+    async_client()  # 运行客户端

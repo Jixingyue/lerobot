@@ -44,7 +44,7 @@ if PYNPUT_AVAILABLE:
 
 class KeyboardTeleop(Teleoperator):
     """
-    Teleop class to use keyboard inputs for control.
+    使用键盘输入进行控制的遥操作类。
     """
 
     config_class = KeyboardTeleopConfig
@@ -131,7 +131,7 @@ class KeyboardTeleop(Teleoperator):
 
         self._drain_pressed_keys()
 
-        # Generate action based on current key states
+        # 根据当前按键状态生成动作
         action = {key for key, val in self.current_pressed.items() if val}
         self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
 
@@ -148,8 +148,8 @@ class KeyboardTeleop(Teleoperator):
 
 class KeyboardEndEffectorTeleop(KeyboardTeleop):
     """
-    Teleop class to use keyboard inputs for end effector control.
-    Designed to be used with the `So100FollowerEndEffector` robot.
+    使用键盘输入进行末端执行器控制的遥操作类。
+    设计用于配合 `So100FollowerEndEffector` 机器人使用。
     """
 
     config_class = KeyboardEndEffectorTeleopConfig
@@ -183,7 +183,7 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
         delta_z = 0.0
         gripper_action = 1.0
 
-        # Generate action based on current key states
+        # 根据当前按键状态生成动作
         for key, val in self.current_pressed.items():
             if key == keyboard.Key.up:
                 delta_y = -int(val)
@@ -198,14 +198,14 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
             elif key == keyboard.Key.shift_r:
                 delta_z = int(val)
             elif key == keyboard.Key.ctrl_r:
-                # Gripper actions are expected to be between 0 (close), 1 (stay), 2 (open)
+                # 夹爪动作的取值应为 0（闭合）、1（保持）、2（张开）之间
                 gripper_action = int(val) + 1
             elif key == keyboard.Key.ctrl_l:
                 gripper_action = int(val) - 1
             elif val:
-                # If the key is pressed, add it to the misc_keys_queue
-                # this will record key presses that are not part of the delta_x, delta_y, delta_z
-                # this is useful for retrieving other events like interventions for RL, episode success, etc.
+                # 如果按键被按下，将其加入 misc_keys_queue
+                # 这会记录不属于 delta_x、delta_y、delta_z 的按键
+                # 这对于获取其他事件（如强化学习中的干预、回合成功等）很有用
                 self.misc_keys_queue.put(key)
 
         action_dict = {
@@ -221,21 +221,20 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
 
     def get_teleop_events(self) -> dict[str, Any]:
         """
-        Get extra control events from the keyboard such as intervention status,
-        episode termination, success indicators, etc.
+        从键盘获取额外的控制事件，例如干预状态、回合终止、成功指示等。
 
-        Keyboard mappings:
-        - Any movement keys pressed = intervention active
-        - 's' key = success (terminate episode successfully)
-        - 'r' key = rerecord episode (terminate and rerecord)
-        - 'q' key = quit episode (terminate without success)
+        按键映射：
+        - 按下任意移动键 = 干预激活
+        - 's' 键 = 成功（成功终止回合）
+        - 'r' 键 = 重新录制回合（终止并重新录制）
+        - 'q' 键 = 退出回合（以失败终止）
 
         Returns:
-            Dictionary containing:
-                - is_intervention: bool - Whether human is currently intervening
-                - terminate_episode: bool - Whether to terminate the current episode
-                - success: bool - Whether the episode was successful
-                - rerecord_episode: bool - Whether to rerecord the episode
+            包含以下内容的字典：
+                - is_intervention: bool - 人类当前是否正在干预
+                - terminate_episode: bool - 是否终止当前回合
+                - success: bool - 回合是否成功
+                - rerecord_episode: bool - 是否重新录制回合
         """
         if not self.is_connected:
             return {
@@ -245,7 +244,7 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
                 TeleopEvents.RERECORD_EPISODE: False,
             }
 
-        # Check if any movement keys are currently pressed (indicates intervention)
+        # 检查当前是否有移动键被按下（表示干预）
         movement_keys = [
             keyboard.Key.up,
             keyboard.Key.down,
@@ -260,12 +259,12 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
 
         self.current_pressed.clear()
 
-        # Check for episode control commands from misc_keys_queue
+        # 从 misc_keys_queue 中检查回合控制命令
         terminate_episode = False
         success = False
         rerecord_episode = False
 
-        # Process any pending misc keys
+        # 处理所有待处理的杂项按键
         while not self.misc_keys_queue.empty():
             key = self.misc_keys_queue.get_nowait()
             if key == "s":
@@ -287,35 +286,35 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
 
 class KeyboardRoverTeleop(KeyboardTeleop):
     """
-    Keyboard teleoperator for mobile robots like EarthRover Mini Plus.
+    用于 EarthRover Mini Plus 等移动机器人的键盘遥操作设备。
 
-    Provides intuitive WASD-style controls for driving a mobile robot:
-    - Linear movement (forward/backward)
-    - Angular movement (turning/rotation)
-    - Speed adjustment
-    - Emergency stop
+    提供直观的 WASD 风格控制来驾驶移动机器人：
+    - 线性移动（前进/后退）
+    - 角向移动（转向/旋转）
+    - 速度调节
+    - 紧急停止
 
-    Keyboard Controls:
-        Movement:
-            - W: Move forward
-            - S: Move backward
-            - A: Turn left (with forward motion)
-            - D: Turn right (with forward motion)
-            - Q: Rotate left in place
-            - E: Rotate right in place
-            - X: Emergency stop
+    键盘控制：
+        移动：
+            - W：前进
+            - S：后退
+            - A：左转（带前进运动）
+            - D：右转（带前进运动）
+            - Q：原地左转
+            - E：原地右转
+            - X：紧急停止
 
-        Speed Control:
-            - +/=: Increase speed
-            - -: Decrease speed
+        速度控制：
+            - +/=：加速
+            - -：减速
 
-        System:
-            - ESC: Disconnect teleoperator
+        系统：
+            - ESC：断开遥操作设备
 
     Attributes:
-        config: Teleoperator configuration
-        current_linear_speed: Current linear velocity magnitude
-        current_angular_speed: Current angular velocity magnitude
+        config: 遥操作设备配置
+        current_linear_speed: 当前线速度大小
+        current_angular_speed: 当前角速度大小
 
     Example:
         ```python
@@ -337,13 +336,13 @@ class KeyboardRoverTeleop(KeyboardTeleop):
 
     def __init__(self, config: KeyboardRoverTeleopConfig):
         super().__init__(config)
-        # Add rover-specific speed settings
+        # 添加漫游车专用的速度设置
         self.current_linear_speed = config.linear_speed
         self.current_angular_speed = config.angular_speed
 
     @property
     def action_features(self) -> dict:
-        """Return action format for rover (linear and angular velocities)."""
+        """返回漫游车的动作格式（线速度和角速度）。"""
         return {
             "linear_velocity": float,
             "angular_velocity": float,
@@ -351,26 +350,26 @@ class KeyboardRoverTeleop(KeyboardTeleop):
 
     @property
     def is_calibrated(self) -> bool:
-        """Rover teleop doesn't require calibration."""
+        """漫游车遥操作不需要校准。"""
         return True
 
     def _drain_pressed_keys(self):
-        """Update current_pressed state from event queue without clearing held keys"""
+        """从事件队列更新 current_pressed 状态，且不清除仍按住的按键"""
         while not self.event_queue.empty():
             key_char, is_pressed = self.event_queue.get_nowait()
             if is_pressed:
                 self.current_pressed[key_char] = True
             else:
-                # Only remove key if it's being released
+                # 仅在按键被释放时才移除
                 self.current_pressed.pop(key_char, None)
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
         """
-        Get the current action based on pressed keys.
+        根据按下的按键获取当前动作。
 
         Returns:
-            RobotAction with 'linear_velocity' and 'angular_velocity' keys.
+            包含 'linear_velocity' 和 'angular_velocity' 键的 RobotAction。
         """
         before_read_t = time.perf_counter()
 
@@ -379,37 +378,37 @@ class KeyboardRoverTeleop(KeyboardTeleop):
         linear_velocity = 0.0
         angular_velocity = 0.0
 
-        # Check which keys are currently pressed (not released)
+        # 检查当前哪些按键被按下（未释放）
         active_keys = {key for key, is_pressed in self.current_pressed.items() if is_pressed}
 
-        # Linear movement (W/S) - these take priority
+        # 线性移动（W/S）——这些具有优先级
         if "w" in active_keys:
             linear_velocity = self.current_linear_speed
         elif "s" in active_keys:
             linear_velocity = -self.current_linear_speed
 
-        # Turning (A/D/Q/E)
+        # 转向（A/D/Q/E）
         if "d" in active_keys:
             angular_velocity = -self.current_angular_speed
-            if linear_velocity == 0:  # If not moving forward/back, add slight forward motion
+            if linear_velocity == 0:  # 如果未在前进/后退，则添加少量前进运动
                 linear_velocity = self.current_linear_speed * self.config.turn_assist_ratio
         elif "a" in active_keys:
             angular_velocity = self.current_angular_speed
-            if linear_velocity == 0:  # If not moving forward/back, add slight forward motion
+            if linear_velocity == 0:  # 如果未在前进/后退，则添加少量前进运动
                 linear_velocity = self.current_linear_speed * self.config.turn_assist_ratio
         elif "q" in active_keys:
             angular_velocity = self.current_angular_speed
-            linear_velocity = 0  # Rotate in place
+            linear_velocity = 0  # 原地旋转
         elif "e" in active_keys:
             angular_velocity = -self.current_angular_speed
-            linear_velocity = 0  # Rotate in place
+            linear_velocity = 0  # 原地旋转
 
-        # Stop (X) - overrides everything
+        # 停止（X）——覆盖一切
         if "x" in active_keys:
             linear_velocity = 0
             angular_velocity = 0
 
-        # Speed adjustment
+        # 速度调节
         if "+" in active_keys or "=" in active_keys:
             self.current_linear_speed += self.config.speed_increment
             self.current_angular_speed += self.config.speed_increment * self.config.angular_speed_ratio

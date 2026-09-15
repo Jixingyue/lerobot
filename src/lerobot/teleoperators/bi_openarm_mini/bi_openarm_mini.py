@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 class BiOpenArmMini(BimanualMixin, Teleoperator):
-    """Bimanual OpenArm Mini teleoperator.
+    """双臂 OpenArm Mini 遥操作设备。
 
-    Composes two single-arm :class:`OpenArmMini` instances. Action and feedback
-    keys of each arm are namespaced with a ``left_`` / ``right_`` prefix, so a
-    bimanual leader can teleoperate a bimanual OpenArm follower.
+    由两个单臂 :class:`OpenArmMini` 实例组合而成。每个臂的动作和反馈键
+    通过 ``left_`` / ``right_`` 前缀进行命名空间区分，从而使双臂主手能够
+    遥操作双臂 OpenArm 从手机器人。
     """
 
     config_class = BiOpenArmMiniConfig
@@ -43,8 +43,8 @@ class BiOpenArmMini(BimanualMixin, Teleoperator):
         super().__init__(config)
         self.config = config
 
-        # `side` is forced to match left/right regardless of what the user passed
-        # on the per-arm base config — the bimanual wrapper owns the side semantics.
+        # 无论用户在单臂基础配置中传入了什么，`side` 都会被强制设置为
+        # left/right —— 双臂封装层负责侧别语义。
         left_arm_config = OpenArmMiniConfig(
             id=f"{config.id}_left" if config.id else None,
             calibration_dir=config.calibration_dir,

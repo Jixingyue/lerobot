@@ -30,12 +30,12 @@ DEFAULT_QUANTILES = [0.01, 0.10, 0.50, 0.90, 0.99]
 
 class RunningQuantileStats:
     """
-    Maintains running statistics for batches of vectors, including mean,
-    standard deviation, min, max, and approximate quantiles.
+    维护向量批次的运行统计量，包括均值、标准差、
+    最小值、最大值和近似分位数。
 
-    Statistics are computed per feature dimension and updated incrementally
-    as new batches are observed. Quantiles are estimated using histograms,
-    which adapt dynamically if the observed data range expands.
+    统计量按特征维度计算，并随着观测到新批次而增量更新。
+    分位数使用直方图估计，当观测到的数据范围扩大时
+    会动态自适应。
     """
 
     def __init__(self, quantile_list: list[float] | None = None, num_quantile_bins: int = 5000):
@@ -54,13 +54,13 @@ class RunningQuantileStats:
         self._quantile_keys = [f"q{int(q * 100):02d}" for q in self._quantile_list]
 
     def update(self, batch: np.ndarray) -> None:
-        """Update the running statistics with a batch of vectors.
+        """使用一批向量更新运行统计量。
 
         Args:
-            batch: An array where all dimensions except the last are batch dimensions.
+            batch: 除最后一维外所有维度均为批次维度的数组。
         """
         batch = batch.reshape(-1, batch.shape[-1])
-        # Promote integer and low-precision inputs before computing squared statistics.
+        # 在计算平方统计量之前，将整数和低精度输入提升精度。
         batch = batch.astype(np.result_type(batch.dtype, np.float32), copy=False)
         num_elements, vector_length = batch.shape
 
@@ -93,7 +93,7 @@ class RunningQuantileStats:
         batch_mean = np.mean(batch, axis=0)
         batch_mean_of_squares = np.mean(batch**2, axis=0)
 
-        # Update running mean and mean of squares
+        # 更新运行均值和平方均值
         self._mean += (batch_mean - self._mean) * (num_elements / self._count)
         self._mean_of_squares += (batch_mean_of_squares - self._mean_of_squares) * (
             num_elements / self._count
@@ -102,13 +102,13 @@ class RunningQuantileStats:
         self._update_histograms(batch)
 
     def get_statistics(self) -> dict[str, np.ndarray]:
-        """Compute and return the statistics of the vectors processed so far.
+        """计算并返回到目前为止所处理向量的统计量。
 
         Args:
-            quantiles: List of quantiles to compute (e.g., [0.01, 0.10, 0.50, 0.90, 0.99]). If None, no quantiles computed.
+            quantiles: 要计算的分位数列表（例如 [0.01, 0.10, 0.50, 0.90, 0.99]）。如果为 None，则不计算分位数。
 
         Returns:
-            Dictionary containing the computed statistics.
+            包含所计算统计量的字典。
         """
         if self._count < 2:
             raise ValueError("Cannot compute statistics for less than 2 vectors.")
@@ -132,25 +132,25 @@ class RunningQuantileStats:
         return stats
 
     def _adjust_histograms(self):
-        """Adjust histograms when min or max changes."""
+        """当最小值或最大值发生变化时调整直方图。"""
         for i in range(len(self._histograms)):
             old_edges = self._bin_edges[i]
             old_hist = self._histograms[i]
 
-            # Create new edges with small padding to ensure range coverage
+            # 创建带有少量填充的新边界以确保范围覆盖
             padding = (self._max[i] - self._min[i]) * 1e-10
             new_edges = np.linspace(
                 self._min[i] - padding, self._max[i] + padding, self._num_quantile_bins + 1
             )
 
-            # Redistribute existing histogram counts to new bins
-            # We need to map each old bin center to the new bins
+            # 将现有直方图计数重新分配到新的分箱
+            # 需要将每个旧分箱中心映射到新的分箱
             old_centers = (old_edges[:-1] + old_edges[1:]) / 2
             new_hist = np.zeros(self._num_quantile_bins)
 
             for old_center, count in zip(old_centers, old_hist, strict=False):
                 if count > 0:
-                    # Find which new bin this old center belongs to
+                    # 找出此旧中心属于哪个新分箱
                     bin_idx = np.searchsorted(new_edges, old_center) - 1
                     bin_idx = max(0, min(bin_idx, self._num_quantile_bins - 1))
                     new_hist[bin_idx] += count
@@ -159,13 +159,13 @@ class RunningQuantileStats:
             self._bin_edges[i] = new_edges
 
     def _update_histograms(self, batch: np.ndarray) -> None:
-        """Update histograms with new vectors."""
+        """使用新向量更新直方图。"""
         for i in range(batch.shape[1]):
             hist, _ = np.histogram(batch[:, i], bins=self._bin_edges[i])
             self._histograms[i] += hist
 
     def _compute_quantiles(self) -> list[np.ndarray]:
-        """Compute quantiles based on histograms."""
+        """基于直方图计算分位数。"""
         results = []
         for q in self._quantile_list:
             target_count = q * self._count
@@ -179,7 +179,7 @@ class RunningQuantileStats:
         return results
 
     def _compute_single_quantile(self, hist: np.ndarray, edges: np.ndarray, target_count: float) -> float:
-        """Compute a single quantile value from histogram and bin edges."""
+        """根据直方图和分箱边界计算单个分位数值。"""
         cumsum = np.cumsum(hist)
         idx = np.searchsorted(cumsum, target_count)
 
@@ -188,15 +188,15 @@ class RunningQuantileStats:
         if idx >= len(cumsum):
             return edges[-1]
 
-        # If not edge case, interpolate within the bin
+        # 如果不是边界情况，则在分箱内进行插值
         count_before = cumsum[idx - 1]
         count_in_bin = cumsum[idx] - count_before
 
-        # If no samples in this bin, use the bin edge
+        # 如果此分箱中没有样本，则使用分箱边界
         if count_in_bin == 0:
             return edges[idx]
 
-        # Linear interpolation within the bin
+        # 分箱内的线性插值
         fraction = (target_count - count_before) / count_in_bin
         return edges[idx] + fraction * (edges[idx + 1] - edges[idx])
 
@@ -204,17 +204,17 @@ class RunningQuantileStats:
 def estimate_num_samples(
     dataset_len: int, min_num_samples: int = 100, max_num_samples: int = 10_000, power: float = 0.75
 ) -> int:
-    """Heuristic to estimate the number of samples based on dataset size.
-    The power controls the sample growth relative to dataset size.
-    Lower the power for less number of samples.
+    """根据数据集大小估计样本数量的启发式方法。
+    power 控制样本数量相对于数据集大小的增长速度。
+    降低 power 可以减少样本数量。
 
-    For default arguments, we have:
-    - from 1 to ~500, num_samples=100
-    - at 1000, num_samples=177
-    - at 2000, num_samples=299
-    - at 5000, num_samples=594
-    - at 10000, num_samples=1000
-    - at 20000, num_samples=1681
+    对于默认参数，有：
+    - 从 1 到约 500，num_samples=100
+    - 在 1000 时，num_samples=177
+    - 在 2000 时，num_samples=299
+    - 在 5000 时，num_samples=594
+    - 在 10000 时，num_samples=1000
+    - 在 20000 时，num_samples=1681
     """
     if dataset_len < min_num_samples:
         min_num_samples = dataset_len
@@ -230,7 +230,7 @@ def auto_downsample_height_width(img: np.ndarray, target_size: int = 150, max_si
     _, height, width = img.shape
 
     if max(width, height) < max_size_threshold:
-        # no downsampling needed
+        # 无需降采样
         return img
 
     downsample_factor = int(width / target_size) if width > height else int(height / target_size)
@@ -243,7 +243,7 @@ def sample_images(image_paths: list[str]) -> np.ndarray:
     images = None
     for i, idx in enumerate(sampled_indices):
         path = image_paths[idx]
-        # we load RGB images as uint8 to reduce memory usage; depth keeps its native dtype
+        # 我们将 RGB 图像加载为 uint8 以减少内存占用；深度图保持其原生 dtype
         img = load_image_as_numpy(path, dtype=np.uint8, channel_first=True)
         img = auto_downsample_height_width(img)
 
@@ -261,24 +261,23 @@ def _reshape_stats_by_axis(
     keepdims: bool,
     original_shape: tuple[int, ...],
 ) -> dict[str, np.ndarray]:
-    """Reshape all statistics to match NumPy's output conventions.
+    """重塑所有统计量以匹配 NumPy 的输出约定。
 
-    Applies consistent reshaping to all statistics (except 'count') based on the
-    axis and keepdims parameters. This ensures statistics have the correct shape
-    for broadcasting with the original data.
+    根据 axis 和 keepdims 参数，对所有统计量（'count' 除外）应用一致的
+    重塑。这确保统计量具有与原始数据进行广播的正确形状。
 
     Args:
-        stats: Dictionary of computed statistics
-        axis: Axis or axes along which statistics were computed
-        keepdims: Whether to keep reduced dimensions as size-1 dimensions
-        original_shape: Shape of the original array
+        stats: 已计算统计量的字典
+        axis: 计算统计量时所沿的轴
+        keepdims: 是否将被归约的维度保留为大小为 1 的维度
+        original_shape: 原始数组的形状
 
     Returns:
-        Dictionary with reshaped statistics
+        重塑后统计量的字典
 
     Note:
-        The 'count' statistic is never reshaped as it represents metadata
-        rather than per-feature statistics.
+        'count' 统计量永远不会被重塑，因为它表示的是元数据
+        而不是按特征的统计量。
     """
     if axis == (1,) and not keepdims:
         return stats
@@ -294,7 +293,7 @@ def _reshape_stats_by_axis(
 
 
 def _reshape_for_image_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
-    """Reshape statistics for image data (axis=(0,2,3))."""
+    """重塑图像数据的统计量（axis=(0,2,3)）。"""
     if keepdims and value.ndim == 1:
         return value.reshape(1, -1, 1, 1)
     return value
@@ -303,7 +302,7 @@ def _reshape_for_image_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
 def _reshape_for_vector_stats(
     value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]
 ) -> np.ndarray:
-    """Reshape statistics for vector data (axis=0 or axis=(0,))."""
+    """重塑向量数据的统计量（axis=0 或 axis=(0,)）。"""
     if not keepdims:
         return value
 
@@ -315,7 +314,7 @@ def _reshape_for_vector_stats(
 
 
 def _reshape_for_feature_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
-    """Reshape statistics for feature-wise computation (axis=(1,))."""
+    """重塑按特征计算的统计量（axis=(1,)）。"""
     if not keepdims:
         return value
 
@@ -329,30 +328,30 @@ def _reshape_for_feature_stats(value: np.ndarray, keepdims: bool) -> np.ndarray:
 def _reshape_for_global_stats(
     value: np.ndarray, keepdims: bool, original_shape: tuple[int, ...]
 ) -> np.ndarray | float:
-    """Reshape statistics for global reduction (axis=None)."""
+    """重塑全局归约的统计量（axis=None）。"""
     if keepdims:
         target_shape = tuple(1 for _ in original_shape)
         return value.reshape(target_shape)
-    # Keep at least 1-D arrays to satisfy validator
+    # 至少保持一维数组以满足验证器的要求
     return np.atleast_1d(value)
 
 
 def _reshape_single_stat(
     value: np.ndarray, axis: int | tuple[int, ...] | None, keepdims: bool, original_shape: tuple[int, ...]
 ) -> np.ndarray | float:
-    """Apply appropriate reshaping to a single statistic array.
+    """对单个统计量数组应用适当的重塑。
 
-    This function transforms statistic arrays to match expected output shapes
-    based on the axis configuration and keepdims parameter.
+    该函数根据 axis 配置和 keepdims 参数，将统计量数组变换为
+    期望的输出形状。
 
     Args:
-        value: The statistic array to reshape
-        axis: Axis or axes that were reduced during computation
-        keepdims: Whether to maintain reduced dimensions as size-1 dimensions
-        original_shape: Shape of the original data before reduction
+        value: 要重塑的统计量数组
+        axis: 计算过程中被归约的轴
+        keepdims: 是否将被归约的维度保留为大小为 1 的维度
+        original_shape: 归约前原始数据的形状
 
     Returns:
-        Reshaped array following NumPy broadcasting conventions
+        遵循 NumPy 广播约定的重塑后数组
 
     """
     if axis == (0, 2, 3):
@@ -371,32 +370,32 @@ def _reshape_single_stat(
 
 
 def _prepare_array_for_stats(array: np.ndarray, axis: int | tuple[int, ...] | None) -> tuple[np.ndarray, int]:
-    """Prepare array for statistics computation by reshaping according to axis.
+    """根据 axis 重塑数组，为统计量计算做准备。
 
     Args:
-        array: Input data array
-        axis: Axis or axes along which to compute statistics
+        array: 输入数据数组
+        axis: 计算统计量时所沿的轴
 
     Returns:
-        Tuple of (reshaped_array, sample_count)
+        (reshaped_array, sample_count) 元组
     """
-    if axis == (0, 2, 3):  # Image data
+    if axis == (0, 2, 3):  # 图像数据
         batch_size, channels, height, width = array.shape
         reshaped = array.transpose(0, 2, 3, 1).reshape(-1, channels)
         return reshaped, batch_size
 
-    if axis == 0 or axis == (0,):  # Vector data
+    if axis == 0 or axis == (0,):  # 向量数据
         reshaped = array
         if array.ndim == 1:
             reshaped = array.reshape(-1, 1)
         return reshaped, array.shape[0]
 
-    if axis == (1,):  # Feature-wise statistics
+    if axis == (1,):  # 按特征的统计量
         return array.T, array.shape[1]
 
-    if axis is None:  # Global statistics
+    if axis is None:  # 全局统计量
         reshaped = array.reshape(-1, 1)
-        # For backward compatibility, count represents the first dimension size
+        # 为了向后兼容，count 表示第一维的大小
         return reshaped, array.shape[0] if array.ndim > 0 else 1
 
     raise ValueError(f"Unsupported axis configuration: {axis}")
@@ -405,14 +404,14 @@ def _prepare_array_for_stats(array: np.ndarray, axis: int | tuple[int, ...] | No
 def _compute_basic_stats(
     array: np.ndarray, sample_count: int, quantile_list: list[float] | None = None
 ) -> dict[str, np.ndarray]:
-    """Compute basic statistics for arrays with insufficient samples for quantiles.
+    """为样本数不足以计算分位数的数组计算基本统计量。
 
     Args:
-        array: Reshaped array ready for statistics computation
-        sample_count: Number of samples represented in the data
+        array: 已重塑、可用于统计量计算的数组
+        sample_count: 数据所表示的样本数量
 
     Returns:
-        Dictionary with basic statistics and quantiles set to mean values
+        包含基本统计量且分位数设为均值的字典
     """
     if quantile_list is None:
         quantile_list = DEFAULT_QUANTILES
@@ -438,32 +437,32 @@ def get_feature_stats(
     keepdims: bool,
     quantile_list: list[float] | None = None,
 ) -> dict[str, np.ndarray]:
-    """Compute comprehensive statistics for array features along specified axes.
+    """沿指定轴计算数组特征的综合统计量。
 
-    This function calculates min, max, mean, std, and quantiles (1%, 10%, 50%, 90%, 99%)
-    for the input array along the specified axes. It handles different data layouts:
-    - Image data: axis=(0,2,3) computes per-channel statistics
-    - Vector data: axis=0 computes per-feature statistics
-    - Feature-wise: axis=1 computes statistics across features
-    - Global: axis=None computes statistics over entire array
+    该函数沿指定轴为输入数组计算 min、max、mean、std 和分位数（1%、10%、50%、90%、99%）。
+    它处理不同的数据布局：
+    - 图像数据：axis=(0,2,3) 计算按通道的统计量
+    - 向量数据：axis=0 计算按特征的统计量
+    - 按特征：axis=1 计算跨特征的统计量
+    - 全局：axis=None 计算整个数组的统计量
 
     Args:
-        array: Input data array with shape appropriate for the specified axis
-        axis: Axis or axes along which to compute statistics
-            - (0, 2, 3): For image data (batch, channels, height, width)
-            - 0 or (0,): For vector/tabular data (samples, features)
-            - (1,): For computing across features
-            - None: For global statistics over entire array
-        keepdims: If True, reduced axes are kept as dimensions with size 1
+        array: 输入数据数组，形状适合指定的 axis
+        axis: 计算统计量时所沿的轴
+            - (0, 2, 3)：用于图像数据（批次、通道、高度、宽度）
+            - 0 或 (0,)：用于向量/表格数据（样本、特征）
+            - (1,)：用于跨特征计算
+            - None：用于整个数组的全局统计量
+        keepdims: 如果为 True，被归约的轴保留为大小为 1 的维度
 
     Returns:
-        Dictionary containing:
-            - 'min': Minimum values
-            - 'max': Maximum values
-            - 'mean': Mean values
-            - 'std': Standard deviation
-            - 'count': Number of samples (always shape (1,))
-            - 'q01', 'q10', 'q50', 'q90', 'q99': Quantile values
+        包含以下内容的字典：
+            - 'min'：最小值
+            - 'max'：最大值
+            - 'mean'：均值
+            - 'std'：标准差
+            - 'count'：样本数量（形状始终为 (1,)）
+            - 'q01'、'q10'、'q50'、'q90'、'q99'：分位数值
 
     """
     if quantile_list is None:
@@ -489,28 +488,28 @@ def compute_episode_stats(
     features: dict,
     quantile_list: list[float] | None = None,
 ) -> dict:
-    """Compute comprehensive statistics for all features in an episode.
+    """计算一个 episode 中所有特征的综合统计量。
 
-    Processes different data types appropriately:
-    - Images/videos: Samples from paths, computes per-channel stats, normalizes to [0,1]
-    - Numerical arrays: Computes per-feature statistics
-    - Strings: Skipped (no statistics computed)
+    适当处理不同的数据类型：
+    - 图像/视频：从路径中采样，计算按通道的统计量，归一化到 [0,1]
+    - 数值数组：计算按特征的统计量
+    - 字符串：跳过（不计算统计量）
 
     Args:
-        episode_data: Dictionary mapping feature names to data
-            - For images/videos: list of file paths
-            - For numerical data: numpy arrays
-        features: Dictionary describing each feature's dtype and shape
+        episode_data: 将特征名映射到数据的字典
+            - 对于图像/视频：文件路径列表
+            - 对于数值数据：numpy 数组
+        features: 描述每个特征的 dtype 和 shape 的字典
 
     Returns:
-        Dictionary mapping feature names to their statistics dictionaries.
-        Each statistics dictionary contains min, max, mean, std, count, and quantiles.
+        将特征名映射到其统计量字典的字典。
+        每个统计量字典包含 min、max、mean、std、count 和分位数。
 
     Note:
-        For 'image'/'video' features, stats are computed per channel and kept with a
-        leading channel axis (e.g. shape (3, 1, 1) for RGB). RGB stats are divided by
-        255 to land in [0, 1]; depth maps (features flagged with ``is_depth_map``) skip
-        this rescaling and remain in their stored units (stored in ``depth_unit``).
+        对于 'image'/'video' 特征，统计量按通道计算，并保留前导的通道轴
+        （例如 RGB 的形状为 (3, 1, 1)）。RGB 统计量除以 255 以落入 [0, 1]；
+        深度图（标记为 ``is_depth_map`` 的特征）跳过此缩放，
+        保持其存储单位（存储在 ``depth_unit`` 中）。
     """
     if quantile_list is None:
         quantile_list = DEFAULT_QUANTILES
@@ -544,7 +543,7 @@ def compute_episode_stats(
 
 
 def _validate_stat_value(value: np.ndarray, key: str, feature_key: str) -> None:
-    """Validate a single statistic value."""
+    """验证单个统计量值。"""
     if not isinstance(value, np.ndarray):
         raise ValueError(
             f"Stats must be composed of numpy array, but key '{key}' of feature '{feature_key}' "
@@ -564,13 +563,13 @@ def _validate_stat_value(value: np.ndarray, key: str, feature_key: str) -> None:
 
 
 def _assert_type_and_shape(stats_list: list[dict[str, dict]]):
-    """Validate that all statistics have correct types and shapes.
+    """验证所有统计量具有正确的类型和形状。
 
     Args:
-        stats_list: List of statistics dictionaries to validate
+        stats_list: 要验证的统计量字典列表
 
     Raises:
-        ValueError: If any statistic has incorrect type or shape
+        ValueError: 如果任何统计量的类型或形状不正确
     """
     for stats in stats_list:
         for feature_key, feature_stats in stats.items():
@@ -579,21 +578,21 @@ def _assert_type_and_shape(stats_list: list[dict[str, dict]]):
 
 
 def aggregate_feature_stats(stats_ft_list: list[dict[str, dict]]) -> dict[str, dict[str, np.ndarray]]:
-    """Aggregates stats for a single feature."""
+    """聚合单个特征的统计量。"""
     means = np.stack([s["mean"] for s in stats_ft_list])
     variances = np.stack([s["std"] ** 2 for s in stats_ft_list])
     counts = np.stack([s["count"] for s in stats_ft_list])
     total_count = counts.sum(axis=0)
 
-    # Prepare weighted mean by matching number of dimensions
+    # 通过匹配维度数来准备加权均值
     while counts.ndim < means.ndim:
         counts = np.expand_dims(counts, axis=-1)
 
-    # Compute the weighted mean
+    # 计算加权均值
     weighted_means = means * counts
     total_mean = weighted_means.sum(axis=0) / total_count
 
-    # Compute the variance using the parallel algorithm
+    # 使用并行算法计算方差
     delta_means = means - total_mean
     weighted_variances = (variances + delta_means**2) * counts
     total_variance = weighted_variances.sum(axis=0) / total_count
@@ -612,10 +611,10 @@ def aggregate_feature_stats(stats_ft_list: list[dict[str, dict]]) -> dict[str, d
         for q_key in quantile_keys:
             if all(q_key in s for s in stats_ft_list):
                 quantile_values = np.stack([s[q_key] for s in stats_ft_list])
-                # Exact global quantiles cannot be recovered from quantile summaries.
-                # Keep a conservative envelope of the available estimates: min
-                # for lower quantiles and max for upper quantiles. The resulting
-                # values are bounds across the inputs, not global quantile estimates.
+                # 无法从分位数摘要中恢复精确的全局分位数。
+                # 保留可用估计的保守包络：下分位数取 min，
+                # 上分位数取 max。所得值是各输入的边界，
+                # 而不是全局分位数估计。
                 q_percent = int(q_key[1:])
                 if q_percent <= 50:
                     aggregated[q_key] = np.min(quantile_values, axis=0)
@@ -626,15 +625,15 @@ def aggregate_feature_stats(stats_ft_list: list[dict[str, dict]]) -> dict[str, d
 
 
 def aggregate_stats(stats_list: list[dict[str, dict]]) -> dict[str, dict[str, np.ndarray]]:
-    """Aggregate stats from multiple compute_stats outputs into a single set of stats.
+    """将多个 compute_stats 输出的统计量聚合为单组统计量。
 
-    The final stats will have the union of all data keys from each of the stats dicts.
+    最终统计量将包含所有统计量字典中数据键的并集。
 
-    For instance:
+    例如：
     - new_min = min(min_dataset_0, min_dataset_1, ...)
     - new_max = max(max_dataset_0, max_dataset_1, ...)
-    - new_mean = (mean of all data, weighted by counts)
-    - new_std = (std of all data)
+    - new_mean = （所有数据的均值，按 count 加权）
+    - new_std = （所有数据的标准差）
     """
 
     _assert_type_and_shape(stats_list)
@@ -650,7 +649,7 @@ def aggregate_stats(stats_list: list[dict[str, dict]]) -> dict[str, dict[str, np
 
 
 def _get_valid_chunk_starts(episode_indices: np.ndarray, chunk_size: int) -> np.ndarray:
-    """Return all start indices where a chunk of ``chunk_size`` stays within one episode."""
+    """返回所有起始索引，使得长度为 ``chunk_size`` 的块保持在单个 episode 内。"""
     total = len(episode_indices)
     if total < chunk_size:
         return np.array([], dtype=np.int64)
@@ -667,9 +666,9 @@ def _compute_relative_chunk_batch(
     chunk_size: int,
     relative_mask: np.ndarray,
 ) -> np.ndarray:
-    """Vectorised relative-action computation for a batch of start indices.
+    """对一批起始索引进行向量化的相对动作计算。
 
-    Returns an ``(N * chunk_size, action_dim)`` float32 array.
+    返回一个 ``(N * chunk_size, action_dim)`` 的 float32 数组。
     """
     if len(start_indices) == 0:
         return np.empty((0, all_actions.shape[1]), dtype=np.float32)
@@ -689,30 +688,28 @@ def compute_relative_action_stats(
     exclude_joints: list[str] | None = None,
     num_workers: int = 0,
 ) -> dict[str, np.ndarray]:
-    """Compute normalization statistics for relative actions over the full dataset.
+    """在整个数据集上计算相对动作的归一化统计量。
 
-    Iterates *all* valid action chunks (within single episodes), converts them to
-    relative actions (action − current_state), and computes per-dimension
-    statistics suitable for normalization.
+    遍历*所有*有效的动作块（位于单个 episode 内），将它们转换为
+    相对动作（action − current_state），并计算适合归一化的
+    按维度统计量。
 
     Args:
-        hf_dataset: The underlying HuggingFace dataset with "action",
-            "observation.state", and "episode_index" columns.
-        features: Dataset feature metadata (must contain "action" with "shape"
-            and optionally "names").
-        chunk_size: Number of consecutive frames per action chunk.
-        exclude_joints: Joint names whose dimensions should remain absolute
-            (not converted to relative actions).
-        num_workers: Number of parallel threads for computation. Values ≤1
-            mean single-threaded. Numpy releases the GIL so threads give
-            real parallelism here.
+        hf_dataset: 底层 HuggingFace 数据集，包含 "action"、
+            "observation.state" 和 "episode_index" 列。
+        features: 数据集特征元数据（必须包含带有 "shape"
+            以及可选 "names" 的 "action"）。
+        chunk_size: 每个动作块的连续帧数。
+        exclude_joints: 应保持绝对值（不转换为相对动作）的关节名称。
+        num_workers: 用于计算的并行线程数。值 ≤1 表示单线程。
+            Numpy 会释放 GIL，因此线程在这里可以实现真正的并行。
 
     Returns:
-        Statistics dict with keys "mean", "std", "min", "max", "q01", …, "q99".
+        包含 "mean"、"std"、"min"、"max"、"q01"、……、"q99" 键的统计量字典。
 
     Raises:
-        ValueError: If the dataset has fewer frames than ``chunk_size``.
-        RuntimeError: If no valid (single-episode) chunks are found.
+        ValueError: 如果数据集的帧数少于 ``chunk_size``。
+        RuntimeError: 如果找不到有效的（单 episode）块。
     """
     if exclude_joints is None:
         exclude_joints = []

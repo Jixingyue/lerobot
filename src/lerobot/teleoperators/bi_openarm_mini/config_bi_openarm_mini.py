@@ -23,7 +23,7 @@ from ..openarm_mini import OpenArmMiniConfigBase
 @TeleoperatorConfig.register_subclass("bi_openarm_mini")
 @dataclass
 class BiOpenArmMiniConfig(TeleoperatorConfig):
-    """Configuration class for Bi OpenArm Mini teleoperators."""
+    """双臂 OpenArm Mini 遥操作设备的配置类。"""
 
     left_arm_config: OpenArmMiniConfigBase
     right_arm_config: OpenArmMiniConfigBase

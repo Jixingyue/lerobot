@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# keys
+# 键名
 import os
 from pathlib import Path
 
@@ -42,15 +42,15 @@ DONE = "next.done"
 SUCCESS = "next.success"
 INFO = "info"
 
-# Complementary-data keys describing a text-generation request, set by the rollout
-# inference engines before the preprocessor runs so a processor step can format the
-# prompt: QUERY_KIND is what is being asked for ("vqa", "next_subtask", ...) and
-# QUERY_TEXT the request itself.  Absent on ordinary action inference.
+# 描述文本生成请求的补充数据键，由 rollout 推理引擎在预处理器
+# 运行之前设置，以便某个处理步骤能够格式化提示词：
+# QUERY_KIND 表示请求的内容类型（"vqa"、"next_subtask" 等），
+# QUERY_TEXT 是请求本身。普通动作推理时不存在这些键。
 QUERY_KIND = "query_kind"
 QUERY_TEXT = "query_text"
 
-# Raw semantic-language dataset columns. These live here so lightweight policy
-# processors do not need to import the optional datasets/pyarrow stack.
+# 原始语义语言数据集列。放在这里是为了让轻量级策略处理器
+# 无需导入可选的 datasets/pyarrow 技术栈。
 LANGUAGE_PERSISTENT = "language_persistent"
 LANGUAGE_EVENTS = "language_events"
 MESSAGES_RENDERED = "messages_rendered"
@@ -58,7 +58,7 @@ MESSAGES_RENDERED = "messages_rendered"
 ROBOTS = "robots"
 TELEOPERATORS = "teleoperators"
 
-# files & directories
+# 文件与目录
 CHECKPOINTS_DIR = "checkpoints"
 LAST_CHECKPOINT_LINK = "last"
 PRETRAINED_MODEL_DIR = "pretrained_model"
@@ -79,20 +79,20 @@ if "LEROBOT_HOME" in os.environ:
         "'LEROBOT_HOME' is deprecated, please use 'HF_LEROBOT_HOME' instead."
     )
 
-# cache dir
+# 缓存目录
 default_cache_path = Path(HF_HOME) / "lerobot"
 HF_LEROBOT_HOME = Path(os.getenv("HF_LEROBOT_HOME", default_cache_path)).expanduser()
-# LeRobot's own revision-safe Hub cache (NOT the system-wide ~/.cache/huggingface/hub/).
-# Used as the ``cache_dir`` argument to ``snapshot_download`` so that different
-# dataset revisions are stored in isolated snapshot directories.
+# LeRobot 自己的支持版本回退的 Hub 缓存（不是系统级的 ~/.cache/huggingface/hub/）。
+# 用作 ``snapshot_download`` 的 ``cache_dir`` 参数，使不同版本的
+# 数据集存储在相互隔离的快照目录中。
 HF_LEROBOT_HUB_CACHE = HF_LEROBOT_HOME / "hub"
 
-# calibration dir
+# 标定目录
 default_calibration_path = HF_LEROBOT_HOME / "calibration"
 HF_LEROBOT_CALIBRATION = Path(os.getenv("HF_LEROBOT_CALIBRATION", default_calibration_path)).expanduser()
 
 
-# Dataset meta-features (auto-populated by the recording pipeline)
+# 数据集元特征（由录制流水线自动填充）
 DEFAULT_FEATURES = {
     "timestamp": {"dtype": "float32", "shape": (1,), "names": None},
     "frame_index": {"dtype": "int64", "shape": (1,), "names": None},
@@ -101,20 +101,20 @@ DEFAULT_FEATURES = {
     "task_index": {"dtype": "int64", "shape": (1,), "names": None},
 }
 
-# ImageNet normalization constants
+# ImageNet 归一化常量
 IMAGENET_STATS = {
     "mean": [[[0.485]], [[0.456]], [[0.406]]],  # (c,1,1)
     "std": [[[0.229]], [[0.224]], [[0.225]]],  # (c,1,1)
 }
 
-# streaming datasets
+# 流式数据集
 LOOKBACK_BACKTRACKTABLE = 100
 LOOKAHEAD_BACKTRACKTABLE = 100
 
 # openpi
-OPENPI_ATTENTION_MASK_VALUE = -2.3819763e38  # TODO(pepijn): Modify this when extending support to fp8 models
+OPENPI_ATTENTION_MASK_VALUE = -2.3819763e38  # TODO(pepijn): 扩展支持 fp8 模型时修改此值
 
-# Constants for LIBERO observation keys
+# LIBERO 观测键的常量
 LIBERO_KEY_EEF_POS = "robot_state/eef/pos"
 LIBERO_KEY_EEF_QUAT = "robot_state/eef/quat"
 LIBERO_KEY_EEF_MAT = "robot_state/eef/mat"

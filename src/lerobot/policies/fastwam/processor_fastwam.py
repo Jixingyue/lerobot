@@ -35,7 +35,7 @@ from .configuration_fastwam import FastWAMConfig
 @dataclass
 @ProcessorStepRegistry.register(name="fastwam_action_toggle_processor")
 class FastWAMActionToggleProcessorStep(ActionProcessorStep):
-    """Apply FastWAM LIBERO toggle semantics to configured action dimensions."""
+    """将 FastWAM LIBERO 的 toggle 语义应用到已配置的动作维度上。"""
 
     toggle_dimensions: list[int]
 
@@ -68,33 +68,31 @@ def make_fastwam_pre_post_processors(
     config: FastWAMConfig,
     dataset_stats: dict[str, dict[str, torch.Tensor]] | None = None,
 ) -> tuple[PolicyProcessorPipeline, PolicyProcessorPipeline]:
-    """Create LeRobot pre- and post-processing pipelines for FastWAM.
+    """为 FastWAM 创建 LeRobot 的预处理和后处理流水线。
 
     Args:
-        config (FastWAMConfig): Policy configuration controlling device and
-            normalization feature metadata.
-        dataset_stats (dict[str, dict[str, torch.Tensor]] | None): Optional
-            LeRobot dataset statistics used by normalization processors.
+        config (FastWAMConfig): 控制设备和归一化特征元数据的策略配置。
+        dataset_stats (dict[str, dict[str, torch.Tensor]] | None): 可选的
+            LeRobot 数据集统计信息，供归一化处理器使用。
 
     Returns:
-        tuple[PolicyProcessorPipeline, PolicyProcessorPipeline]: Input and
-        output processor pipelines discoverable by LeRobot.
+        tuple[PolicyProcessorPipeline, PolicyProcessorPipeline]: 可被 LeRobot
+        发现的输入和输出处理器流水线。
     """
 
-    # NOTE: no visual normalization here. VISUAL is IDENTITY (see configuration_fastwam.normalization_mapping)
-    # — images pass through in [0, 1] and the model maps them to the Wan VAE's [-1, 1] at the encode
-    # boundary. This is deliberate: `lerobot_train.py` overrides the normalizer stats with
-    # `dataset.meta.stats` when fine-tuning, and a real dataset's per-channel image std is the tiny
-    # frame-to-frame brightness variance, which would blow images far outside [-1,1] and saturate them.
-    # STATE/ACTION still normalize with dataset stats below.
+    # 注意：这里不做视觉归一化。VISUAL 使用 IDENTITY（见 configuration_fastwam.normalization_mapping）
+    # —— 图像以 [0, 1] 范围透传，模型在编码边界处将其映射到 Wan VAE 的 [-1, 1]。
+    # 这是有意为之：`lerobot_train.py` 在微调时会用 `dataset.meta.stats` 覆盖归一化统计量，
+    # 而真实数据集的逐通道图像 std 是极小的帧间亮度方差，会把图像推到 [-1,1] 之外很远并导致饱和。
+    # STATE/ACTION 仍然使用下面的数据集统计量进行归一化。
     normalization_stats: dict[str, dict[str, Any]] = dict(dataset_stats or {})
 
-    # NOTE: no resize step here. The model is the single authority on input resolution: it resizes
-    # each camera to the per-camera target (image_size split across cameras) in
-    # `_stack_video_from_images` / `_prepare_infer_image`, on every path (train forward, rollout and
-    # eval select_action). A preprocessor resize step would be both redundant (the model re-resizes
-    # anyway) and unsafe across fine-tuning: its `resize_size` would be inherited from the base
-    # checkpoint's camera geometry, not this dataset's, making the concatenation N_cameras x too wide.
+    # 注意：这里没有 resize 步骤。模型是输入分辨率的唯一权威：它在
+    # `_stack_video_from_images` / `_prepare_infer_image` 中把每个相机 resize 到
+    # 各自的相机目标尺寸（image_size 按相机数均分），覆盖所有路径（train forward、rollout 和
+    # eval select_action）。预处理器的 resize 步骤既是冗余的（模型反正会重新 resize），
+    # 在微调时也不安全：其 `resize_size` 会继承基础 checkpoint 的相机几何尺寸，
+    # 而不是当前数据集的，导致拼接结果宽出 N_cameras 倍。
 
     steps = make_default_policy_processor_steps(config, normalization_stats, normalizer_device=config.device)
 

@@ -18,15 +18,15 @@ import time
 
 def precise_sleep(seconds: float, spin_threshold: float = 0.010, sleep_margin: float = 0.005):
     """
-    Wait for `seconds` with better precision than time.sleep alone at the expense of more CPU usage.
+    以更高的 CPU 消耗为代价，等待 `seconds` 秒，精度高于单独使用 time.sleep。
 
-    Parameters:
-      - seconds: duration to wait
-      - spin_threshold: if remaining <= spin_threshold -> spin; otherwise sleep (seconds). Default 10ms
-      - sleep_margin: when sleeping leave this much time before deadline to avoid oversleep. Default 5ms
+    参数：
+      - seconds：等待时长
+      - spin_threshold：若剩余时间 <= spin_threshold -> 自旋；否则睡眠（秒）。默认 10ms
+      - sleep_margin：睡眠时在截止时间前预留这段时间，避免睡过头。默认 5ms
 
-    Note:
-        The default parameters are chosen to prioritize timing accuracy over CPU usage for the common 30 FPS use case.
+    说明：
+        默认参数的选择是为了在常见的 30 FPS 使用场景下，优先保证计时精度而非 CPU 占用。
     """
     if seconds <= 0:
         return
@@ -36,24 +36,24 @@ def precise_sleep(seconds: float, spin_threshold: float = 0.010, sleep_margin: f
         raise ValueError(f"sleep_margin must be >= 0, got {sleep_margin}")
 
     system = platform.system()
-    # On macOS and Windows the scheduler / sleep granularity can make
-    # short sleeps inaccurate. Instead of burning CPU for the whole
-    # duration, sleep for most of the time and spin for the final few
-    # milliseconds to achieve good accuracy with much lower CPU usage.
+    # 在 macOS 和 Windows 上，调度器 / 睡眠粒度可能导致
+    # 短时间睡眠不准确。与其在整个时长内烧 CPU，
+    # 不如大部分时间睡眠，只在最后几毫秒自旋，
+    # 从而以低得多的 CPU 占用获得良好的精度。
     if system in ("Darwin", "Windows"):
         end_time = time.perf_counter() + seconds
         while True:
             remaining = end_time - time.perf_counter()
             if remaining <= 0:
                 break
-            # If there's more than a couple milliseconds left, sleep most
-            # of the remaining time and leave a small margin for the final spin.
+            # 如果剩余时间超过几毫秒，就睡掉大部分剩余时间，
+            # 并为最后的自旋留出一小段余量。
             if remaining > spin_threshold:
-                # Sleep but avoid sleeping past the end by leaving a small margin.
+                # 睡眠，但通过预留一小段余量避免睡过截止时间。
                 time.sleep(max(remaining - sleep_margin, 0))
             else:
-                # Final short spin to hit precise timing without long sleeps.
+                # 最后短暂自旋，以在不长时间睡眠的情况下命中精确计时。
                 pass
     else:
-        # On Linux time.sleep is accurate enough for most uses
+        # 在 Linux 上，time.sleep 对大多数用途已足够精确
         time.sleep(seconds)

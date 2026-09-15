@@ -13,33 +13,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Final parquet rewrite.
+"""最终的 parquet 重写。
 
-For every episode the writer:
+对于每个回合，写入器：
 
-1. reads the staged module outputs,
-2. partitions them into a persistent slice (PERSISTENT_STYLES) and an event
-   slice (EVENT_ONLY_STYLES + style=None tool-call atoms),
-3. sorts each slice deterministically,
-4. broadcasts the persistent slice across every frame in the episode,
-5. for each frame, materializes the sublist of event rows whose timestamp
-   exactly equals that frame's timestamp,
-6. drops the legacy ``subtask_index`` column,
-7. writes the parquet shard back in place.
+1. 读取暂存的模块输出，
+2. 将它们分区为持久切片（PERSISTENT_STYLES）和事件切片
+   （EVENT_ONLY_STYLES + style=None 工具调用原子），
+3. 确定性地排序每个切片，
+4. 将持久切片广播到回合中的每一帧，
+5. 对于每一帧，具体化时间戳恰好等于该帧时间戳的事件行的子列表，
+6. 丢弃遗留的 ``subtask_index`` 列，
+7. 将 parquet 分片原地写回。
 
-The writer does NOT add a dataset-level ``tools`` column. Tool *calls* are
-emitted per-row via the existing ``tool_calls`` field on the v3.1 row
-struct for every speech atom. The tool *schema* (the description
-of the ``say`` function and its parameters) is a fixed code constant —
-``SAY_TOOL_SCHEMA`` below — and downstream chat-template consumers import
-it directly rather than reading a redundant per-row column.
+写入器不会添加数据集级别的 ``tools`` 列。工具*调用*通过
+v3.1 行结构体上现有的 ``tool_calls`` 字段为每个语音原子按行发射。
+工具*模式*（``say`` 函数及其参数的描述）是一个固定的代码常量——
+下面的 ``SAY_TOOL_SCHEMA``——下游聊天模板消费者直接导入它，
+而不是读取冗余的逐行列。
 
-Invariants enforced here (and re-checked by the validator):
+这里强制执行的不变量（并由验证器重新检查）：
 
-- per-episode persistent slice is byte-identical across every frame;
-- ``language_events`` rows on a frame all have ``timestamp == frame_ts``
-  (timestamps come straight from the source parquet — never recomputed);
-- every row passes ``column_for_style(style)``.
+- 按回合的持久切片在每一帧上都是字节相同的；
+- 帧上的 ``language_events`` 行都具有 ``timestamp == frame_ts``
+  （时间戳直接来自源 parquet——从不重新计算）；
+- 每行都通过 ``column_for_style(style)``。
 """
 
 from __future__ import annotations
@@ -69,10 +67,10 @@ from .staging import EpisodeStaging
 logger = logging.getLogger(__name__)
 
 
-# Tool schema constants live in lerobot.datasets.language — single
-# source of truth. Re-exported here so existing imports
-# (``from lerobot.annotations.steerable_pipeline.writer import SAY_TOOL_SCHEMA``)
-# keep working.
+# 工具模式常量位于 lerobot.datasets.language —— 单一真实来源。
+# 在此重新导出，以便现有的导入
+# （``from lerobot.annotations.steerable_pipeline.writer import SAY_TOOL_SCHEMA``）
+# 继续工作。
 from lerobot.datasets.language import DEFAULT_TOOLS, SAY_TOOL_SCHEMA  # noqa: F401, E402
 
 
@@ -81,7 +79,7 @@ def _row_persistent_sort_key(row: dict[str, Any]) -> tuple:
 
 
 def _row_event_sort_key(row: dict[str, Any]) -> tuple:
-    # events are bucketed per-frame, but within a frame we still want determinism
+    # 事件按帧分桶，但在一帧内我们仍然想要确定性
     return (
         row.get("style") or "",
         row.get("role") or "",
@@ -90,11 +88,11 @@ def _row_event_sort_key(row: dict[str, Any]) -> tuple:
 
 
 def _normalize_row(row: dict[str, Any], style: str | None, *, with_timestamp: bool) -> dict[str, Any]:
-    """Coerce a staged row into the language-column struct shape.
+    """将暂存行强制转换为语言列结构体形状。
 
-    Key order matches ``PERSISTENT_ROW_FIELDS`` / ``EVENT_ROW_FIELDS`` — the
-    writer infers the parquet struct schema from insertion order, so
-    ``timestamp`` (persistent rows only) sits between ``style`` and ``camera``.
+    键顺序匹配 ``PERSISTENT_ROW_FIELDS`` / ``EVENT_ROW_FIELDS``——
+    写入器从插入顺序推断 parquet 结构体模式，因此
+    ``timestamp``（仅持久行）位于 ``style`` 和 ``camera`` 之间。
     """
     camera = row.get("camera")
     validate_camera_field(style, camera)
@@ -111,7 +109,7 @@ def _normalize_row(row: dict[str, Any], style: str | None, *, with_timestamp: bo
 
 
 def _normalize_persistent_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Coerce a staged row into the persistent column's struct shape."""
+    """将暂存行强制转换为持久列的结构体形状。"""
     style = row.get("style")
     if style not in PERSISTENT_STYLES:
         raise ValueError(
@@ -121,14 +119,14 @@ def _normalize_persistent_row(row: dict[str, Any]) -> dict[str, Any]:
     if "timestamp" not in row:
         raise ValueError(f"persistent row missing timestamp: {row!r}")
     if "role" not in row:
-        # Friendly error from the writer instead of a raw KeyError below;
-        # the validator doesn't check ``role`` yet.
+        # 来自写入器的友好错误，而不是下面的原始 KeyError；
+        # 验证器尚未检查 ``role``。
         raise ValueError(f"persistent row missing role: {row!r}")
     return _normalize_row(row, style, with_timestamp=True)
 
 
 def _normalize_event_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Coerce a staged row into the event column's struct shape (no timestamp)."""
+    """将暂存行强制转换为事件列的结构体形状（无时间戳）。"""
     style = row.get("style")
     if style is not None and style not in EVENT_ONLY_STYLES:
         raise ValueError(
@@ -150,7 +148,7 @@ def _normalize_tool_calls(value: Any) -> list[Any] | None:
 
 
 def _validate_atom_invariants(row: dict[str, Any]) -> None:
-    """At-least-one of content/tool_calls; style=None implies tool_calls."""
+    """content/tool_calls 至少一个；style=None 隐含 tool_calls。"""
     has_content = row.get("content") is not None
     has_tools = row.get("tool_calls") is not None
     if not (has_content or has_tools):
@@ -160,9 +158,9 @@ def _validate_atom_invariants(row: dict[str, Any]) -> None:
 
 
 def _validate_speech_atom(row: dict[str, Any]) -> None:
-    """Speech atoms: role=assistant, style=None, content=None, say tool call."""
+    """语音原子：role=assistant，style=None，content=None，say 工具调用。"""
     if row.get("style") is not None:
-        return  # not a speech atom
+        return  # 不是语音原子
     if row.get("role") != "assistant":
         raise ValueError(f"speech atom must have role=assistant: {row!r}")
     if row.get("content") is not None:
@@ -185,7 +183,7 @@ def _validate_speech_atom(row: dict[str, Any]) -> None:
 
 @dataclass
 class LanguageColumnsWriter:
-    """Rewrite ``data/chunk-*/file-*.parquet`` with the two language columns."""
+    """用两个语言列重写 ``data/chunk-*/file-*.parquet``。"""
 
     drop_existing_subtask_index: bool = True
 
@@ -215,9 +213,8 @@ class LanguageColumnsWriter:
         table = pq.read_table(path)
         n_rows = table.num_rows
 
-        # Ensure we cover every episode in the file. Episodes that don't have
-        # staging artifacts are passed through with empty annotation lists —
-        # this keeps the writer idempotent and safe for partial reruns.
+        # 确保我们覆盖文件中的每个回合。没有暂存产物的回合
+        # 以空标注列表通过——这保持写入器幂等且对部分重运行安全。
         staged_per_ep: dict[int, dict[str, list[dict[str, Any]]]] = {}
         for record in episodes:
             staging = EpisodeStaging(staging_dir, record.episode_index)
@@ -228,7 +225,7 @@ class LanguageColumnsWriter:
 
         for ep_index, ep_staged in staged_per_ep.items():
             persistent_rows: list[dict[str, Any]] = []
-            event_rows: list[dict[str, Any]] = []  # carry timestamp until bucketed
+            event_rows: list[dict[str, Any]] = []  # 携带时间戳直到分桶
             for _module_name, rows in ep_staged.items():
                 for row in rows:
                     style = row.get("style")
@@ -274,9 +271,8 @@ class LanguageColumnsWriter:
         new_table = self._materialize_table(
             table, per_row_persistent, per_row_events, drop_old=self.drop_existing_subtask_index
         )
-        # Re-emit one row group per episode (a bulk pq.write_table would collapse
-        # them into one). Write to a sibling tmp path and atomically rename so a
-        # crash mid-write can't leave a half-written shard.
+        # 每个回合重新发射一个行组（批量 pq.write_table 会将它们折叠成一个）。
+        # 写入兄弟 tmp 路径并原子重命名，以便写入中途崩溃不会留下半写的分片。
         tmp_path = path.with_suffix(path.suffix + ".tmp")
         write_table_one_row_group_per_episode(new_table, tmp_path)
         tmp_path.replace(path)
@@ -295,22 +291,20 @@ class LanguageColumnsWriter:
             if drop_old and name == "subtask_index":
                 continue
             if name in (LANGUAGE_PERSISTENT, LANGUAGE_EVENTS):
-                continue  # we'll re-add canonical versions
-            # Strip any legacy ``tools`` column previously emitted by older
-            # writers — the schema no longer uses it (constant lives in
-            # SAY_TOOL_SCHEMA / DEFAULT_TOOLS).
+                continue  # 我们将重新添加规范版本
+            # 去除旧写入器以前发射的任何遗留 ``tools`` 列——
+            # 模式不再使用它（常量位于 SAY_TOOL_SCHEMA / DEFAULT_TOOLS）。
             if name == "tools":
                 continue
             cols.append(table.column(name))
             names.append(name)
 
-        # We let pyarrow infer struct/list schema rather than passing the
-        # canonical type from `lerobot.datasets.language` directly: that type
-        # uses `pa.json_()` for the `tool_calls` element type, which
-        # `pa.array(..., type=...)` cannot materialize from Python lists on
-        # current pyarrow versions. The inferred schema round-trips through
-        # parquet and `LeRobotDataset` correctly — `tests/datasets/test_language.py`
-        # exercises the same flow.
+        # 我们让 pyarrow 推断结构体/列表模式，而不是直接从
+        # `lerobot.datasets.language` 传递规范类型：该类型
+        # 对 `tool_calls` 元素类型使用 `pa.json_()`，
+        # 在当前 pyarrow 版本上 `pa.array(..., type=...)` 无法从 Python 列表具体化它。
+        # 推断的模式通过 parquet 和 `LeRobotDataset` 正确往返——
+        # `tests/datasets/test_language.py` 练习了相同的流程。
         persistent_arr = pa.array(persistent)
         events_arr = pa.array(events)
 
@@ -321,7 +315,7 @@ class LanguageColumnsWriter:
 
 
 def speech_atom(timestamp: float, text: str) -> dict[str, Any]:
-    """Build a canonical speech tool-call atom for the events column."""
+    """为事件列构建规范的语音工具调用原子。"""
     return {
         "role": "assistant",
         "content": None,

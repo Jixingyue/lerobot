@@ -16,7 +16,7 @@ FIRMWARE_MAJOR_VERSION = (0, 1)
 FIRMWARE_MINOR_VERSION = (1, 1)
 MODEL_NUMBER = (3, 2)
 
-# TODO(Steven): Consider doing the following:
+# TODO(Steven): 考虑采用以下做法：
 # from enum import Enum
 # class MyControlTableKey(Enum):
 #   ID = "ID"
@@ -28,21 +28,21 @@ MODEL_NUMBER = (3, 2)
 #   MyControlTableKey.GOAL_SPEED.value: (46, 2)
 #   ...
 # }
-# This allows me do to:
+# 这样就可以这样写：
 # bus.write(MyControlTableKey.GOAL_SPEED, ...)
-# Instead of:
+# 而不是：
 # bus.write("Goal_Speed", ...)
-# This is important for two reasons:
-# 1. The linter will tell me if I'm trying to use an invalid key, instead of me realizing when I get the RunTimeError
-# 2. We can change the value of the MyControlTableKey enums without impacting the client code
+# 这样做有两个重要原因：
+# 1. 如果试图使用无效的键，linter 会提示我，而不是等到抛出 RunTimeError 时才发现
+# 2. 我们可以修改 MyControlTableKey 枚举的值而不影响客户端代码
 
 # data_name: (address, size_byte)
 # http://doc.feetech.cn/#/prodinfodownload?srcType=FT-SMS-STS-emanual-229f4476422d4059abfb1cb0
 STS_SMS_SERIES_CONTROL_TABLE = {
     # EPROM
-    "Firmware_Major_Version": FIRMWARE_MAJOR_VERSION,  # read-only
-    "Firmware_Minor_Version": FIRMWARE_MINOR_VERSION,  # read-only
-    "Model_Number": MODEL_NUMBER,  # read-only
+    "Firmware_Major_Version": FIRMWARE_MAJOR_VERSION,  # 只读
+    "Firmware_Minor_Version": FIRMWARE_MINOR_VERSION,  # 只读
+    "Model_Number": MODEL_NUMBER,  # 只读
     "ID": (5, 1),
     "Baud_Rate": (6, 1),
     "Return_Delay_Time": (7, 1),
@@ -80,32 +80,32 @@ STS_SMS_SERIES_CONTROL_TABLE = {
     "Goal_Velocity": (46, 2),
     "Torque_Limit": (48, 2),
     "Lock": (55, 1),
-    "Present_Position": (56, 2),  # read-only
-    "Present_Velocity": (58, 2),  # read-only
-    "Present_Load": (60, 2),  # read-only
-    "Present_Voltage": (62, 1),  # read-only
-    "Present_Temperature": (63, 1),  # read-only
-    "Status": (65, 1),  # read-only
-    "Moving": (66, 1),  # read-only
-    "Present_Current": (69, 2),  # read-only
-    "Goal_Position_2": (71, 2),  # read-only
+    "Present_Position": (56, 2),  # 只读
+    "Present_Velocity": (58, 2),  # 只读
+    "Present_Load": (60, 2),  # 只读
+    "Present_Voltage": (62, 1),  # 只读
+    "Present_Temperature": (63, 1),  # 只读
+    "Status": (65, 1),  # 只读
+    "Moving": (66, 1),  # 只读
+    "Present_Current": (69, 2),  # 只读
+    "Goal_Position_2": (71, 2),  # 只读
     # Factory
     "Moving_Velocity": (80, 1),
     "Moving_Velocity_Threshold": (80, 1),
     "DTs": (81, 1),  # (ms)
     "Velocity_Unit_factor": (82, 1),
-    "Hts": (83, 1),  # (ns) valid for firmware >= 2.54, other versions keep 0
+    "Hts": (83, 1),  # (ns) 适用于固件 >= 2.54，其他版本保持为 0
     "Maximum_Velocity_Limit": (84, 1),
     "Maximum_Acceleration": (85, 1),
-    "Acceleration_Multiplier ": (86, 1),  # Acceleration multiplier in effect when acceleration is 0
+    "Acceleration_Multiplier ": (86, 1),  # 当加速度为 0 时生效的加速度倍数
 }
 
 # http://doc.feetech.cn/#/prodinfodownload?srcType=FT-SCSCL-emanual-cbcc8ab2e3384282a01d4bf3
 SCS_SERIES_CONTROL_TABLE = {
     # EPROM
-    "Firmware_Major_Version": FIRMWARE_MAJOR_VERSION,  # read-only
-    "Firmware_Minor_Version": FIRMWARE_MINOR_VERSION,  # read-only
-    "Model_Number": MODEL_NUMBER,  # read-only
+    "Firmware_Major_Version": FIRMWARE_MAJOR_VERSION,  # 只读
+    "Firmware_Minor_Version": FIRMWARE_MINOR_VERSION,  # 只读
+    "Model_Number": MODEL_NUMBER,  # 只读
     "ID": (5, 1),
     "Baud_Rate": (6, 1),
     "Return_Delay_Time": (7, 1),
@@ -134,21 +134,21 @@ SCS_SERIES_CONTROL_TABLE = {
     "Running_Time": (44, 2),
     "Goal_Velocity": (46, 2),
     "Lock": (48, 1),
-    "Present_Position": (56, 2),  # read-only
-    "Present_Velocity": (58, 2),  # read-only
-    "Present_Load": (60, 2),  # read-only
-    "Present_Voltage": (62, 1),  # read-only
-    "Present_Temperature": (63, 1),  # read-only
-    "Sync_Write_Flag": (64, 1),  # read-only
-    "Status": (65, 1),  # read-only
-    "Moving": (66, 1),  # read-only
+    "Present_Position": (56, 2),  # 只读
+    "Present_Velocity": (58, 2),  # 只读
+    "Present_Load": (60, 2),  # 只读
+    "Present_Voltage": (62, 1),  # 只读
+    "Present_Temperature": (63, 1),  # 只读
+    "Sync_Write_Flag": (64, 1),  # 只读
+    "Status": (65, 1),  # 只读
+    "Moving": (66, 1),  # 只读
     # Factory
     "PWM_Maximum_Step": (78, 1),
     "Moving_Velocity_Threshold*50": (79, 1),
     "DTs": (80, 1),  # (ms)
     "Minimum_Velocity_Limit*50": (81, 1),
     "Maximum_Velocity_Limit*50": (82, 1),
-    "Acceleration_2": (83, 1),  # don't know what that is
+    "Acceleration_2": (83, 1),  # 不清楚这是什么
 }
 
 STS_SMS_SERIES_BAUDRATE_TABLE = {
@@ -203,7 +203,7 @@ MODEL_BAUDRATE_TABLE = {
     "scs0009": SCS_SERIES_BAUDRATE_TABLE,
 }
 
-# Sign-Magnitude encoding bits
+# 符号-数值（Sign-Magnitude）编码位数
 STS_SMS_SERIES_ENCODINGS_TABLE = {
     "Present_Load": 10,
     "Homing_Offset": 11,

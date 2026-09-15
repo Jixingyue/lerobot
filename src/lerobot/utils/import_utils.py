@@ -25,42 +25,42 @@ def is_package_available(
     pkg_name: str, import_name: str | None = None, return_version: bool = False
 ) -> tuple[bool, str] | bool:
     """
-    Check if the package spec exists and grab its version to avoid importing a local directory.
+    检查包的 spec 是否存在，并获取其版本以避免导入到本地目录。
 
-    Args:
-        pkg_name: The name of the package as installed via pip (e.g. "python-can").
-        import_name: The actual name used to import the package (e.g. "can").
-                     Defaults to pkg_name if not provided.
-        return_version: Whether to return the version string.
+    参数:
+        pkg_name: 通过 pip 安装时使用的包名（例如 "python-can"）。
+        import_name: 导入该包时实际使用的名称（例如 "can"）。
+                     未提供时默认为 pkg_name。
+        return_version: 是否返回版本字符串。
     """
     if import_name is None:
         import_name = pkg_name
 
-    # Check if the module spec exists using the import name
+    # 使用导入名称检查模块 spec 是否存在
     package_exists = importlib.util.find_spec(import_name) is not None
     package_version = "N/A"
     if package_exists:
         try:
-            # Primary method to get the package version
+            # 获取包版本的主要方法
             package_version = importlib.metadata.version(pkg_name)
 
         except importlib.metadata.PackageNotFoundError:
-            # Fallback method: Only for "torch" and versions containing "dev"
+            # 回退方法：仅适用于 "torch" 以及包含 "dev" 的版本
             if pkg_name == "torch":
                 try:
                     package = importlib.import_module(import_name)
                     temp_version = getattr(package, "__version__", "N/A")
-                    # Check if the version contains "dev"
+                    # 检查版本是否包含 "dev"
                     if "dev" in temp_version:
                         package_version = temp_version
                         package_exists = True
                     else:
                         package_exists = False
                 except ImportError:
-                    # If the package can't be imported, it's not available
+                    # 如果无法导入该包，则视为不可用
                     package_exists = False
             else:
-                # For packages other than "torch", don't attempt the fallback and set as not available
+                # 对于 "torch" 以外的包，不尝试回退，直接设为不可用
                 package_exists = False
         logging.debug(f"Detected {pkg_name} version: {package_version}")
     if return_version:
@@ -71,8 +71,8 @@ def is_package_available(
 
 def get_safe_default_video_backend():
     logger = logging.getLogger(__name__)
+    # 尽管 torchcodec 已安装，它在运行时仍可能无法加载。
     if importlib.util.find_spec("torchcodec"):
-        # Despite being installed, torchcodec may not be loadable at runtime.
         try:
             importlib.import_module("torchcodec")
             return "torchcodec"
@@ -93,7 +93,7 @@ _require_package_cache: dict[str, bool] = {}
 
 
 def require_package(pkg_name: str, extra: str, import_name: str | None = None) -> None:
-    """Raise an informative ImportError if a package required by an optional feature is missing."""
+    """当某个可选功能所需的包缺失时，抛出信息明确的 ImportError。"""
     cache_key = import_name or pkg_name
     if cache_key not in _require_package_cache:
         _require_package_cache[cache_key] = is_package_available(pkg_name, import_name)
@@ -104,12 +104,12 @@ def require_package(pkg_name: str, extra: str, import_name: str | None = None) -
         )
 
 
-# ── Centralised availability flags ────────────────────────────────────────
-# Every optional-dependency check lives here so that the rest of the codebase
-# can simply ``from lerobot.utils.import_utils import _foo_available``.
-# Do NOT define ad-hoc ``is_package_available(...)`` calls in other modules.
+# ── 集中管理的可用性标志 ────────────────────────────────────────
+# 所有可选依赖的检查都放在这里，以便代码库的其他部分
+# 可以直接 ``from lerobot.utils.import_utils import _foo_available``。
+# 不要在其他模块中临时定义 ``is_package_available(...)`` 调用。
 
-# ML / training
+# 机器学习 / 训练
 _lancedb_available = is_package_available("lancedb")
 _transformers_available = is_package_available("transformers")
 _peft_available = is_package_available("peft")
@@ -117,7 +117,7 @@ _scipy_available = is_package_available("scipy")
 _diffusers_available = is_package_available("diffusers")
 _torchdiffeq_available = is_package_available("torchdiffeq")
 
-# Hardware SDKs
+# 硬件 SDK
 _serial_available = is_package_available("pyserial", import_name="serial")
 _deepdiff_available = is_package_available("deepdiff")
 _dynamixel_sdk_available = is_package_available("dynamixel-sdk", import_name="dynamixel_sdk")
@@ -138,15 +138,15 @@ _teleop_available = is_package_available("teleop")
 _placo_available = is_package_available("placo")
 _hidapi_available = is_package_available("hidapi", import_name="hid")
 
-# Data / serialization
+# 数据 / 序列化
 _datasets_available = is_package_available("datasets")
 _pandas_available = is_package_available("pandas")
 _faker_available = is_package_available("faker")
 
-# Video encoding / decoding
+# 视频编码 / 解码
 _av_available = is_package_available("av")
 
-# Misc
+# 其他
 _pynput_available = is_package_available("pynput")
 _pygame_available = is_package_available("pygame")
 _qwen_vl_utils_available = is_package_available("qwen-vl-utils", import_name="qwen_vl_utils")
@@ -158,42 +158,41 @@ _wallx_deps_available = (
 
 def make_device_from_device_class(config: ChoiceRegistry) -> Any:
     """
-    Dynamically instantiates an object from its `ChoiceRegistry` configuration.
+    根据对象的 `ChoiceRegistry` 配置动态实例化该对象。
 
-    This factory uses the module path and class name from the `config` object's
-    type to locate and instantiate the corresponding device class (not the config).
-    It derives the device class name by removing a trailing 'Config' from the config
-    class name and tries a few candidate modules where the device implementation is
-    commonly located.
+    此工厂利用 `config` 对象类型中的模块路径和类名来定位并实例化
+    相应的设备类（而不是配置类）。
+    它通过从配置类名末尾去掉 'Config' 来推导设备类名，并尝试在设备实现
+    通常所在的几个候选模块中进行查找。
     """
     if not isinstance(config, ChoiceRegistry):
         raise ValueError(f"Config should be an instance of `ChoiceRegistry`, got {type(config)}")
 
     config_cls = config.__class__
-    module_path = config_cls.__module__  # typical: lerobot_teleop_mydevice.config_mydevice
-    config_name = config_cls.__name__  # typical: MyDeviceConfig
+    module_path = config_cls.__module__  # 典型情况：lerobot_teleop_mydevice.config_mydevice
+    config_name = config_cls.__name__  # 典型情况：MyDeviceConfig
 
-    # Derive device class name (strip "Config")
+    # 推导设备类名（去掉 "Config"）
     if not config_name.endswith("Config"):
         raise ValueError(f"Config class name '{config_name}' does not end with 'Config'")
 
-    device_class_name = config_name[:-6]  # typical: MyDeviceConfig -> MyDevice
+    device_class_name = config_name[:-6]  # 典型情况：MyDeviceConfig -> MyDevice
 
-    # Build candidate modules to search for the device class
+    # 构造用于搜索设备类的候选模块列表
     parts = module_path.split(".")
     parent_module = ".".join(parts[:-1]) if len(parts) > 1 else module_path
     candidates = [
-        module_path,  # the config's own module (single-file plugins)
-        parent_module,  # typical: lerobot_teleop_mydevice
-        parent_module + "." + device_class_name.lower(),  # typical: lerobot_teleop_mydevice.mydevice
+        module_path,  # 配置自身所在的模块（单文件插件）
+        parent_module,  # 典型情况：lerobot_teleop_mydevice
+        parent_module + "." + device_class_name.lower(),  # 典型情况：lerobot_teleop_mydevice.mydevice
     ]
 
-    # handle modules named like "config_xxx" -> try replacing that piece with "xxx"
+    # 处理名为 "config_xxx" 的模块——尝试将该部分替换为 "xxx"
     last = parts[-1] if parts else ""
     if last.startswith("config_"):
         candidates.append(".".join(parts[:-1] + [last.replace("config_", "")]))
 
-    # de-duplicate while preserving order
+    # 在保持顺序的同时去重
     seen: set[str] = set()
     candidates = [c for c in candidates if not (c in seen or seen.add(c))]
 
@@ -224,12 +223,12 @@ def make_device_from_device_class(config: ChoiceRegistry) -> Any:
 
 def register_third_party_plugins() -> None:
     """
-    Discover and import third-party LeRobot plugins so they can register themselves.
+    发现并导入第三方 LeRobot 插件，以便它们能够自行注册。
 
-    This function uses `importlib.metadata` to find packages installed in the environment
-    (including editable installs) starting with 'lerobot_robot_', 'lerobot_camera_',
-    'lerobot_teleoperator_', 'lerobot_policy_', 'lerobot_env_' or 'lerobot_strategy_' and
-    imports them.
+    此函数使用 `importlib.metadata` 查找环境中已安装的
+    （包括可编辑安装的）以 'lerobot_robot_'、'lerobot_camera_'、
+    'lerobot_teleoperator_'、'lerobot_policy_'、'lerobot_env_' 或
+    'lerobot_strategy_' 开头的包，并导入它们。
     """
     prefixes = (
         "lerobot_robot_",

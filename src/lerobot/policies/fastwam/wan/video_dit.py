@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_sampling_sigmas(sampling_steps, shift):
-    # Vendored from Wan2.2 (formerly wan/utils/fm_solvers.py); computes the
-    # noise-level (sigma) schedule for Wan-compatible flow-matching inference.
+    # 从 Wan2.2 引入（原先位于 wan/utils/fm_solvers.py）；用于计算
+    # 与 Wan 兼容的 flow-matching 推理的噪声水平（sigma）调度。
     sigma = np.linspace(1, 0, sampling_steps + 1)[:sampling_steps]
     sigma = shift * sigma / (1 + (shift - 1) * sigma)
     return sigma
@@ -75,13 +75,12 @@ def fastwam_masked_attention(
     ctx_mask: torch.Tensor | None = None,
     fp32_attention: bool = True,
 ) -> torch.Tensor:
-    """FastWAM masked attention wrapper for MoT masks and CPU test coverage.
+    """FastWAM 的带掩码注意力封装，支持 MoT 掩码与 CPU 测试覆盖。
 
-    The official Wan attention implementation is still used as the source of
-    the projection/norm modules. This wrapper only replaces the final attention
-    kernel because FastWAM needs explicit boolean masks for video/action MoT
-    routing, while the upstream FlashAttention path accepts sequence lengths
-    but not arbitrary [query, key] masks.
+    投影/归一化模块仍然以官方 Wan 注意力实现为来源。本封装仅替换最终的
+    注意力核，因为 FastWAM 需要显式的布尔掩码来实现视频/动作 MoT 路由，
+    而上游的 FlashAttention 路径只接受序列长度，不支持任意的
+    [query, key] 掩码。
     """
 
     q = rearrange(q, "b s (n d) -> b n s d", n=num_heads)
@@ -103,7 +102,7 @@ def modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor):
 
 
 class WanContinuousFlowMatchScheduler:
-    """Continuous-time Flow-Matching scheduler with shift-based Wan sampling."""
+    """连续时间 Flow-Matching 调度器，采用基于 shift 的 Wan 采样。"""
 
     def __init__(self, num_train_timesteps: int = 1000, shift: float = 5.0, eps: float = 1e-10):
         if num_train_timesteps <= 0:
@@ -249,7 +248,7 @@ def create_group_causal_attn_mask(
 
 
 class FastWAMAttentionBlock(WanAttentionBlock):
-    """Wan attention block with FastWAM's arbitrary boolean mask support."""
+    """支持 FastWAM 任意布尔掩码的 Wan 注意力块。"""
 
     def __init__(
         self,
@@ -660,11 +659,11 @@ class WanVideoDiT(WanModel):
         ) * timestep.to(dtype=model_dtype).view(batch_size, 1, 1)
         token_timesteps[:, 0, :] = 0
         token_timesteps = token_timesteps.reshape(batch_size, -1)
-        # Wan keeps the time embedding in fp32: the AdaLN modulation in the vendored
-        # Head/Block asserts e.dtype == float32 (numerical stability of the scale/shift).
-        # Upstream guarantees this via an fp32 autocast region, so it holds even when the
-        # model runs in bf16. Mirror that here, then cast the per-block modulation back to
-        # model_dtype so the bf16 attention blocks are not upcast to fp32.
+        # Wan 将时间嵌入保持在 fp32：引入的 Head/Block 中的 AdaLN 调制会断言
+        # e.dtype == float32（保证 scale/shift 的数值稳定性）。
+        # 上游通过 fp32 autocast 区域来保证这一点，因此即使模型以 bf16 运行也成立。
+        # 这里照搬该做法，随后再把每个块的调制量转回 model_dtype，
+        # 避免 bf16 注意力块被上转为 fp32。
         with torch.amp.autocast("cuda", dtype=torch.float32):
             token_t_emb = sinusoidal_embedding_1d(self.freq_dim, token_timesteps.reshape(-1)).float()
             t = self.time_embedding(token_t_emb).reshape(batch_size, -1, self.hidden_dim)

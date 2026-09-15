@@ -40,7 +40,7 @@ else:
 
 def apply_rope(x, positions, max_wavelength=10_000):
     """
-    Applies RoPE positions [B, L] to x [B, L, H, D].
+    将 RoPE 位置 [B, L] 应用到 x [B, L, H, D] 上。
     """
     d_half = x.shape[-1] // 2
     device = x.device
@@ -104,7 +104,7 @@ class SmolVLMWithExpertModel(nn.Module):
             self.get_vlm_model().text_model.layers = self.get_vlm_model().text_model.layers[:num_vlm_layers]
         self.num_vlm_layers = len(self.get_vlm_model().text_model.layers)
         self.config = config
-        # Smaller lm expert
+        # 更小的 lm expert
         lm_expert_config = copy.deepcopy(config.text_config)
         hidden_size = lm_expert_config.hidden_size
         lm_expert_config.hidden_size = int(hidden_size * expert_width_multiplier)  # hidden_size // 2
@@ -120,7 +120,7 @@ class SmolVLMWithExpertModel(nn.Module):
         self.num_expert_layers = len(self.lm_expert.layers)
         self.self_attn_every_n_layers = self_attn_every_n_layers
         if "cross" in attention_mode:
-            # Reshape qkv projections to have the same input dimension as the vlm
+            # 重塑 qkv 投影，使其输入维度与 vlm 相同
             for layer_idx in range(len(self.lm_expert.layers)):
                 if self.self_attn_every_n_layers > 0 and layer_idx % self.self_attn_every_n_layers == 0:
                     continue
@@ -134,7 +134,7 @@ class SmolVLMWithExpertModel(nn.Module):
                     lm_expert_config.num_key_value_heads * lm_expert_config.head_dim,
                     bias=lm_expert_config.attention_bias,
                 )
-        # Remove unused embed_tokens
+        # 移除未使用的 embed_tokens
         self.lm_expert.embed_tokens = None
 
         self.num_attention_heads = self.config.text_config.num_attention_heads
@@ -159,7 +159,7 @@ class SmolVLMWithExpertModel(nn.Module):
             for params in self.vlm.parameters():
                 params.requires_grad = False
         else:
-            # To avoid unused params issue with distributed training
+            # 避免分布式训练中出现未使用参数的问题
             last_layers = [self.num_vlm_layers - 1]
             if (
                 self.num_vlm_layers != self.num_expert_layers
@@ -185,7 +185,7 @@ class SmolVLMWithExpertModel(nn.Module):
                     "would silently remain trainable (parameter naming may have changed in transformers): "
                     f"{sorted(unmatched_patterns)}"
                 )
-        # To avoid unused params issue with distributed training
+        # 避免分布式训练中出现未使用参数的问题
         for name, params in self.lm_expert.named_parameters():
             if "lm_head" in name:
                 params.requires_grad = False
@@ -201,7 +201,7 @@ class SmolVLMWithExpertModel(nn.Module):
 
     def embed_image(self, image: torch.Tensor):
         patch_attention_mask = None
-        # Get sequence from the vision encoder
+        # 从视觉编码器获取序列
         image_hidden_states = (
             self.get_vlm_model()
             .vision_model(
@@ -210,7 +210,7 @@ class SmolVLMWithExpertModel(nn.Module):
             )
             .last_hidden_state
         )
-        # Modality projection & resampling
+        # 模态投影与重采样
         image_hidden_states = self.get_vlm_model().connector(image_hidden_states)
         return image_hidden_states
 
@@ -250,8 +250,8 @@ class SmolVLMWithExpertModel(nn.Module):
             key_states.append(key_state)
             value_states.append(value_state)
 
-        # B,L,H,D with L sequence length, H number of heads, D head dim
-        # concatenate on the number of embeddings/tokens
+        # B,L,H,D，其中 L 为序列长度，H 为注意力头数，D 为头维度
+        # 在嵌入/token 数量维度上拼接
         query_states = torch.cat(query_states, dim=1)
         key_states = torch.cat(key_states, dim=1)
         value_states = torch.cat(value_states, dim=1)
@@ -270,10 +270,10 @@ class SmolVLMWithExpertModel(nn.Module):
         key_states = apply_rope(key_states, position_ids_)
 
         if use_cache:
-            # `DynamicCache` stores tensors as [batch, heads, seq, head_dim]; this module works with
-            # [batch, seq, heads, head_dim]. During prefix prefill this stores the (post-RoPE) K/V and
-            # returns them unchanged; during denoising it appends the suffix K/V and returns
-            # [prefix; suffix], exactly like the previous hand-rolled dict cache.
+            # `DynamicCache` 以 [batch, heads, seq, head_dim] 存储张量，而本模块使用
+            # [batch, seq, heads, head_dim]。在前缀预填充（prefix prefill）阶段，这里会存入
+            # （经过 RoPE 之后的）K/V 并原样返回；在去噪阶段，则会追加后缀的 K/V 并返回
+            # [prefix; suffix]，与此前手写的字典缓存行为完全一致。
             key_states, value_states = past_key_values.update(
                 key_states.transpose(1, 2), value_states.transpose(1, 2), layer_idx
             )
@@ -307,7 +307,7 @@ class SmolVLMWithExpertModel(nn.Module):
         )
 
         if len(inputs_embeds) == 2 and not past_key_values:
-            # Prefix attention
+            # 前缀注意力
             seq_len = inputs_embeds[0].shape[1]
             position_id, expert_position_id = position_ids[:, :seq_len], position_ids[:, seq_len:]
             prefix_attention_mask = attention_mask[:, :seq_len, :seq_len]
@@ -324,7 +324,7 @@ class SmolVLMWithExpertModel(nn.Module):
             key_state = layer.self_attn.k_proj(hidden_states).view(hidden_shape)
             value_states = layer.self_attn.v_proj(hidden_states).view(hidden_shape)
 
-            # B,L,H,D with L sequence length, H number of heads, D head dim
+            # B,L,H,D，其中 L 为序列长度，H 为注意力头数，D 为头维度
             query_states = apply_rope(query_state, position_id)
             key_states = apply_rope(key_state, position_id)
 
@@ -336,14 +336,14 @@ class SmolVLMWithExpertModel(nn.Module):
             expert_position_id = position_ids
 
         if use_cache and past_key_values is not None:
-            # Cross-attention layers never fill the cache themselves: during the prefix prefill every
-            # layer goes through `forward_attn_layer`, which stores the (post-RoPE) VLM K/V for this
-            # layer index. Here we only read them back (no concatenation: the expert cross-attends to
-            # the fixed prefix). `DynamicCache` stores [batch, heads, seq, head_dim]; transpose back.
+            # 交叉注意力层自身从不填充缓存：在前缀预填充期间，每一层都会走
+            # `forward_attn_layer`，由它为该层索引存储（经过 RoPE 之后的）VLM K/V。
+            # 这里只将它们读回（不做拼接：expert 交叉关注的是固定的前缀）。
+            # `DynamicCache` 以 [batch, heads, seq, head_dim] 存储，因此这里需要转置回来。
             key_states = past_key_values.layers[layer_idx].keys.transpose(1, 2)
             value_states = past_key_values.layers[layer_idx].values.transpose(1, 2)
 
-        # Expert
+        # Expert 部分
         expert_layer = model_layers[1][layer_idx]
         if expert_layer is not None:
             expert_hidden_states = expert_layer.input_layernorm(inputs_embeds[1])
@@ -354,13 +354,13 @@ class SmolVLMWithExpertModel(nn.Module):
             expert_hidden_states = expert_hidden_states.to(dtype=expert_layer.self_attn.q_proj.weight.dtype)
             expert_query_state = expert_layer.self_attn.q_proj(expert_hidden_states).view(expert_hidden_shape)
 
-            # reshape (not view): K/V read back from the cache are transposed, hence non-contiguous
+            # 使用 reshape（而非 view）：从缓存读回的 K/V 经过转置，因此不是连续的
             _key_states = key_states.to(dtype=expert_layer.self_attn.k_proj.weight.dtype).reshape(
                 *key_states.shape[:2], -1
             )
             expert_key_states = expert_layer.self_attn.k_proj(_key_states).view(
                 *_key_states.shape[:-1], -1, expert_layer.self_attn.head_dim
-            )  # k_proj should have same dim as kv
+            )  # k_proj 的维度应与 kv 相同
 
             _value_states = value_states.to(dtype=expert_layer.self_attn.v_proj.weight.dtype).reshape(
                 *value_states.shape[:2], -1
@@ -371,10 +371,10 @@ class SmolVLMWithExpertModel(nn.Module):
 
             expert_position_id = (
                 expert_position_id - torch.min(expert_position_id, dim=1, keepdim=True).values
-            )  # start from 0
+            )  # 从 0 开始
             expert_attention_mask = attention_mask[
                 :, -inputs_embeds[1].shape[1] :, : expert_key_states.shape[1] :
-            ]  # take into account kv
+            ]  # 将 kv 考虑在内
 
             expert_query_states = apply_rope(expert_query_state, expert_position_id)
 
@@ -418,16 +418,15 @@ class SmolVLMWithExpertModel(nn.Module):
         models = [self.get_vlm_model().text_model, self.lm_expert]
         model_layers = self.get_model_layers(models)
         for hidden_states in inputs_embeds:
-            # TODO this is very inefficient
-            # dtype is always the same, batch size too (if > 1 len)
-            # device could be trickier in multi gpu edge cases but that's it
+            # TODO 这种做法效率很低
+            # dtype 总是相同的，batch size 也相同（如果长度 > 1）
+            # 在多 GPU 的边缘情况下 device 可能更棘手，但也仅此而已
             if hidden_states is None:
                 continue
             batch_size = hidden_states.shape[0]
 
-        # Prefix prefill: no cache was passed, so create one and fill it (every layer runs
-        # self-attention over the prefix). When a filled cache is passed (denoising), layers
-        # read from it instead.
+        # 前缀预填充：没有传入缓存，因此创建一个并填充（每一层都在前缀上运行
+        # 自注意力）。当传入已填充的缓存时（去噪阶段），各层改为从缓存中读取。
         fill_kv_cache = use_cache and past_key_values is None
         if fill_kv_cache:
             past_key_values = DynamicCache()
@@ -470,7 +469,7 @@ class SmolVLMWithExpertModel(nn.Module):
                 layer = model_layers[i][layer_idx]
                 att_output = (
                     att_outputs[i] if i < len(att_outputs) else att_outputs[0]
-                )  # in case of self_attn
+                )  # 自注意力（self_attn）情况下的处理
                 if hidden_states is not None:
                     if layer is None:
                         outputs_embeds.append(hidden_states)
@@ -498,7 +497,7 @@ class SmolVLMWithExpertModel(nn.Module):
 
             inputs_embeds = outputs_embeds
 
-        # final norm
+        # 最终归一化
         outputs_embeds = []
         for i, hidden_states in enumerate(inputs_embeds):
             if hidden_states is not None:
@@ -535,7 +534,7 @@ class SmolVLMWithExpertModel(nn.Module):
             batch_size, sequence_length, num_key_value_heads * num_key_value_groups, head_dim
         )
 
-        # Attention here is upcasted to float32 to match the original eager implementation.
+        # 这里的注意力计算会提升为 float32，以与最初的 eager 实现保持一致。
         query_states = query_states.to(dtype=torch.float32)
         key_states = key_states.to(dtype=torch.float32)
 
@@ -546,7 +545,7 @@ class SmolVLMWithExpertModel(nn.Module):
         att_weights *= head_dim**-0.5
 
         att_weights = att_weights.to(dtype=torch.float32)
-        big_neg = torch.finfo(att_weights.dtype).min  # -2.3819763e38  # See gemma/modules.py
+        big_neg = torch.finfo(att_weights.dtype).min  # -2.3819763e38  # 参见 gemma/modules.py
         masked_att_weights = torch.where(attention_mask[:, None, :, :], att_weights, big_neg)
         probs = nn.functional.softmax(masked_att_weights, dim=-1)
         probs = probs.to(dtype=value_states.dtype)
@@ -554,7 +553,7 @@ class SmolVLMWithExpertModel(nn.Module):
         att_output = torch.matmul(probs, value_states.permute(0, 2, 1, 3))
 
         att_output = att_output.permute(0, 2, 1, 3)
-        # we use -1 because sequence length can change
+        # 这里使用 -1，因为序列长度可能发生变化
         att_output = att_output.reshape(batch_size, -1, num_key_value_heads * num_key_value_groups * head_dim)
 
         return att_output

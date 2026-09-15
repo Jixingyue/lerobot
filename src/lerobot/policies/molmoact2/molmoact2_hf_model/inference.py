@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-"""Inference utilities for MolmoAct2"""
+"""MolmoAct2 的推理工具"""
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass

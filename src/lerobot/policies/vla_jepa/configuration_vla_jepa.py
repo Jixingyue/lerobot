@@ -46,11 +46,10 @@ class VLAJEPAConfig(PreTrainedConfig):
     jepa_encoder_name: str = "facebook/vjepa2-vitl-fpc64-256"
     freeze_qwen: bool = False
     enable_world_model: bool = True
-    # Enables cross-embodiment transfer: when fine-tuning a pretrained model on a robot with a
-    # different action or state dimensionality, the input/output projection layers must be
-    # re-initialised from scratch while the rest of the network keeps its pretrained weights.
-    # List the key prefixes that are allowed to have shape mismatches; anything else raises an error.
-    # e.g. ["model.action_model.action_encoder", "model.action_model.state_encoder"]
+    # 启用跨本体（cross-embodiment）迁移：当在动作或状态维度不同的机器人上微调预训练模型时，
+    # 输入/输出投影层必须从头重新初始化，而网络的其余部分保留其预训练权重。
+    # 这里列出允许出现形状不匹配的键前缀；其他任何不匹配都会报错。
+    # 例如 ["model.action_model.action_encoder", "model.action_model.state_encoder"]
     reinit_modules: list[str] | None = None
 
     tokenizer_padding_side: str = "left"
@@ -61,12 +60,12 @@ class VLAJEPAConfig(PreTrainedConfig):
     action_dim: int = 7
     state_dim: int = 8
 
-    # Relative actions: converts absolute actions to relative (action -= state) during
-    # preprocessing, and reverses it at postprocessing. Requires `state_dim` (OBS_STATE).
+    # 相对动作：在预处理时将绝对动作转换为相对动作（action -= state），
+    # 并在后处理时逆转该转换。需要 `state_dim`（OBS_STATE）。
     use_relative_actions: bool = False
-    # Joint names to keep absolute (not converted to relative). Empty list = all dims relative.
+    # 保持绝对（不转换为相对）的关节名称。空列表表示所有维度均为相对。
     relative_exclude_joints: list[str] = field(default_factory=lambda: ["gripper"])
-    # Populated at runtime from dataset metadata by make_policy (used to build the exclude mask).
+    # 在运行时由 make_policy 根据数据集元数据填充（用于构建排除掩码）。
     action_feature_names: list[str] | None = None
 
     num_action_tokens_per_timestep: int = 8
@@ -83,45 +82,44 @@ class VLAJEPAConfig(PreTrainedConfig):
     action_noise_beta_alpha: float = 1.5
     action_noise_beta_beta: float = 1.0
     action_noise_s: float = 0.999
-    # Size of the action head's learned position-embedding table. Kept at 1024 to match the
-    # published checkpoints; only raise it if `chunk_size` approaches that.
+    # 动作头所学位置嵌入表的大小。保持为 1024 以与已发布的检查点一致；
+    # 只有当 `chunk_size` 接近该值时才应调大它。
     action_max_seq_len: int = 1024
-    # Unused. Retained because the published checkpoints serialize it and draccus rejects
-    # config.json keys that the dataclass no longer declares.
+    # 未使用。予以保留是因为已发布的检查点会序列化该字段，而 draccus 会拒绝
+    # dataclass 中不再声明的 config.json 键。
     num_target_vision_tokens: int = 32
 
-    # total video frames loaded per sample
+    # 每个样本加载的视频帧总数
     num_video_frames: int = 8
     predictor_depth: int = 12
     predictor_num_heads: int = 8
     predictor_mlp_ratio: float = 4.0
     predictor_dropout: float = 0.0
     world_model_loss_weight: float = 0.1
-    # Temporal tubelet size of the JEPA encoder (e.g. 2 for vjepa2-vitl-fpc64-256). When the
-    # world model is enabled the encoder's own `config.tubelet_size` is authoritative and this
-    # is only used for the `num_video_frames` sanity check below.
+    # JEPA 编码器的时间 tubelet 大小（例如 vjepa2-vitl-fpc64-256 为 2）。启用世界模型时，
+    # 以编码器自身的 `config.tubelet_size` 为准，该值仅用于下方的 `num_video_frames`
+    # 健全性检查。
     jepa_tubelet_size: int = 2
-    # Camera views the world-model predictor is built for (extra views trimmed, missing ones padded
-    # with the first). Baked into checkpoint shapes. `None` falls back to `jepa_tubelet_size`, which
-    # is what the published checkpoints encode.
+    # 世界模型预测器所针对的相机视角（多余的视角会被裁剪，缺失的视角用第一个视角填充）。
+    # 该值会固化到检查点形状中。`None` 时回退到 `jepa_tubelet_size`，
+    # 这也是已发布检查点所编码的值。
     world_model_num_views: int | None = None
-    repeated_diffusion_steps: int = 8  # independent noise draws per batch item (CogACT-style)
-    # If True, encode the world-model context causally instead of slicing it from the leaky shared pass (#4153).
+    repeated_diffusion_steps: int = 8  # 每个批次项独立的噪声采样次数（CogACT 风格）
+    # 若为 True，则以因果方式编码世界模型上下文，而不是从存在信息泄漏的共享前向过程中切片（#4153）。
     causal_world_model_context: bool = False
 
     resize_images_to: tuple[int, int] | None = None
-    # Gripper post-processing from the starVLA LIBERO eval loop. Off by default: only correct for
-    # LIBERO's action convention, and pins the gripper to a constant when its physical range is not
-    # roughly [0, 1]. See the docs for why.
+    # 来自 starVLA LIBERO 评估循环的夹爪后处理。默认关闭：它只对 LIBERO 的动作约定
+    # 正确，并且当夹爪的物理范围不近似为 [0, 1] 时会将夹爪固定为常量。原因请参见文档。
     binarize_gripper_action: bool = False
     pre_snap_gripper_action: bool = False
     clip_normalized_actions: bool = True
-    # Index of the gripper in the action vector. Prefer leaving this at its default and
-    # setting `gripper_joint_names`, which resolves the index from dataset metadata.
+    # 夹爪在动作向量中的索引。建议保留默认值，改为设置 `gripper_joint_names`，
+    # 由其根据数据集元数据解析索引。
     gripper_dim: int = 6
     gripper_threshold: float = 0.5
-    # Action-dimension names identifying the gripper. When these match `action_feature_names`,
-    # the resolved index wins over `gripper_dim`.
+    # 标识夹爪的动作维度名称。当这些名称与 `action_feature_names` 匹配时，
+    # 解析出的索引优先于 `gripper_dim`。
     gripper_joint_names: list[str] = field(default_factory=lambda: ["gripper"])
     torch_dtype: str = "bfloat16"
 
@@ -137,7 +135,7 @@ class VLAJEPAConfig(PreTrainedConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.freeze_qwen and self.enable_world_model:
-            # freezing qwen backbone makes world model training irrelevant since no grad flows
+            # 冻结 qwen 主干后没有梯度流入，世界模型训练便失去意义
             self.enable_world_model = False
         if self.freeze_qwen:
             logger.warning(
@@ -157,15 +155,15 @@ class VLAJEPAConfig(PreTrainedConfig):
 
     @property
     def num_world_model_views(self) -> int:
-        """Camera views the world model predictor is built for (see `world_model_num_views`)."""
+        """世界模型预测器所针对的相机视角（参见 `world_model_num_views`）。"""
         return self.world_model_num_views or self.jepa_tubelet_size
 
     @property
     def resolved_gripper_dim(self) -> int:
-        """Gripper index, resolved from `action_feature_names` when possible.
+        """夹爪索引，尽可能从 `action_feature_names` 解析得到。
 
-        Falls back to the raw `gripper_dim` when dataset metadata is unavailable (for example
-        when a saved processor pipeline is rebuilt without a dataset attached).
+        当数据集元数据不可用时（例如重建已保存的处理器流水线时没有附带数据集），
+        回退到原始的 `gripper_dim`。
         """
         if not self.action_feature_names or not self.gripper_joint_names:
             return self.gripper_dim
@@ -184,8 +182,8 @@ class VLAJEPAConfig(PreTrainedConfig):
         self.action_dim = self.action_feature.shape[0]
         if self.robot_state_feature is not None:
             self.state_dim = self.robot_state_feature.shape[0]
-        # The gripper steps silently no-op when the index is out of range, which reads as
-        # "binarization ran" while nothing happened. Fail loudly at construction instead.
+        # 当索引超出范围时，夹爪相关步骤会静默地不做任何操作，这看起来像是“二值化已执行”，
+        # 但实际什么都没发生。因此在构建时直接显式报错。
         if self.pre_snap_gripper_action or self.binarize_gripper_action:
             gripper_dim = self.resolved_gripper_dim
             if gripper_dim >= self.action_dim:
@@ -196,12 +194,12 @@ class VLAJEPAConfig(PreTrainedConfig):
                 )
 
     def set_dataset_feature_metadata(self, dataset_features: dict[str, Any]) -> None:
-        """Derive action/state dims and dimension names from the dataset actually being used.
+        """根据实际使用的数据集推导动作/状态维度以及各维度名称。
 
-        `input_features` keeps the *pretrained* feature keys (rename_map needs them), so
-        `validate_features` would otherwise read stale dims off a pretrained config. Called by
-        `make_policy` before the model and processor pipeline are built. Also writes
-        `observation.state` into `input_features` so it gets normalized.
+        `input_features` 保留的是*预训练*的特征键（rename_map 需要它们），否则
+        `validate_features` 会从预训练配置中读到过时的维度。该方法由
+        `make_policy` 在构建模型和处理器流水线之前调用。同时会把
+        `observation.state` 写入 `input_features`，以便对其进行归一化。
         """
         if OBS_STATE in dataset_features:
             shape = tuple(dataset_features[OBS_STATE]["shape"])
@@ -232,13 +230,13 @@ class VLAJEPAConfig(PreTrainedConfig):
 
     @property
     def observation_delta_indices(self) -> list[int]:
-        # Only the world model consumes frames past index 0, so without it asking for the full
-        # window would decode `num_video_frames` frames per camera per sample and drop them.
+        # 只有世界模型会消费索引 0 之后的帧，因此若不启用世界模型，请求完整窗口
+        # 会导致每个样本的每个相机都解码 `num_video_frames` 帧，随后又将其丢弃。
         if not self.enable_world_model:
             return [0]
-        # Matches the original repo's `range(video_horizon)` when the chunk fits in the video window.
-        # For longer chunks, stride the frames across the chunk rather than clustering them at the
-        # start, so the world model sees dynamics over the whole horizon.
+        # 当动作块能容纳于视频窗口内时，与原始仓库的 `range(video_horizon)` 一致。
+        # 对于更长的动作块，则让帧在整个块上跨步分布，而不是聚集在开头，
+        # 以使世界模型能够看到整个时域上的动态。
         if self.num_video_frames >= self.chunk_size:
             return list(range(self.num_video_frames))
         stride = (self.chunk_size - 1) // (self.num_video_frames - 1)

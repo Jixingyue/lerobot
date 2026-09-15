@@ -13,15 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Steerable annotation pipeline producing ``language_persistent`` and
-``language_events`` columns for LeRobot datasets.
+"""可引导的标注流水线，为 LeRobot 数据集生成 ``language_persistent`` 和
+``language_events`` 列。
 
-The pipeline is decomposed into three independently runnable modules whose
-outputs are staged per-episode before a final parquet rewrite:
+该流水线被分解为三个可独立运行的模块，它们的输出在最终 parquet 重写之前按回合（episode）暂存：
 
-- :mod:`.modules.plan_subtasks_memory` (the ``plan`` module) — persistent styles
-- :mod:`.modules.interjections_and_speech` (the ``interjections`` module) — event styles + speech
-- :mod:`.modules.general_vqa` (the ``vqa`` module) — event-style VQA pairs
+- :mod:`.modules.plan_subtasks_memory`（``plan`` 模块）— 持久化样式
+- :mod:`.modules.interjections_and_speech`（``interjections`` 模块）— 事件样式 + 语音
+- :mod:`.modules.general_vqa`（``vqa`` 模块）— 事件样式的 VQA 对
 """
 
 from .config import AnnotationPipelineConfig

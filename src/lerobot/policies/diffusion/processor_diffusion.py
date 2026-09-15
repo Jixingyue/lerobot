@@ -35,25 +35,25 @@ def make_diffusion_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for a diffusion policy.
+    为扩散策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares the input data for the model by:
-    1. Renaming features.
-    2. Normalizing the input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Moving the data to the specified device.
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征。
+    2. 根据数据集统计量对输入和输出特征进行归一化。
+    3. 添加批次维度。
+    4. 将数据移动到指定设备。
 
-    The post-processing pipeline handles the model's output by:
-    1. Moving the data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    后处理流水线通过以下步骤处理模型的输出：
+    1. 将数据移动到 CPU。
+    2. 将输出特征反归一化到其原始尺度。
 
     Args:
-        config: The configuration object for the diffusion policy,
-            containing feature definitions, normalization mappings, and device information.
-        dataset_stats: A dictionary of statistics used for normalization.
-            Defaults to None.
+        config: 扩散策略的配置对象，
+            包含特征定义、归一化映射和设备信息。
+        dataset_stats: 用于归一化的统计量字典。
+            默认为 None。
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+        包含配置好的预处理器和后处理器流水线的元组。
     """
     return make_default_pre_post_processors(config, dataset_stats)

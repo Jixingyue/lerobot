@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-Helper to recalibrate your device (robot or teleoperator).
+重新校准你的设备（机器人或遥操作器）的辅助工具。
 
-Requires: pip install 'lerobot[hardware]'
+需要安装：pip install 'lerobot[hardware]'
 
-Example:
+示例：
 
 ```shell
 lerobot-calibrate \

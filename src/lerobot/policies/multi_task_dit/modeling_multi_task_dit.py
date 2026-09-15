@@ -64,8 +64,7 @@ from lerobot.utils.constants import (
 from ..pretrained import PreTrainedPolicy
 from ..utils import populate_queues
 
-# -- Policy --
-
+#  -- 策略 --
 
 class MultiTaskDiTPolicy(PreTrainedPolicy):
     config_class = MultiTaskDiTConfig
@@ -198,8 +197,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
         return loss, None
 
 
-# -- Observation Encoders --
-
+#  -- 观测编码器 --
 
 class CLIPVisionEncoder(nn.Module):
     """CLIP vision encoder using the CLS token for global image representation."""
@@ -383,8 +381,7 @@ class ObservationEncoder(nn.Module):
         return combined_features.flatten(start_dim=1)
 
 
-# -- Transformer Components --
-
+#  -- Transformer 组件 --
 
 def modulate(x: Tensor, shift: Tensor, scale: Tensor) -> Tensor:
     """Modulate input with shift and scale for AdaLN-Zero."""
@@ -629,8 +626,7 @@ class DiffusionTransformer(nn.Module):
         return self.output_proj(hidden_seq)
 
 
-# -- Objectives --
-
+#  -- 目标 --
 
 class DiffusionObjective(nn.Module):
     """Standard diffusion (DDPM/DDIM) objective implementation."""

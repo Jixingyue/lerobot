@@ -22,65 +22,64 @@ from lerobot.optim import AdamWConfig
 @PreTrainedConfig.register_subclass("act")
 @dataclass
 class ACTConfig(PreTrainedConfig):
-    """Configuration class for the Action Chunking Transformers policy.
+    """Action Chunking Transformers 策略的配置类。
 
-    Defaults are configured for training on bimanual Aloha tasks like "insertion" or "transfer".
+    默认值已针对双臂 Aloha 任务（如 "insertion" 或 "transfer"）的训练进行了配置。
 
-    The parameters you will most likely need to change are the ones which depend on the environment / sensors.
-    Those are: `input_features` and `output_features`.
+    你最可能需要修改的参数是那些依赖于环境/传感器的参数，
+    即：`input_features` 和 `output_features`。
 
-    Notes on the inputs and outputs:
-        - Either:
-            - At least one key starting with "observation.image is required as an input.
-              AND/OR
-            - The key "observation.environment_state" is required as input.
-        - If there are multiple keys beginning with "observation.images." they are treated as multiple camera
-          views. Right now we only support all images having the same shape.
-        - May optionally work without an "observation.state" key for the proprioceptive robot state.
-        - "action" is required as an output key.
+    关于输入和输出的说明：
+        - 满足以下之一：
+            - 至少需要一个以 "observation.image" 开头的键作为输入。
+              和/或
+            - 需要键 "observation.environment_state" 作为输入。
+        - 如果有多个以 "observation.images." 开头的键，它们会被视为多个相机
+          视角。目前我们只支持所有图像具有相同的形状。
+        - 对于本体感知机器人状态的 "observation.state" 键，可以选择没有。
+        - 输出键中必须有 "action"。
 
     Args:
-        n_obs_steps: Number of environment steps worth of observations to pass to the policy (takes the
-            current step and additional steps going back).
-        chunk_size: The size of the action prediction "chunks" in units of environment steps.
-        n_action_steps: The number of action steps to run in the environment for one invocation of the policy.
-            This should be no greater than the chunk size. For example, if the chunk size size 100, you may
-            set this to 50. This would mean that the model predicts 100 steps worth of actions, runs 50 in the
-            environment, and throws the other 50 out.
-        input_features: A dictionary defining the PolicyFeature of the input data for the policy. The key represents
-            the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        output_features: A dictionary defining the PolicyFeature of the output data for the policy. The key represents
-            the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        normalization_mapping: A dictionary that maps from a str value of FeatureType (e.g., "STATE", "VISUAL") to
-            a corresponding NormalizationMode (e.g., NormalizationMode.MIN_MAX)
-        vision_backbone: Name of the torchvision resnet backbone to use for encoding images.
-        pretrained_backbone_weights: Pretrained weights from torchvision to initialize the backbone.
-            `None` means no pretrained weights.
-        replace_final_stride_with_dilation: Whether to replace the ResNet's final 2x2 stride with a dilated
-            convolution.
-        pre_norm: Whether to use "pre-norm" in the transformer blocks.
-        dim_model: The transformer blocks' main hidden dimension.
-        n_heads: The number of heads to use in the transformer blocks' multi-head attention.
-        dim_feedforward: The dimension to expand the transformer's hidden dimension to in the feed-forward
-            layers.
-        feedforward_activation: The activation to use in the transformer block's feed-forward layers.
-        n_encoder_layers: The number of transformer layers to use for the transformer encoder.
-        n_decoder_layers: The number of transformer layers to use for the transformer decoder.
-        use_vae: Whether to use a variational objective during training. This introduces another transformer
-            which is used as the VAE's encoder (not to be confused with the transformer encoder - see
-            documentation in the policy class).
-        latent_dim: The VAE's latent dimension.
-        n_vae_encoder_layers: The number of transformer layers to use for the VAE's encoder.
-        temporal_ensemble_coeff: Coefficient for the exponential weighting scheme to apply for temporal
-            ensembling. Defaults to None which means temporal ensembling is not used. `n_action_steps` must be
-            1 when using this feature, as inference needs to happen at every step to form an ensemble. For
-            more information on how ensembling works, please see `ACTTemporalEnsembler`.
-        dropout: Dropout to use in the transformer layers (see code for details).
-        kl_weight: The weight to use for the KL-divergence component of the loss if the variational objective
-            is enabled. Loss is then calculated as: `reconstruction_loss + kl_weight * kld_loss`.
+        n_obs_steps: 传递给策略的、以环境步数计的观测数量（取当前步
+            以及向前回溯的额外步数）。
+        chunk_size: 以环境步数为单位的动作预测"块"的大小。
+        n_action_steps: 策略每调用一次要在环境中执行的动作步数。
+            该值不应大于块大小。例如，如果块大小为 100，你可以
+            将其设为 50。这意味着模型预测 100 步的动作，在环境中执行 50 步，
+            并丢弃其余 50 步。
+        input_features: 定义策略输入数据 PolicyFeature 的字典。键表示
+            输入数据名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        output_features: 定义策略输出数据 PolicyFeature 的字典。键表示
+            输出数据名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        normalization_mapping: 将 FeatureType 的字符串值（例如 "STATE"、"VISUAL"）映射到
+            对应 NormalizationMode（例如 NormalizationMode.MIN_MAX）的字典。
+        vision_backbone: 用于图像编码的 torchvision resnet 骨干网络名称。
+        pretrained_backbone_weights: 用于初始化骨干网络的 torchvision 预训练权重。
+            `None` 表示不使用预训练权重。
+        replace_final_stride_with_dilation: 是否用膨胀卷积替换 ResNet 最后的
+            2x2 步幅。
+        pre_norm: 是否在 transformer 块中使用 "pre-norm"。
+        dim_model: transformer 块的主隐藏维度。
+        n_heads: transformer 块多头注意力中使用的头数。
+        dim_feedforward: 前馈层中 transformer 隐藏维度扩展到的维度。
+        feedforward_activation: transformer 块前馈层中使用的激活函数。
+        n_encoder_layers: transformer 编码器使用的 transformer 层数。
+        n_decoder_layers: transformer 解码器使用的 transformer 层数。
+        use_vae: 是否在训练期间使用变分目标。这会引入另一个
+            用作 VAE 编码器的 transformer（不要与 transformer 编码器混淆——参见
+            策略类中的文档）。
+        latent_dim: VAE 的潜在维度。
+        n_vae_encoder_layers: VAE 编码器使用的 transformer 层数。
+        temporal_ensemble_coeff: 用于时间集成的指数加权方案的系数。
+            默认为 None，表示不使用时间集成。使用此功能时 `n_action_steps` 必须为
+            1，因为需要在每一步都进行推理以形成集成。有关集成工作原理的
+            更多信息，请参见 `ACTTemporalEnsembler`。
+        dropout: transformer 层中使用的 dropout（详见代码）。
+        kl_weight: 启用变分目标时，损失中 KL 散度分量使用的权重。
+            损失计算方式为：`reconstruction_loss + kl_weight * kld_loss`。
     """
 
-    # Input / output structure.
+    # 输入/输出结构。
     n_obs_steps: int = 1
     chunk_size: int = 100
     n_action_steps: int = 100
@@ -93,36 +92,36 @@ class ACTConfig(PreTrainedConfig):
         }
     )
 
-    # Architecture.
-    # Vision backbone.
+    # 架构。
+    # 视觉骨干网络。
     vision_backbone: str = "resnet18"
     pretrained_backbone_weights: str | None = "ResNet18_Weights.IMAGENET1K_V1"
     replace_final_stride_with_dilation: int = False
-    # Transformer layers.
+    # Transformer 层。
     pre_norm: bool = False
     dim_model: int = 512
     n_heads: int = 8
     dim_feedforward: int = 3200
     feedforward_activation: str = "relu"
     n_encoder_layers: int = 4
-    # Note: Although the original ACT implementation has 7 for `n_decoder_layers`, there is a bug in the code
-    # that means only the first layer is used. Here we match the original implementation by setting this to 1.
-    # See this issue https://github.com/tonyzhaozh/act/issues/25#issue-2258740521.
+    # 注意：虽然原始 ACT 实现的 `n_decoder_layers` 为 7，但代码中存在一个 bug，
+    # 导致只使用了第一层。这里通过将其设为 1 来匹配原始实现。
+    # 参见此 issue https://github.com/tonyzhaozh/act/issues/25#issue-2258740521。
     n_decoder_layers: int = 1
-    # VAE.
+    # VAE。
     use_vae: bool = True
     latent_dim: int = 32
     n_vae_encoder_layers: int = 4
 
-    # Inference.
-    # Note: the value used in ACT when temporal ensembling is enabled is 0.01.
+    # 推理。
+    # 注意：ACT 在启用时间集成时使用的值为 0.01。
     temporal_ensemble_coeff: float | None = None
 
-    # Training and loss computation.
+    # 训练和损失计算。
     dropout: float = 0.1
     kl_weight: float = 10.0
 
-    # Training preset
+    # 训练预设
     optimizer_lr: float = 1e-5
     optimizer_weight_decay: float = 1e-4
     optimizer_lr_backbone: float = 1e-5
@@ -130,7 +129,7 @@ class ACTConfig(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        """Input validation (not exhaustive)."""
+        """输入校验（并非详尽无遗）。"""
         if not self.vision_backbone.startswith("resnet"):
             raise ValueError(
                 f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(Virgile) : Robustify mode control , only the MIT protocole is implemented for now
+# TODO(Virgile)：增强模式控制的健壮性，目前只实现了 MIT 协议
 
 import logging
 import time
@@ -67,21 +67,21 @@ class MotorState(TypedDict):
 
 class RobstrideMotorsBus(MotorsBusBase):
     """
-    The Robstride implementation for a MotorsBus using CAN bus communication.
+    使用 CAN 总线通信的 MotorsBus 的 Robstride 实现。
 
-    This class uses python-can for CAN bus communication with Robstride motors.
-    The motors need to be switched to MIT control mode to be compatible with this implementation.
-    More details on the protocol can be found in the documentation links below:
-    - python-can documentation: https://python-can.readthedocs.io/en/stable/
-    - Robstride CAN protocol: https://github.com/RobStride/MotorStudio
+    本类使用 python-can 与 Robstride 电机进行 CAN 总线通信。
+    电机需要切换到 MIT 控制模式才能与此实现兼容。
+    协议的更多细节可参阅以下文档链接：
+    - python-can 文档：https://python-can.readthedocs.io/en/stable/
+    - Robstride CAN 协议：https://github.com/RobStride/MotorStudio
     """
 
-    # CAN-specific settings
+    # CAN 专用设置
     available_baudrates = deepcopy(AVAILABLE_BAUDRATES)
     default_baudrate = DEFAULT_BAUDRATE
     default_timeout = DEFAULT_TIMEOUT_MS
 
-    # Motor configuration
+    # 电机配置
     model_resolution_table = deepcopy(MODEL_RESOLUTION)
     normalized_data = deepcopy(NORMALIZED_DATA)
 
@@ -96,16 +96,16 @@ class RobstrideMotorsBus(MotorsBusBase):
         data_bitrate: int | None = 5000000,
     ):
         """
-        Initialize the Robstride motors bus.
+        初始化 Robstride 电机总线。
 
         Args:
-            port: CAN interface name (e.g., "can0" for Linux, "/dev/cu.usbmodem*" for macOS)
-            motors: Dictionary mapping motor names to Motor objects
-            calibration: Optional calibration data
-            can_interface: CAN interface type - "auto" (default), "socketcan" (Linux), or "slcan" (macOS/serial)
-            use_can_fd: Whether to use CAN FD mode (default: True for OpenArms)
-            bitrate: Nominal bitrate in bps (default: 1000000 = 1 Mbps)
-            data_bitrate: Data bitrate for CAN FD in bps (default: 5000000 = 5 Mbps), ignored if use_can_fd is False
+            port: CAN 接口名称（例如 Linux 下为 "can0"，macOS 下为 "/dev/cu.usbmodem*"）
+            motors: 电机名称到 Motor 对象的映射字典
+            calibration: 可选的校准数据
+            can_interface: CAN 接口类型 - "auto"（默认）、"socketcan"（Linux）或 "slcan"（macOS/serial）
+            use_can_fd: 是否使用 CAN FD 模式（OpenArms 默认为 True）
+            bitrate: 标称比特率，单位 bps（默认：1000000 = 1 Mbps）
+            data_bitrate: CAN FD 的数据比特率，单位 bps（默认：5000000 = 5 Mbps），当 use_can_fd 为 False 时被忽略
         """
         require_package("python-can", extra="robstride", import_name="can")
         super().__init__(port, motors, calibration)
@@ -117,28 +117,28 @@ class RobstrideMotorsBus(MotorsBusBase):
         self.canbus: can.BusABC | None = None
         self._is_connected = False
 
-        # Map motor names to CAN IDs
+        # 将电机名称映射到 CAN ID
         self._motor_can_ids: dict[str, int] = {}
         self._recv_id_to_motor: dict[int, str] = {}
 
-        # Store motor types and recv IDs
+        # 存储电机类型和接收 ID
         self._motor_types: dict[str, MotorType] = {}
-        # Dynamic gains storage (Damiao-style update path via write/sync_write)
+        # 动态增益存储（通过 write/sync_write 的 Damiao 风格更新路径）
         self._gains: dict[str, dict[str, float]] = {}
         for name, motor in self.motors.items():
             if motor.motor_type_str is not None:
                 self._motor_types[name] = getattr(MotorType, motor.motor_type_str.upper())
             else:
-                # Default to O0if not specified
+                # 未指定时默认为 O0
                 self._motor_types[name] = MotorType.O0
 
-            # Damiao-style defaults: fixed gains at startup for every motor.
+            # Damiao 风格的默认值：启动时为每个电机设置固定增益。
             self._gains[name] = {"kp": 10.0, "kd": 0.5}
 
-            # Map recv_id to motor name for filtering responses
+            # 将 recv_id 映射到电机名称，用于过滤响应
             if motor.recv_id is not None:
                 self._recv_id_to_motor[motor.recv_id] = name
-        # Motor Mode
+        # 电机模式
         self.enabled: dict[str, bool] = {}
         self.operation_mode: dict[str, ControlMode] = {}
         self._last_known_states: dict[str, MotorState] = {
@@ -155,7 +155,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         self._id_to_name: dict[int, str] = {}
         for name in self.motors:
             self.enabled[name] = False
-            self.operation_mode[name] = ControlMode.MIT  # default mode
+            self.operation_mode[name] = ControlMode.MIT  # 默认模式
             self.last_feedback_time[name] = None
 
         for name, motor in self.motors.items():
@@ -164,7 +164,7 @@ class RobstrideMotorsBus(MotorsBusBase):
 
     @property
     def is_connected(self) -> bool:
-        """Check if the CAN bus is connected."""
+        """检查 CAN 总线是否已连接。"""
         return self._is_connected and self.canbus is not None
 
     def _bus(self) -> can.BusABC:
@@ -175,13 +175,13 @@ class RobstrideMotorsBus(MotorsBusBase):
     @check_if_already_connected
     def connect(self, handshake: bool = True) -> None:
         """
-        Open the CAN bus and initialize communication.
+        打开 CAN 总线并初始化通信。
 
         Args:
-            handshake: If True, ping all motors to verify they're present
+            handshake: 如果为 True，则 ping 所有电机以确认它们存在
         """
         try:
-            # Auto-detect interface type based on port name
+            # 根据端口名称自动检测接口类型
             if self.can_interface == "auto":
                 if self.port.startswith("/dev/"):
                     self.can_interface = "slcan"
@@ -231,15 +231,15 @@ class RobstrideMotorsBus(MotorsBusBase):
         self, expected_recv_id: int | None = None, timeout: float = RUNNING_TIMEOUT
     ) -> tuple[bool, can.Message | None]:
         """
-        Poll the bus for a response to a fault-clear request.
+        轮询总线以获取故障清除请求的响应。
 
         Args:
-            expected_recv_id: Only accept frames from this CAN ID when provided.
-            timeout: Maximum time spent polling the bus in seconds.
+            expected_recv_id: 如果提供，则只接受来自该 CAN ID 的帧。
+            timeout: 轮询总线的最长时间（秒）。
 
         Returns:
-            Tuple where the first element is True if a fault frame was received,
-            and the second element is the CAN message (or None on timeout).
+            元组，第一个元素在收到故障帧时为 True，
+            第二个元素是 CAN 消息（超时则为 None）。
         """
         start_time = time.time()
 
@@ -251,7 +251,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             if expected_recv_id is not None and msg.data[0] != expected_recv_id:
                 continue
 
-            # Fault-status frame heuristic (doc-based)
+            # 故障状态帧的启发式判断（基于文档）
             fault_bits = int.from_bytes(msg.data[1:5], "little")
             if fault_bits != 0 and msg.data[5] == msg.data[6] == msg.data[7] == 0:
                 logger.error(
@@ -260,7 +260,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                 )
                 return True, msg
 
-            # Otherwise: valid normal response
+            # 否则：有效的正常响应
             return False, msg
 
         return False, None
@@ -274,7 +274,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             logger.error(f"Fault reported by motor '{motor}' during state update. msg={msg.data.hex()}")
             raise RuntimeError(f"Fault reported by motor '{motor}' during state update.")
 
-        self._decode_motor_state(msg.data)  # updates cache
+        self._decode_motor_state(msg.data)  # 更新缓存
         return True
 
     def _handshake(self) -> None:
@@ -289,8 +289,8 @@ class RobstrideMotorsBus(MotorsBusBase):
             elif has_fault:
                 faulted_motors.append(motor_name)
             else:
-                # CLEAR_FAULT responses are not guaranteed to always match the MIT feedback layout
-                # on all firmware versions. Handshake should not fail just because cache warm-up fails.
+                # CLEAR_FAULT 响应并不保证在所有固件版本上都与 MIT 反馈布局一致。
+                # 不应仅因为缓存预热失败就让握手失败。
                 try:
                     self._decode_motor_state(msg.data)
                 except Exception as e:
@@ -312,7 +312,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         logger.info("Handshake successful. All motors ready.")
 
     def _switch_operation_mode(self, motor: NameOrID, mode: ControlMode) -> None:
-        """Switch the operation mode of a motor."""
+        """切换电机的运行模式。"""
         motor_name = self._get_motor_name(motor)
         motor_id = self._get_motor_id(motor_name)
         recv_id = self._get_motor_recv_id(motor_name)
@@ -328,10 +328,10 @@ class RobstrideMotorsBus(MotorsBusBase):
     @check_if_not_connected
     def disconnect(self, disable_torque: bool = True) -> None:
         """
-        Close the CAN bus connection.
+        关闭 CAN 总线连接。
 
         Args:
-            disable_torque: If True, disable torque on all motors before disconnecting
+            disable_torque: 如果为 True，则在断开连接前禁用所有电机的力矩
         """
         if disable_torque:
             try:
@@ -346,22 +346,22 @@ class RobstrideMotorsBus(MotorsBusBase):
         logger.debug(f"{self.__class__.__name__} disconnected.")
 
     def configure_motors(self) -> None:
-        """Configure all motors with default settings."""
-        # Robstride motors don't require much configuration in MIT mode
-        # Just ensure they're enabled
+        """使用默认设置配置所有电机。"""
+        # Robstride 电机在 MIT 模式下不需要太多配置
+        # 只需确保它们已使能即可
         for motor in self.motors:
             self._enable_motor(self._get_motor_name(motor))
             self._switch_operation_mode(motor, ControlMode.MIT)
             time.sleep(0.01)
 
     def switch_to_mode(self, mode: ControlMode) -> None:
-        """Switch operation mode on selected motors."""
+        """切换所选电机的运行模式。"""
         for motor in self.motors:
             self._switch_operation_mode(motor, mode)
             time.sleep(0.01)
 
     def _enable_motor(self, motor: NameOrID) -> None:
-        """Enable a single motor."""
+        """使能单个电机。"""
         motor_id = self._get_motor_id(motor)
         recv_id = self._get_motor_recv_id(motor)
         data = [0xFF] * 7 + [CAN_CMD_ENABLE]
@@ -370,7 +370,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         self._recv_motor_response(expected_recv_id=recv_id, timeout=PARAM_TIMEOUT)
 
     def _disable_motor(self, motor: NameOrID) -> None:
-        """Disable a single motor."""
+        """禁用单个电机。"""
         motor_id = self._get_motor_id(motor)
         recv_id = self._get_motor_recv_id(motor)
         data = [0xFF] * 7 + [CAN_CMD_DISABLE]
@@ -379,7 +379,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         self._recv_motor_response(expected_recv_id=recv_id)
 
     def enable_torque(self, motors: str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Enable torque on selected motors."""
+        """启用所选电机的力矩。"""
         motors = self._get_motors_list(motors)
         for motor in motors:
             for _ in range(num_retry + 1):
@@ -393,7 +393,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                     time.sleep(0.01)
 
     def disable_torque(self, motors: str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Disable torque on selected motors."""
+        """禁用所选电机的力矩。"""
         motors = self._get_motors_list(motors)
         for motor in motors:
             for _ in range(num_retry + 1):
@@ -408,9 +408,9 @@ class RobstrideMotorsBus(MotorsBusBase):
     @contextmanager
     def torque_disabled(self, motors: str | list[str] | None = None):
         """
-        Context manager that guarantees torque is re-enabled.
+        保证力矩会被重新启用的上下文管理器。
 
-        This helper is useful to temporarily disable torque when configuring motors.
+        此辅助方法在临时禁用力矩以配置电机时很有用。
 
         Examples:
             >>> with bus.torque_disabled():
@@ -424,7 +424,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             self.enable_torque(motors)
 
     def set_zero_position(self, motors: str | list[str] | None = None) -> None:
-        """Set current position as zero for selected motors."""
+        """将所选电机的当前位置设为零点。"""
         motors = self._get_motors_list(motors)
         for motor in motors:
             motor_id = self._get_motor_id(motor)
@@ -439,26 +439,26 @@ class RobstrideMotorsBus(MotorsBusBase):
         self, expected_recv_id: int | None = None, timeout: float = 0.001
     ) -> can.Message | None:
         """
-        Receive a response from a motor.
+        接收来自电机的响应。
 
         Args:
-            expected_recv_id: If provided, only return messages from this CAN ID
-            timeout: Timeout in seconds (default: 1ms for high-speed operation)
+            expected_recv_id: 如果提供，则只返回来自该 CAN ID 的消息
+            timeout: 超时时间，单位秒（默认：1ms，用于高速操作）
 
         Returns:
-            CAN message if received, None otherwise
+            如果收到则返回 CAN 消息，否则返回 None
         """
         try:
             start_time = time.time()
             messages_seen = []
             while time.time() - start_time < timeout:
-                msg = self._bus().recv(timeout=RUNNING_TIMEOUT / 10)  # 100us timeout for fast polling
+                msg = self._bus().recv(timeout=RUNNING_TIMEOUT / 10)  # 100us 超时，用于快速轮询
                 if msg:
                     messages_seen.append(f"0x{msg.arbitration_id:02X}")
-                    # If no filter specified, return any message
+                    # 如果未指定过滤器，则返回任意消息
                     if expected_recv_id is None:
                         return msg
-                    # Otherwise, only return if it matches the expected recv_id
+                    # 否则，只在匹配预期的 recv_id 时返回
                     if msg.data[0] == expected_recv_id:
                         return msg
                     else:
@@ -466,7 +466,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                             f"Ignoring message from CAN ID 0x{msg.arbitration_id:02X}, expected 0x{expected_recv_id:02X}"
                         )
 
-            # Only log warnings if we're in debug mode to reduce overhead
+            # 仅在调试模式下记录警告，以减少开销
             if logger.isEnabledFor(logging.DEBUG):
                 if messages_seen:
                     logger.debug(
@@ -482,15 +482,15 @@ class RobstrideMotorsBus(MotorsBusBase):
         self, expected_recv_ids: list[int], timeout: float = 0.002
     ) -> dict[int, can.Message]:
         """
-        Efficiently receive responses from multiple motors at once.
-        Uses the OpenArms pattern: collect all available messages within timeout.
+        高效地一次性接收多个电机的响应。
+        使用 OpenArms 模式：在超时时间内收集所有可用的消息。
 
         Args:
-            expected_recv_ids: List of CAN IDs we expect responses from
-            timeout: Total timeout in seconds (default: 2ms)
+            expected_recv_ids: 期望收到响应的 CAN ID 列表
+            timeout: 总超时时间，单位秒（默认：2ms）
 
         Returns:
-            Dictionary mapping recv_id to CAN message
+            recv_id 到 CAN 消息的映射字典
         """
         responses: dict[int, can.Message] = {}
         expected_set = set(expected_recv_ids)
@@ -498,11 +498,11 @@ class RobstrideMotorsBus(MotorsBusBase):
 
         try:
             while len(responses) < len(expected_recv_ids) and (time.time() - start_time) < timeout:
-                msg = self._bus().recv(timeout=RUNNING_TIMEOUT / 10)  # 100us poll timeout
+                msg = self._bus().recv(timeout=RUNNING_TIMEOUT / 10)  # 100us 轮询超时
                 if msg and msg.data[0] in expected_set:
                     responses[msg.data[0]] = msg
                     if len(responses) == len(expected_recv_ids):
-                        break  # Got all responses, exit early
+                        break  # 已收到所有响应，提前退出
         except Exception as e:
             logger.debug(f"Error receiving responses: {e}")
 
@@ -515,12 +515,12 @@ class RobstrideMotorsBus(MotorsBusBase):
         max_messages: int = 4096,
     ) -> list[can.Message]:
         """
-        Receive frames until the bus goes quiet.
+        接收帧直到总线安静下来。
 
         Args:
-            timeout: Poll timeout used for each recv() call. Collection stops
-                when one recv() times out (quiet gap).
-            max_messages: Safety cap to prevent unbounded loops.
+            timeout: 每次 recv() 调用使用的轮询超时。当某次 recv()
+                超时时（安静间隙）停止收集。
+            max_messages: 防止无限循环的安全上限。
         """
         out: list[can.Message] = []
         max_messages = max(1, max_messages)
@@ -539,10 +539,10 @@ class RobstrideMotorsBus(MotorsBusBase):
 
     def _process_feedback_messages(self, messages: list[can.Message]) -> set[int]:
         """
-        Decode all received feedback frames and update cached motor states.
+        解码所有收到的反馈帧并更新缓存的电机状态。
 
         Returns:
-            Set of payload recv_ids that were successfully mapped to motors.
+            成功映射到电机的负载 recv_id 集合。
         """
         processed_recv_ids: set[int] = set()
         for msg in messages:
@@ -569,12 +569,12 @@ class RobstrideMotorsBus(MotorsBusBase):
 
     def flush_rx_queue(self, poll_timeout_s: float = 0.0005, max_messages: int = 4096) -> int:
         """
-        Drain pending RX frames from the CAN interface.
+        排空 CAN 接口上待处理的 RX 帧。
 
-        This is used by higher-level controllers to drop stale feedback before issuing
-        a fresh read cycle, so subsequent state reads are based on most recent replies.
-        It should also be called once when a controller instance is created/connected,
-        to clear residual frames left on the interface from previous sessions.
+        上层控制器用它在新读取周期开始前丢弃过时的反馈，
+        使后续的状态读取基于最新的响应。
+        在控制器实例创建/连接时也应调用一次，
+        以清除之前会话残留在接口上的帧。
         """
         drained = 0
         poll_timeout_s = max(0.0, poll_timeout_s)
@@ -596,35 +596,35 @@ class RobstrideMotorsBus(MotorsBusBase):
         current_limit_a: float,
     ) -> None:
         """
-        Send a Velocity Mode Control Command (Command 11) to a single motor.
+        向单个电机发送速度模式控制命令（Command 11）。
 
         Args:
-            motor: Motor name or CAN ID.
-            velocity_rad_per_sec: Target speed in rad/s (32-bit float).
-            current_limit_a: Current limit in A (32-bit float).
+            motor: 电机名称或 CAN ID。
+            velocity_rad_per_sec: 目标速度，单位 rad/s（32 位浮点）。
+            current_limit_a: 电流限制，单位 A（32 位浮点）。
         """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         motor_id = self._get_motor_id(motor)
         motor_name = self._get_motor_name(motor)
-        # Optional: ensure the motor is in velocity control mode
+        # 可选：确保电机处于速度控制模式
 
         if self.operation_mode[motor_name] != ControlMode.VEL:
             raise RuntimeError(f"Motor '{motor_name}' is not in velocity control mode.")
-        # Convert to rad/s to match protocol specification
+        # 转换为 rad/s 以匹配协议规范
 
         velocity_rad_per_sec = np.radians(velocity_deg_per_sec)
 
-        # Encode float32 little-endian without struct (byte list)
+        # 不使用 struct，将 float32 编码为小端字节（字节列表）
         def _float32_to_le_bytes(x: float) -> list[int]:
-            b = np.float32(x).tobytes()  # 4 bytes, little-endian
+            b = np.float32(x).tobytes()  # 4 字节，小端序
             return [b[0], b[1], b[2], b[3]]
 
         speed_bytes = _float32_to_le_bytes(velocity_rad_per_sec)
         limit_bytes = _float32_to_le_bytes(current_limit_a)
 
-        data = speed_bytes + limit_bytes  # 8 octets : [0–3]=speed, [4–7]=current limit
+        data = speed_bytes + limit_bytes  # 8 个字节：[0–3]=速度，[4–7]=电流限制
 
         msg = can.Message(
             arbitration_id=motor_id,
@@ -633,7 +633,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         )
         self._bus().send(msg)
 
-        # Si le proto renvoie une réponse type état, on peut la décoder comme pour MIT
+        # 如果协议返回状态类型的响应，可以像 MIT 一样解码
         recv_id = self._get_motor_recv_id(motor)
         if recv_id is not None:
             resp = self._recv_motor_response(expected_recv_id=recv_id)
@@ -652,15 +652,15 @@ class RobstrideMotorsBus(MotorsBusBase):
         wait_for_response: bool = True,
     ) -> None:
         """
-        Send MIT control command to a motor.
+        向电机发送 MIT 控制命令。
 
         Args:
-            motor: Motor name or ID
-            kp: Position gain
-            kd: Velocity gain
-            position_degrees: Target position (degrees)
-            velocity_deg_per_sec: Target velocity (degrees/s)
-            torque: Target torque (N·m)
+            motor: 电机名称或 ID
+            kp: 位置增益
+            kd: 速度增益
+            position_degrees: 目标位置（度）
+            velocity_deg_per_sec: 目标速度（度/秒）
+            torque: 目标力矩（N·m）
         """
         motor_name = self._get_motor_name(motor)
         motor_type = self._motor_types[motor_name]
@@ -686,7 +686,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         velocity_deg_per_sec: float,
         torque: float,
     ) -> list[int]:
-        """Encode an MIT control command payload from physical units."""
+        """从物理量编码 MIT 控制命令负载。"""
         position_rad = np.radians(position_degrees)
         velocity_rad_per_sec = np.radians(velocity_deg_per_sec)
         pmax, vmax, tmax = MOTOR_LIMIT_PARAMS[motor_type]
@@ -712,7 +712,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         self,
         commands: dict[NameOrID, tuple[float, float, float, float, float]],
     ) -> None:
-        """Send MIT commands in batch and update cache from collected responses."""
+        """批量发送 MIT 命令，并根据收集的响应更新缓存。"""
         if not commands:
             return
 
@@ -728,8 +728,8 @@ class RobstrideMotorsBus(MotorsBusBase):
             msg = can.Message(arbitration_id=motor_id, data=data, is_extended_id=False)
             self._bus().send(msg)
             recv_id_to_motor[self._get_motor_recv_id(motor)] = motor_name
-        # Read every feedback frame until RX goes quiet, then decode all of them.
-        # This avoids dropping useful frames when responses from different motors interleave.
+        # 读取所有反馈帧直到 RX 安静下来，然后全部解码。
+        # 这可以避免在不同电机的响应交错时丢弃有用的帧。
         messages = self._recv_all_messages_until_quiet()
         processed_recv_ids = self._process_feedback_messages(messages)
 
@@ -738,29 +738,29 @@ class RobstrideMotorsBus(MotorsBusBase):
                 logger.warning(f"Packet drop: {motor_name} (ID: 0x{recv_id:02X}). Using last known state.")
 
     def _float_to_uint(self, x: float, x_min: float, x_max: float, bits: int) -> int:
-        """Convert float to unsigned integer for CAN transmission."""
-        x = max(x_min, min(x_max, x))  # Clamp to range
+        """将浮点数转换为无符号整数以进行 CAN 传输。"""
+        x = max(x_min, min(x_max, x))  # 限幅到范围内
         span = x_max - x_min
         data_norm = (x - x_min) / span
         return int(data_norm * ((1 << bits) - 1))
 
     def _uint_to_float(self, x: int, x_min: float, x_max: float, bits: int) -> float:
-        """Convert unsigned integer from CAN to float."""
+        """将来自 CAN 的无符号整数转换为浮点数。"""
         span = x_max - x_min
         data_norm = float(x) / ((1 << bits) - 1)
         return data_norm * span + x_min
 
     def _decode_motor_state(self, data: bytearray | bytes) -> tuple[float, float, float, float]:
         """
-        Decode motor state from CAN data.
+        从 CAN 数据解码电机状态。
 
         Returns:
-            Tuple of (position_degrees, velocity_deg_per_sec, torque, temp_mos)
+            (position_degrees, velocity_deg_per_sec, torque, temp_mos) 元组
         """
         if len(data) < 8:
             raise ValueError("Invalid motor state data")
 
-        # Extract encoded values
+        # 提取编码值
         motor_id = data[0]
         motor_name = self._id_to_name[motor_id]
         q_uint = (data[1] << 8) | data[2]
@@ -769,32 +769,32 @@ class RobstrideMotorsBus(MotorsBusBase):
         t_mos = (data[6] << 8) | data[7]
 
         motor_type = self._motor_types[motor_name]
-        # Get motor limits
+        # 获取电机限位参数
         pmax, vmax, tmax = MOTOR_LIMIT_PARAMS[motor_type]
 
-        # Decode to physical values (radians)
+        # 解码为物理量（弧度）
         position_rad = self._uint_to_float(q_uint, -pmax, pmax, 16)
         velocity_rad_per_sec = self._uint_to_float(dq_uint, -vmax, vmax, 12)
         torque = self._uint_to_float(tau_uint, -tmax, tmax, 12)
 
-        # Convert to degrees
+        # 转换为度
         position_degrees = np.degrees(position_rad)
         velocity_deg_per_sec = np.degrees(velocity_rad_per_sec)
 
-        # Update cached state
+        # 更新缓存状态
         self.last_feedback_time[motor_name] = time.time()
         self._last_known_states[motor_name] = {
             "position": position_degrees,
             "velocity": velocity_deg_per_sec,
             "torque": torque,
             "temp_mos": t_mos / 10,
-            # Not available in Robstride MIT feedback.
+            # Robstride MIT 反馈中不可用。
             "temp_rotor": 0.0,
         }
         return position_degrees, velocity_deg_per_sec, torque, t_mos / 10
 
     def _process_response(self, motor: str, msg: can.Message) -> None:
-        """Decode a feedback frame and update the cache for one motor."""
+        """解码反馈帧并更新单个电机的缓存。"""
         try:
             self._decode_motor_state(msg.data)
         except Exception as e:
@@ -804,7 +804,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             )
 
     def _get_cached_value(self, motor: str, data_name: str) -> Value:
-        """Retrieve a specific value from the state cache."""
+        """从状态缓存中获取特定值。"""
         state = self._last_known_states[motor]
         mapping: dict[str, Any] = {
             "Present_Position": state["position"],
@@ -824,9 +824,9 @@ class RobstrideMotorsBus(MotorsBusBase):
         data_name: str,
         motor: str,
     ) -> Value:
-        """Read a value from a single motor. Positions are always in degrees."""
+        """从单个电机读取值。位置始终以度为单位。"""
 
-        # Refresh motor to get latest state
+        # 刷新电机以获取最新状态
         t_init = time.time()
         if (
             self.last_feedback_time[motor] is None
@@ -843,21 +843,21 @@ class RobstrideMotorsBus(MotorsBusBase):
         motor: str,
         value: Value,
     ) -> None:
-        """Write a value to a single motor. Positions are always in degrees."""
+        """向单个电机写入值。位置始终以度为单位。"""
         motor_name = self._get_motor_name(motor)
 
         if data_name in ("Kp", "Kd"):
             self._gains[motor_name][data_name.lower()] = float(value)
         elif data_name == "Goal_Position":
-            # Use MIT control with position in degrees
+            # 使用 MIT 控制，位置以度为单位
             kp = self._gains[motor_name]["kp"]
             kd = self._gains[motor_name]["kd"]
             self._mit_control(motor, kp, kd, value, 0, 0)
         elif data_name == "Goal_Velocity":
-            # Use Velocity control mode
+            # 使用速度控制模式
             if self.operation_mode[motor_name] != ControlMode.VEL:
                 raise RuntimeError(f"Motor '{motor_name}' is not in velocity control mode.")
-            current_limit_a = 5.0  # Example current limit / not specified in doc. This mode is rarely used and primarily intended for diagnostics
+            current_limit_a = 5.0  # 示例电流限制 / 文档中未指定。此模式很少使用，主要用于诊断
             self._speed_control(motor, value, current_limit_a)
         else:
             raise ValueError(f"Writing {data_name} not supported in MIT mode")
@@ -868,9 +868,9 @@ class RobstrideMotorsBus(MotorsBusBase):
         motors: str | list[str] | None = None,
     ) -> dict[str, Value]:
         """
-        Read the same value from multiple motors simultaneously.
-        Uses batched operations: sends all refresh commands, then collects all responses.
-        This is MUCH faster than sequential reads (OpenArms pattern).
+        同时从多个电机读取相同的值。
+        使用批量操作：先发送所有刷新命令，然后收集所有响应。
+        这比顺序读取快得多（OpenArms 模式）。
         """
         target_motors = self._get_motors_list(motors)
         self._batch_refresh(target_motors)
@@ -883,8 +883,9 @@ class RobstrideMotorsBus(MotorsBusBase):
         values: dict[str, Value],
     ) -> None:
         """
-        Write different values to multiple motors simultaneously. Positions are always in degrees.
-        Uses batched operations: sends all commands first, then collects responses when MIT mode is used, otherwise send cmd and wait for response for each motor).
+        同时向多个电机写入不同的值。位置始终以度为单位。
+        使用批量操作：先发送所有命令，当使用 MIT 模式时再收集响应；
+        否则对每个电机分别发送命令并等待响应。
         """
         if data_name in ("Kp", "Kd"):
             key = data_name.lower()
@@ -904,7 +905,7 @@ class RobstrideMotorsBus(MotorsBusBase):
                 )
             self._mit_control_batch(commands)
         else:
-            # Fall back to individual writes for other data types
+            # 其他数据类型回退到逐个写入
             for motor, value in values.items():
                 self.write(data_name, motor, value)
 
@@ -915,14 +916,14 @@ class RobstrideMotorsBus(MotorsBusBase):
         num_retry: int = 0,
     ) -> dict[str, MotorState]:
         """
-        Read ALL motor states (position, velocity, torque) with Robstride TTL refresh policy.
+        使用 Robstride TTL 刷新策略读取所有电机状态（位置、速度、力矩）。
         """
         target_motors = self._get_motors_list(motors)
         self._batch_refresh(target_motors)
         return {motor: self._last_known_states[motor].copy() for motor in target_motors}
 
     def _batch_refresh(self, motors: list[str]) -> None:
-        """Refresh a set of motors and update the feedback cache."""
+        """刷新一组电机并更新反馈缓存。"""
         init_time = time.time()
         updated_motors: list[str] = []
 
@@ -947,15 +948,15 @@ class RobstrideMotorsBus(MotorsBusBase):
                 logger.warning(f"Packet drop: {motor} (ID: 0x{recv_id:02X}). Using last known state.")
 
     def read_calibration(self) -> dict[str, MotorCalibration]:
-        """Read calibration data from motors."""
-        # Robstride motors don't store calibration internally
-        # Return existing calibration or empty dict
+        """从电机读取校准数据。"""
+        # Robstride 电机不在内部存储校准数据
+        # 返回现有校准数据或空字典
         return self.calibration if self.calibration else {}
 
     def write_calibration(self, calibration_dict: dict[str, MotorCalibration], cache: bool = True) -> None:
-        """Write calibration data to motors."""
-        # Robstride motors don't store calibration internally
-        # Just cache it in memory
+        """向电机写入校准数据。"""
+        # Robstride 电机不在内部存储校准数据
+        # 仅在内存中缓存
         if cache:
             self.calibration = calibration_dict
 
@@ -963,18 +964,18 @@ class RobstrideMotorsBus(MotorsBusBase):
         self, motors: str | list[str] | None = None, display_values: bool = True
     ) -> tuple[dict[str, Value], dict[str, Value]]:
         """
-        Interactively record the min/max values of each motor in degrees.
+        以交互方式记录每个电机的最小/最大值（单位：度）。
 
-        Move the joints by hand (with torque disabled) while the method streams live positions.
-        Press Enter to finish.
+        在方法实时输出当前位置时，用手移动关节（力矩已禁用）。
+        按 Enter 键结束。
         """
         target_motors = self._get_motors_list(motors)
 
-        # Disable torque for manual movement
+        # 禁用力矩以便手动移动
         self.disable_torque(target_motors)
         time.sleep(0.1)
 
-        # Get initial positions (already in degrees)
+        # 获取初始位置（已经是度）
         start_positions = self.sync_read("Present_Position", target_motors)
         mins = start_positions.copy()
         maxes = start_positions.copy()
@@ -1014,15 +1015,15 @@ class RobstrideMotorsBus(MotorsBusBase):
                 user_pressed_enter = True
 
             if display_values and not user_pressed_enter:
-                # Move cursor up to overwrite the previous output
+                # 上移光标以覆盖之前的输出
                 move_cursor_up(len(target_motors) + 4)
 
             time.sleep(0.05)
 
-        # Re-enable torque
+        # 重新启用力矩
         self.enable_torque(target_motors)
 
-        # Validate ranges
+        # 验证范围
         for motor in target_motors:
             if (motor in mins) and (motor in maxes) and (abs(maxes[motor] - mins[motor]) < 5.0):
                 raise ValueError(f"Motor {motor} has insufficient range of motion (< 5 degrees)")
@@ -1030,7 +1031,7 @@ class RobstrideMotorsBus(MotorsBusBase):
         return mins, maxes
 
     def _get_motors_list(self, motors: str | list[str] | None) -> list[str]:
-        """Convert motor specification to list of motor names."""
+        """将电机规格转换为电机名称列表。"""
         if motors is None:
             return list(self.motors.keys())
         elif isinstance(motors, str):
@@ -1041,7 +1042,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             raise TypeError(f"Invalid motors type: {type(motors)}")
 
     def _get_motor_id(self, motor: NameOrID) -> int:
-        """Get CAN ID for a motor."""
+        """获取电机的 CAN ID。"""
         if isinstance(motor, str):
             if motor in self.motors:
                 return self.motors[motor].id
@@ -1051,7 +1052,7 @@ class RobstrideMotorsBus(MotorsBusBase):
             return motor
 
     def _get_motor_name(self, motor: NameOrID) -> str:
-        """Get motor name from name or ID."""
+        """根据名称或 ID 获取电机名称。"""
         if isinstance(motor, str):
             return motor
         else:
@@ -1061,10 +1062,10 @@ class RobstrideMotorsBus(MotorsBusBase):
             raise ValueError(f"Unknown motor ID: {motor}")
 
     def _get_motor_recv_id(self, motor: NameOrID) -> int:
-        """Return the expected ID found in feedback payload byte0 for this motor.
+        """返回该电机反馈负载 byte0 中预期的 ID。
 
-        Robstride MIT feedback frames encode an ID in data[0]. Some setups expose it as
-        `motor.recv_id`; otherwise we fall back to the configured `motor.id`.
+        Robstride MIT 反馈帧在 data[0] 中编码了一个 ID。某些配置将其暴露为
+        `motor.recv_id`；否则回退到配置的 `motor.id`。
         """
         motor_name = self._get_motor_name(motor)
         motor_obj = self.motors[motor_name]
@@ -1082,5 +1083,5 @@ class RobstrideMotorsBus(MotorsBusBase):
 
     @cached_property
     def is_calibrated(self) -> bool:
-        """Check if motors are calibrated."""
+        """检查电机是否已校准。"""
         return bool(self.calibration)

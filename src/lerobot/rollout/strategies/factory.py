@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Strategy factory: config type-name → strategy class dispatch."""
+"""策略工厂：根据配置的类型名分发到对应的策略类。"""
 
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ if TYPE_CHECKING:
 
 
 def create_strategy(config: RolloutStrategyConfig) -> RolloutStrategy:
-    """Instantiate the appropriate strategy from a config object.
+    """根据配置对象实例化相应的策略。
 
-    Dispatches on ``config.type`` (the name registered via ``draccus.ChoiceRegistry``)
-    for the built-ins, then falls back to the ``<Name>Config`` -> ``<Name>`` naming
-    convention shared with the robot, camera and teleoperator factories, so a
-    third-party strategy needs no edit here.
+    对于内置策略，依据 ``config.type``（通过 ``draccus.ChoiceRegistry``
+    注册的名称）进行分发；随后回退到与机器人、相机和遥操作器工厂共用的
+    ``<Name>Config`` -> ``<Name>`` 命名约定，因此第三方策略无需修改
+    此处代码。
     """
     if config.type == "base":
         return BaseStrategy(config)

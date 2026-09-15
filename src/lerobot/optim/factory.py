@@ -25,14 +25,14 @@ from lerobot.policies import PreTrainedPolicy
 def make_optimizer_and_scheduler(
     cfg: TrainPipelineConfig, policy: PreTrainedPolicy
 ) -> tuple[Optimizer, LRScheduler | None]:
-    """Generates the optimizer and scheduler based on configs.
+    """根据配置生成优化器和调度器。
 
     Args:
-        cfg (TrainPipelineConfig): The training config that contains optimizer and scheduler configs
-        policy (PreTrainedPolicy): The policy config from which parameters and presets must be taken from.
+        cfg (TrainPipelineConfig): 包含优化器和调度器配置的训练配置
+        policy (PreTrainedPolicy): 用于获取参数和预设的策略配置。
 
     Returns:
-        tuple[Optimizer, LRScheduler | None]: The couple (Optimizer, Scheduler). Scheduler can be `None`.
+        tuple[Optimizer, LRScheduler | None]: (Optimizer, Scheduler) 组合。Scheduler 可以为 `None`。
     """
     params = policy.get_optim_params() if cfg.use_policy_training_preset else policy.parameters()
     if cfg.optimizer is None:

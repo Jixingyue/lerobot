@@ -200,8 +200,7 @@ def detect_features_and_norm_modes(
             elif ACTION in key:
                 feature_type = FeatureType.ACTION
             else:
-                feature_type = FeatureType.STATE  # Default
-
+                feature_type = FeatureType.STATE  #  默认
             features[key] = PolicyFeature(feature_type, shape)
 
     # If no features in config, infer from stats

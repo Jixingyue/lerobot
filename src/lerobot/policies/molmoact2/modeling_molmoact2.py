@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MolmoAct2 policy for LeRobot.
+"""LeRobot 的 MolmoAct2 策略。
 
-MolmoAct2 is a VLM-based robotics policy from Allen AI that combines a
-Molmo vision-language backbone with a per-layer flow-matching action expert
-for continuous action generation, plus an optional discrete action token
-head. This module wraps the vendored HF model implementation
-(``molmoact2_hf_model/``) into the LeRobot ``PreTrainedPolicy`` interface.
+MolmoAct2 是 Allen AI 推出的基于 VLM 的机器人策略，它将 Molmo 视觉-语言
+骨干网络与逐层的 flow-matching action expert 相结合，用于连续动作生成，
+并附带一个可选的离散动作 token 头。本模块将内置的 HF 模型实现
+（``molmoact2_hf_model/``）封装为 LeRobot 的 ``PreTrainedPolicy`` 接口。
 
-Paper:  https://allenai.org/blog/molmoact2
-Code:   https://github.com/allenai/molmoact2
+论文：https://allenai.org/blog/molmoact2
+代码：https://github.com/allenai/molmoact2
 """
 
 from __future__ import annotations
@@ -70,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 
 def _torch_dtype(dtype: str) -> torch.dtype:
-    """Convert a dtype name string to a torch.dtype."""
+    """将 dtype 名称字符串转换为 torch.dtype。"""
     if dtype == "float32":
         return torch.float32
     if dtype == "bfloat16":
@@ -83,14 +82,13 @@ def _call_module_without_gradient_checkpointing_layer(
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    """Call normal ``nn.Module`` dispatch without a subclass ``__call__`` wrapper.
+    """绕过子类的 ``__call__`` 包装，直接调用普通的 ``nn.Module`` 分发逻辑。
 
-    Transformers decoder layers implement activation checkpointing by
-    overriding ``__call__``. MolmoAct2's joint continuous path checkpoints the
-    paired text+action layer as one unit, so invoking that override inside the
-    joint checkpoint would checkpoint the text layer twice. Dispatching through
-    the base implementation skips only the Transformers wrapper while retaining
-    module compilation, hooks, and autograd.
+    Transformers 的 decoder 层通过重写 ``__call__`` 来实现激活检查点。
+    MolmoAct2 的联合连续路径会把配对的文本层+动作层作为一个整体做检查点，
+    因此在联合检查点内部调用那个重写方法会导致文本层被重复检查点两次。
+    通过基类实现进行分发只会跳过 Transformers 的包装层，同时保留模块编译、
+    hooks 和 autograd。
     """
     return torch.nn.Module.__call__(module, *args, **kwargs)
 
@@ -107,13 +105,12 @@ def _next_decode_position_ids_from_attention_mask(attention_mask: Tensor | None)
 
 
 def _set_dynamo_lru_cache(enabled: bool) -> None:
-    """Set Dynamo's compiled-graph cache ordering policy.
+    """设置 Dynamo 编译图缓存的排序策略。
 
-    PyTorch activation checkpointing replays an eager function during
-    backward.  With repeated compiled blocks, LRU reordering can make that
-    replay select a different valid graph than the original forward, which
-    changes the saved-tensor signature.  PyTorch exposes this narrow switch as
-    the short-term fix for pytorch/pytorch#166926.
+    PyTorch 的激活检查点会在反向传播期间重放 eager 函数。对于重复出现的
+    编译块，LRU 重排序可能使该重放选择一个与原始前向不同但仍有效的图，
+    从而改变保存张量的签名。PyTorch 将这个窄开关作为
+    pytorch/pytorch#166926 的短期修复方案暴露出来。
     """
     torch_c = getattr(torch, "_C", None)
     dynamo_c = getattr(torch_c, "_dynamo", None)
@@ -129,14 +126,12 @@ def _set_dynamo_lru_cache(enabled: bool) -> None:
 
 
 def _disable_dynamo_ddp_optimizer() -> None:
-    """Keep block compilation identical in DDP forward and recomputation.
+    """使 DDP 前向与重计算阶段的块编译保持一致。
 
-    The Dynamo DDP optimizer changes graph partitioning only while execution is
-    inside the DDP forward context. Activation-checkpoint recomputation happens
-    during backward, outside that context. MolmoAct2 already compiles individual
-    transformer blocks, so disabling this additional graph splitter preserves
-    stable block graphs while the regular C++ DDP reducer still synchronizes
-    gradients.
+    Dynamo 的 DDP 优化器只在执行处于 DDP 前向上下文内部时才会改变图划分。
+    而激活检查点的重计算发生在反向传播期间，位于该上下文之外。MolmoAct2
+    已经对单个 transformer 块进行编译，因此禁用这个额外的图分割器可以保持
+    块图的稳定，同时常规的 C++ DDP reducer 仍会同步梯度。
     """
     dynamo = getattr(torch, "_dynamo", None)
     dynamo_config = getattr(dynamo, "config", None)
@@ -154,13 +149,12 @@ def _mark_action_context_dynamic(
     value_states: Tensor,
     attention_mask: Tensor | None,
 ) -> None:
-    """Mark only the variable cross-attention sequence dimensions dynamic.
+    """仅将可变的交叉注意力序列维度标记为动态。
 
-    MolmoAct2 training fixes the per-rank batch size, flow-timestep count, and
-    action horizon. The encoder context length is the only action-block input
-    dimension that changes between batches. Marking that dimension explicitly
-    lets Dynamo build one reusable graph without making every otherwise-static
-    action dimension symbolic.
+    MolmoAct2 训练会固定每个 rank 的批大小、flow 时间步数量和动作时长。
+    编码器上下文长度是唯一在不同批次之间变化的 action-block 输入维度。
+    显式标记该维度可以让 Dynamo 构建一个可复用的图，而不必把其他本来
+    静态的动作维度都变成符号化的。
     """
     dynamo = getattr(torch, "_dynamo", None)
     mark_dynamic = getattr(dynamo, "mark_dynamic", None)
@@ -225,7 +219,7 @@ def _load_hf_norm_metadata_for_tag(
     norm_tag: str | None,
     norm_stats_path: str | None = None,
 ) -> dict[str, Any]:
-    """Read per-tag metadata from the checkpoint's ``norm_stats.json``."""
+    """从检查点的 ``norm_stats.json`` 中读取按 tag 划分的元数据。"""
     norm_tag = str(norm_tag or "").strip()
     if not norm_tag:
         return {}
@@ -268,11 +262,11 @@ def _load_hf_norm_metadata_for_tag(
 
 
 def _apply_norm_tag_metadata(config: MolmoAct2Config) -> None:
-    """Populate config fields from the checkpoint's norm-tag metadata."""
+    """根据检查点的 norm-tag 元数据填充配置字段。"""
     if config.pretrained_path is not None:
-        # LeRobot checkpoints persist the already-resolved embodiment metadata
-        # and their saved processors own normalization. Reopening one through
-        # policy.path must not consult the original HF/local norm stats source.
+        # LeRobot 检查点持久化了已解析好的本体（embodiment）元数据，
+        # 且其保存的 processor 自行管理归一化。通过 policy.path 重新打开
+        # 检查点时，绝不能再查询原始的 HF/本地归一化统计来源。
         return
     if not str(config.norm_tag or "").strip():
         return
@@ -294,7 +288,7 @@ def _apply_norm_tag_metadata(config: MolmoAct2Config) -> None:
 
 
 def _saved_policy_action_mode(config: MolmoAct2Config) -> str | None:
-    """Read the action mode from a LeRobot-saved checkpoint's ``config.json``."""
+    """从 LeRobot 保存的检查点的 ``config.json`` 中读取动作模式。"""
     from pathlib import Path
 
     pretrained_path = getattr(config, "pretrained_path", None)
@@ -319,7 +313,7 @@ def _training_action_mode(config: MolmoAct2Config, saved_policy_action_mode: str
 def _validate_inference_action_mode(
     config: MolmoAct2Config, saved_policy_action_mode: str | None = None
 ) -> None:
-    """Check that the requested inference mode is compatible with the training mode."""
+    """检查所请求的推理模式是否与训练模式兼容。"""
     requested_mode = config.inference_action_mode
     if requested_mode is None:
         return
@@ -342,7 +336,7 @@ def _validate_checkpoint_action_mode(
     *,
     has_action_expert: bool,
 ) -> None:
-    """Check that the checkpoint's action mode is compatible with the config."""
+    """检查检查点的动作模式是否与配置兼容。"""
     if config.action_mode == "both" and checkpoint_action_mode != "both":
         raise ValueError(
             f"action_mode='both' requires checkpoint action_mode='both', got {checkpoint_action_mode!r}."
@@ -361,7 +355,7 @@ def _resolve_inference_action_mode(
     requested_mode: str | None,
     saved_policy_action_mode: str | None = None,
 ) -> str:
-    """Resolve the final inference action mode, validating compatibility."""
+    """解析最终的推理动作模式，并校验兼容性。"""
     training_mode = _training_action_mode(config, saved_policy_action_mode)
     if requested_mode is None:
         requested_mode = config.inference_action_mode
@@ -611,12 +605,12 @@ def _weighted_per_example(
 
 
 class MolmoAct2Policy(PreTrainedPolicy):
-    """MolmoAct2 policy wrapping the vendored HF model for LeRobot.
+    """为 LeRobot 封装内置 HF 模型的 MolmoAct2 策略。
 
-    Supports three training modes via ``config.action_mode``:
-    ``"continuous"`` (flow-matching only), ``"discrete"`` (autoregressive
-    token prediction only), or ``"both"`` (joint loss). At inference,
-    ``config.inference_action_mode`` selects which head generates actions.
+    通过 ``config.action_mode`` 支持三种训练模式：``"continuous"``
+    （仅 flow-matching）、``"discrete"``（仅自回归 token 预测）或
+    ``"both"``（联合损失）。推理时，``config.inference_action_mode``
+    选择由哪个头来生成动作。
     """
 
     config_class = MolmoAct2Config
@@ -630,7 +624,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
         strict: bool = True,
         **kwargs: Any,
     ) -> MolmoAct2Policy:
-        """Load a LeRobot checkpoint without silently accepting topology changes."""
+        """加载 LeRobot 检查点，且不静默接受拓扑结构变化。"""
         return super().from_pretrained(
             pretrained_name_or_path,
             strict=strict,
@@ -693,13 +687,12 @@ class MolmoAct2Policy(PreTrainedPolicy):
             low_cpu_mem_usage=True,
             token=_hf_token(),
         )
-        # Keep Hub loading limited to local code plus safetensors, and verify the
-        # local implementation exactly matches the checkpoint key space.
+        # 将 Hub 加载限制为本地代码加 safetensors，并校验本地实现与
+        # 检查点的键空间完全一致。
         self._apply_bfloat16_parameter_policy()
-        # In bfloat16 mode, establish the final target dtype tree before this last
-        # strict load. This preserves the checkpoint's original fp32 values for
-        # the action expert and other fp32-targeted modules instead of widening
-        # already-rounded bf16 tensors.
+        # 在 bfloat16 模式下，在这最后一次严格加载之前确立最终的目标
+        # dtype 树。这样可以为 action expert 和其他目标为 fp32 的模块保留
+        # 检查点中原始的 fp32 数值，而不是扩展已经被舍入过的 bf16 张量。
         _strict_load_safetensors_weights(self.model, checkpoint_location)
         hf_max_action_dim = int(getattr(self.model.config, "max_action_dim", -1))
         if hf_max_action_dim != int(self.config.expected_max_action_dim):
@@ -738,7 +731,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
         self.train(self.training)
 
     def reset(self) -> None:
-        """Clear the action queue and rollout generator between episodes."""
+        """在 episode 之间清空动作队列和 rollout 生成器。"""
         self._action_queue = deque(maxlen=self.config.n_action_steps)
         self._rollout_action_generator = None
 
@@ -855,12 +848,12 @@ class MolmoAct2Policy(PreTrainedPolicy):
                     param.requires_grad = False
 
     def _apply_bfloat16_parameter_policy(self) -> None:
-        """Apply the fixed low-memory MolmoAct2 parameter-storage policy.
+        """应用固定的低显存 MolmoAct2 参数存储策略。
 
-        Large text and vision matrices stay in bf16. The complete action
-        expert, norms, RoPE state, depth gates, and LoRA adapters use fp32
-        parameters and therefore fp32 Adam state when trainable. Eligible
-        action-expert operators still execute in bf16 under autocast.
+        大型文本和视觉矩阵保持 bf16。完整的 action expert、norms、RoPE
+        状态、depth gates 和 LoRA 适配器使用 fp32 参数，因此在可训练时
+        也使用 fp32 的 Adam 状态。符合条件的 action-expert 算子在
+        autocast 下仍以 bf16 执行。
         """
         if self.config.dtype != "bfloat16":
             return
@@ -890,14 +883,14 @@ class MolmoAct2Policy(PreTrainedPolicy):
                 module.to(dtype=torch.float32)
             if isinstance(MolmoAct2RotaryEmbedding, type) and isinstance(module, MolmoAct2RotaryEmbedding):
                 module.to(dtype=torch.float32)
-                # ``original_inv_freq`` is an alias rather than a registered
-                # buffer, so Module.to() does not update it automatically.
+                # ``original_inv_freq`` 是一个别名而非注册的 buffer，
+                # 因此 Module.to() 不会自动更新它。
                 module.original_inv_freq = module.inv_freq
                 module._pos_sin_cache = torch.empty(0, device=module.inv_freq.device, dtype=torch.float32)
                 module._pos_cos_cache = torch.empty(0, device=module.inv_freq.device, dtype=torch.float32)
 
     def get_optim_params(self) -> list[dict[str, Any]]:
-        """Return optimizer param groups with per-component learning rates."""
+        """返回带有按组件学习率的优化器参数组。"""
         vit_params: list[Tensor] = []
         connector_params: list[Tensor] = []
         action_expert_params: list[Tensor] = []
@@ -907,11 +900,10 @@ class MolmoAct2Policy(PreTrainedPolicy):
                 continue
             if "action_expert" in name:
                 action_expert_params.append(param)
-            # Native MolmoAct2 explicitly owns the checkpoint's additional
-            # vocabulary table under get_connector_parameters().  It remains
-            # trainable for the published ft_embedding="lm_head" FFT recipe,
-            # so route it to the connector LR and independent clip group even
-            # though it is structurally nested below the text embedding.
+            # 原生 MolmoAct2 在 get_connector_parameters() 下显式管理
+            # 检查点中额外的词表。在已发布的 ft_embedding="lm_head" FFT
+            # 方案中它保持可训练，因此尽管它在结构上嵌套在文本嵌入之下，
+            # 仍将其路由到 connector 学习率和独立裁剪组。
             elif ".wte.new_embedding" in name or any(
                 part in name for part in ("image_pooling_2d", "image_projector")
             ):
@@ -940,8 +932,8 @@ class MolmoAct2Policy(PreTrainedPolicy):
         return groups
 
     def _model_inputs(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
-        # Match Pi0.5: keep continuous inputs in fp32, then cross into bf16 at
-        # explicit model/autocast boundaries.
+        # 与 Pi0.5 保持一致：连续输入保持 fp32，然后在明确的模型/autocast
+        # 边界处转入 bf16。
         return {
             key: value.to(dtype=torch.float32) if value.is_floating_point() else value
             for key, value in batch.items()
@@ -959,8 +951,8 @@ class MolmoAct2Policy(PreTrainedPolicy):
                 )
             return torch.autocast(device_type=device_type, dtype=compute_dtype)
         if autocast_available:
-            # A surrounding eval/use_amp context must not override the single
-            # Pi0.5-style dtype switch when float32 was requested.
+            # 当请求 float32 时，外层的 eval/use_amp 上下文绝不能覆盖
+            # 这个唯一的 Pi0.5 风格 dtype 开关。
             return torch.autocast(device_type=device_type, enabled=False)
         return nullcontext()
 
@@ -988,49 +980,44 @@ class MolmoAct2Policy(PreTrainedPolicy):
         return self._hf_model().model
 
     def _iter_compile_targets(self) -> Iterator[tuple[str, torch.nn.Module, bool | None]]:
-        """Yield the numerically validated MolmoAct2 training compile boundary.
+        """产出经过数值验证的 MolmoAct2 训练编译边界。
 
-        The outer policy/model forwards intentionally remain eager: multimodal
-        packing, action-span handling, and metrics contain data-dependent Python
-        control flow. Compiling those wrappers would add graph breaks without
-        improving the transformer-heavy training path. The VLM, vision tower,
-        and connector also remain eager in both FFT and LoRA modes. Real-batch
-        same-start parity tests found material activation, gradient, and Adam
-        update drift when those BF16 paths were compiled. Action-expert blocks
-        pass the forward, activation, and gradient gates and retain the useful
-        F-step flow-matching acceleration.
+        外层策略/模型的前向刻意保持 eager：多模态打包、动作区间处理和
+        指标计算包含依赖数据的 Python 控制流。编译这些包装层只会增加
+        图断点，并不能改善以 transformer 为主的训练路径。在 FFT 和 LoRA
+        两种模式下，VLM、视觉塔和 connector 也保持 eager。真实批次的
+        同起点一致性测试发现，编译这些 BF16 路径会导致明显的激活、梯度
+        和 Adam 更新偏差。Action-expert 块能通过前向、激活和梯度检查，
+        并保留有用的 F 步 flow-matching 加速。
         """
         backbone = self._backbone()
 
-        # Non-reentrant activation checkpointing must replay the same compiled
-        # graph in forward and backward. The variable encoder-context dimensions
-        # are marked explicitly immediately before each block call, so Dynamo
-        # sees them as symbolic in the first trace. Leave the remaining fixed
-        # batch/action dimensions static instead of requesting a fully dynamic
-        # graph here.
+        # 非重入激活检查点必须在前向和反向中重放同一个编译图。可变的
+        # 编码器上下文维度会在每次块调用之前被显式标记，使 Dynamo 在
+        # 第一次追踪时就将其视为符号化的。其余固定的批/动作维度保持静态，
+        # 而不是在这里请求一个完全动态的图。
         sequence_dynamic = None
         action_expert = getattr(backbone, "action_expert", None)
         for index, block in enumerate(getattr(action_expert, "blocks", ())):
             yield f"action_expert.blocks.{index}", block, sequence_dynamic
 
     def _apply_compile(self) -> None:
-        """Install official-style block compilation when explicitly enabled."""
+        """在显式启用时安装官方风格的按块编译。"""
         if not self.config.compile_model or self._compile_applied:
             return
         if not hasattr(torch.nn.Module, "compile"):
             raise RuntimeError("MolmoAct2 compile_model=True requires torch.nn.Module.compile support.")
 
         if self.config.gradient_checkpointing:
-            # Keep Dynamo cache lookup order stable between the original
-            # forward and activation-checkpoint recomputation.  This does not
-            # disable graph caching or compilation; it only disables LRU hit
-            # reordering, the PyTorch-recommended workaround for repeated
-            # compiled blocks saving a different tensor signature on replay.
+            # 保持 Dynamo 缓存查找顺序在原始前向和激活检查点重计算之间
+            # 稳定。这不会禁用图缓存或编译；它只禁用 LRU 命中重排序——
+            # 这是 PyTorch 针对重复编译块在重放时保存不同张量签名问题
+            # 推荐的解决办法。
             _set_dynamo_lru_cache(False)
-            # DDP's compiler-side graph splitter is active only in the original
-            # DDP forward, not in checkpoint recomputation. The model's existing
-            # block boundaries already provide natural backward/all-reduce
-            # overlap, so keep this extra splitter disabled for graph identity.
+            # DDP 编译器侧的图分割器只在原始 DDP 前向中生效，在检查点
+            # 重计算中不生效。模型现有的块边界已经提供了天然的反向/
+            # all-reduce 重叠，因此为保证图的一致性，保持禁用这个额外的
+            # 分割器。
             _disable_dynamo_ddp_optimizer()
 
         torch.set_float32_matmul_precision("high")
@@ -1081,13 +1068,11 @@ class MolmoAct2Policy(PreTrainedPolicy):
         input_ids: Tensor | None,
         attention_mask: Tensor | None,
     ) -> Tensor | None:
-        # The released HF base is a BOTH checkpoint, but the current official
-        # trainer explicitly switches its native model to continuous action
-        # format.  Calling the HF backbone helper first would therefore inherit
-        # the checkpoint's stale BOTH-mode EOS/action-span masking even when
-        # this policy is training continuous-only.  Construct the ordinary
-        # prompt mask directly for continuous mode; only the joint objective
-        # should apply discrete-output masking.
+        # 已发布的 HF 基础模型是 BOTH 检查点，但当前官方训练器会显式地
+        # 将其原生模型切换为连续动作格式。因此如果先调用 HF backbone 的
+        # 辅助方法，即使本策略只训练连续模式，也会继承检查点中过时的
+        # BOTH 模式 EOS/动作区间掩码。连续模式下直接构造普通的提示掩码；
+        # 只有联合目标才应应用离散输出掩码。
         if getattr(self.config, "action_mode", None) != "both":
             if attention_mask is not None:
                 return attention_mask.to(dtype=torch.bool).clone()
@@ -1172,10 +1157,10 @@ class MolmoAct2Policy(PreTrainedPolicy):
         timesteps: Tensor | None = None,
         noise: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        # Match the original MolmoAct2 fp32+AMP training path: normalized actions,
-        # sampled flow noise, timesteps, and the velocity target are kept in fp32.
-        # Autocast still handles eligible action-expert matmuls even though its
-        # parameters are deliberately stored in fp32.
+        # 与原始 MolmoAct2 的 fp32+AMP 训练路径保持一致：归一化后的动作、
+        # 采样的 flow 噪声、时间步和速度目标都保持 fp32。尽管其参数刻意
+        # 以 fp32 存储，Autocast 仍会处理符合条件的 action-expert 矩阵
+        # 乘法。
         actions = actions.to(dtype=torch.float32)
         batch_size = int(actions.shape[0])
         device = actions.device
@@ -1260,8 +1245,8 @@ class MolmoAct2Policy(PreTrainedPolicy):
             raise ValueError("MolmoAct2 joint flow training cannot combine inputs_embeds with visual inputs.")
         if inputs_embeds is None:
             inputs_embeds, _image_features = backbone.build_input_embeddings(input_ids, images, token_pooling)
-        # External embeddings bypass the vendored text model's embedding
-        # boundary, so normalize them to the active AMP activation dtype here.
+        # 外部嵌入绕过了内置文本模型的嵌入边界，因此在这里将它们
+        # 归一化为当前 AMP 激活 dtype。
         device_type = inputs_embeds.device.type
         if torch.is_autocast_enabled(device_type):
             inputs_embeds = inputs_embeds.to(dtype=torch.get_autocast_dtype(device_type))
@@ -1278,13 +1263,12 @@ class MolmoAct2Policy(PreTrainedPolicy):
         if isinstance(attention_mask, dict):
             causal_mask_mapping = attention_mask
         else:
-            # The official native fine-tuning config explicitly sets
-            # ``bi_directional_attn=None``. The converted HF processor still
-            # emits image ``token_type_ids`` for inference compatibility, but
-            # forwarding them here would silently make all image tokens
-            # bidirectional and change every VLM KV state seen by the action
-            # expert. Keep joint flow training causal to match the model's
-            # pretraining/fine-tuning recipe; inference remains unchanged.
+            # 官方原生微调配置显式设置了 ``bi_directional_attn=None``。
+            # 转换后的 HF processor 为了推理兼容性仍会输出图像的
+            # ``token_type_ids``，但在这里转发它们会悄悄地把所有图像
+            # token 变成双向，并改变 action expert 看到的所有 VLM KV
+            # 状态。保持联合 flow 训练为因果模式，以匹配模型的预训练/
+            # 微调方案；推理保持不变。
             causal_mask_mapping = backbone._build_native_attention_bias(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -1356,10 +1340,9 @@ class MolmoAct2Policy(PreTrainedPolicy):
         if batch.get("action_horizon_is_pad") is not None:
             action_attention_mask = ~batch["action_horizon_is_pad"].to(device=device, dtype=torch.bool)
 
-        # Match the original AMP implementation: construct masks and RoPE caches
-        # from the action activation dtype, not the fp32 master-weight dtype.
-        # Under bf16 autocast the linears below produce bf16 activations even
-        # though action_embed.weight remains fp32.
+        # 与原始 AMP 实现保持一致：用动作激活的 dtype（而非 fp32 主权重
+        # 的 dtype）来构造掩码和 RoPE 缓存。在 bf16 autocast 下，下面的
+        # 线性层会产生 bf16 激活，即使 action_embed.weight 保持 fp32。
         action_parameter_dtype = action_expert.action_embed.weight.dtype
         conditioning = self._action_time_conditioning(action_expert, timesteps_flat)
         action_hidden = action_expert.action_embed(xt_flat.to(dtype=action_parameter_dtype))
@@ -1434,10 +1417,10 @@ class MolmoAct2Policy(PreTrainedPolicy):
                 "collect_layer_kv_states": True,
             }
             if use_gradient_checkpointing:
-                # The surrounding checkpoint covers the paired text+action
-                # layer. Bypass only Transformers' per-text-layer checkpoint
-                # wrapper so the text block is not recomputed twice. Base
-                # Module dispatch still honors Module.compile and hooks.
+                # 外层检查点覆盖的是配对的文本层+动作层。只绕过
+                # Transformers 的逐文本层检查点包装，避免文本块被
+                # 重复计算两次。基类 Module 分发仍会遵循
+                # Module.compile 和 hooks。
                 layer_outputs = _call_module_without_gradient_checkpointing_layer(
                     decoder_block,
                     layer_hidden,
@@ -1905,7 +1888,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
         batch: dict[str, Tensor],
         reduction: str = "mean",
     ) -> tuple[Tensor, dict[str, Any]]:
-        """Compute training loss under MolmoAct2's configured AMP policy."""
+        """在 MolmoAct2 配置的 AMP 策略下计算训练损失。"""
         with self._autocast_context():
             return self._forward_impl(batch, reduction=reduction)
 
@@ -1914,7 +1897,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
         batch: dict[str, Tensor],
         reduction: str = "mean",
     ) -> tuple[Tensor, dict[str, Any]]:
-        """Compute training loss (flow-matching and/or discrete token loss)."""
+        """计算训练损失（flow-matching 损失和/或离散 token 损失）。"""
         if reduction not in {"mean", "none"}:
             raise ValueError(f"Unsupported reduction={reduction!r}. Expected 'mean' or 'none'.")
         model_inputs = self._model_inputs(batch)
@@ -1974,7 +1957,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs) -> Tensor:
-        """Generate an action chunk via continuous flow matching or discrete AR decoding."""
+        """通过连续 flow matching 或离散自回归解码生成动作块。"""
         if "action_mode" in kwargs:
             raise TypeError(
                 "MolmoAct2 predict_action_chunk got unexpected keyword argument 'action_mode'; "
@@ -2013,12 +1996,11 @@ class MolmoAct2Policy(PreTrainedPolicy):
                 )
             else:
                 generation_kwargs: dict[str, Tensor] = {}
-                # LeRobot checkpoints record their actual training action mode
-                # in the outer policy config, while their immutable HF base can
-                # still say ``both``.  Reuse the continuous training mask at
-                # inference for saved LeRobot checkpoints.  Original HF
-                # checkpoints have no saved outer mode and retain their native
-                # BOTH-mode inference behavior.
+                # LeRobot 检查点会在外层策略配置中记录其实际的训练动作
+                # 模式，而其不可变的 HF 基础模型可能仍标记为 ``both``。
+                # 对于已保存的 LeRobot 检查点，在推理时复用连续训练的
+                # 掩码。原始 HF 检查点没有保存的外层模式，保留其原生的
+                # BOTH 模式推理行为。
                 if self._checkpoint_action_mode is not None:
                     generation_kwargs["encoder_attention_mask"] = (
                         self._encoder_attention_mask_for_action_expert(
@@ -2038,7 +2020,7 @@ class MolmoAct2Policy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], **kwargs) -> Tensor:
-        """Pop one action step from the queue, regenerating the chunk when empty."""
+        """从队列中取出一个动作步，队列为空时重新生成动作块。"""
         if self._rtc_enabled():
             raise AssertionError("RTC is not supported for select_action, use it with predict_action_chunk")
         self.eval()
@@ -2059,9 +2041,9 @@ class MolmoAct2Policy(PreTrainedPolicy):
             "lora_alpha": self.config.lora_alpha,
             "lora_dropout": self.config.lora_dropout,
             "bias": self.config.lora_bias,
-            # We apply the official Gaussian initialization below under an
-            # isolated seed. Avoid PEFT's default Kaiming reset first, which
-            # would otherwise consume the global training RNG stream.
+            # 下面会在隔离的种子下应用官方的高斯初始化。先避免使用
+            # PEFT 默认的 Kaiming 重置，否则会消耗全局训练的
+            # RNG 流。
             "init_lora_weights": False,
         }
 
@@ -2079,13 +2061,12 @@ class MolmoAct2Policy(PreTrainedPolicy):
 
     def _lora_target_modules(self, *, prefix: str, lm_head_path: str) -> str:
         vlm_linear_leaves = "w1|w2|w3|wq|wk|wv|wo|att_proj|attn_out|ff_proj|ff_out|patch_embedding"
-        # The native model keeps its vocabulary projection at
-        # ``transformer.ff_out``. The HF conversion moves that exact weight to
-        # the top-level ``lm_head``; include it explicitly so LoRA covers the
-        # same linear modules as official MolmoAct2. Native MolmoAct2 also keeps
-        # image pooling and projection inside ``vision_backbone``. The HF
-        # conversion moves those connector modules beside ``vision_backbone``,
-        # so include their converted parent paths explicitly as well.
+        # 原生模型将其词表投影放在 ``transformer.ff_out``。HF 转换把
+        # 这个权重移到了顶层的 ``lm_head``；显式包含它，使 LoRA 覆盖
+        # 与官方 MolmoAct2 相同的线性模块。原生 MolmoAct2 还把图像
+        # pooling 和投影放在 ``vision_backbone`` 内部。HF 转换把这些
+        # connector 模块移到了 ``vision_backbone`` 旁边，因此也要显式
+        # 包含它们转换后的父路径。
         return (
             rf"(?:{prefix}\.(transformer|vision_backbone|image_pooling_2d|image_projector)\.(?:.*\.)?"
             rf"({vlm_linear_leaves})|{lm_head_path})$"
@@ -2098,14 +2079,13 @@ class MolmoAct2Policy(PreTrainedPolicy):
 
     @staticmethod
     def _official_lora_initialization_sort_key(module_name: str) -> tuple[int, int, int]:
-        """Return the native MolmoAct2 module traversal order for a HF LoRA layer.
+        """返回 HF LoRA 层对应的原生 MolmoAct2 模块遍历顺序。
 
-        Official training injects PEFT into the native text transformer and
-        vision backbone separately, then initializes adapters by iterating the
-        resulting native module tree.  The converted HF model registers the
-        same 303 linear targets in a different order.  Sorting by the native
-        structural order makes seed 6198 select the same Gaussian LoRA-A
-        matrix for each mapped module instead of merely the same distribution.
+        官方训练分别将 PEFT 注入原生文本 transformer 和视觉骨干，然后
+        通过遍历所得的原生模块树来初始化适配器。转换后的 HF 模型以
+        不同的顺序注册了相同的 303 个线性目标。按原生结构顺序排序可以
+        让种子 6198 为每个映射模块选出相同的高斯 LoRA-A 矩阵，而不仅仅
+        是相同的分布。
         """
 
         text_match = re.search(
@@ -2156,17 +2136,17 @@ class MolmoAct2Policy(PreTrainedPolicy):
 
         for param in self.model.parameters():
             param.requires_grad_(False)
-        # Keep LoRA adapters in fp32 for optimizer stability. This is a
-        # deliberate memory/precision tradeoff, especially at high rank.
+        # 为优化器稳定性将 LoRA 适配器保持为 fp32。这是刻意的
+        # 显存/精度权衡，在高秩时尤其如此。
         self.model = get_peft_model(
             self.model,
             peft_config,
             autocast_adapter_dtype=True,
         )
-        # Match the official trainer: adapters start as an identity update,
-        # with A sampled from N(0, 1/r) and B initialized to zero. Forking the
-        # RNG keeps initialization identical on every DDP rank without changing
-        # the training/data RNG stream.
+        # 与官方训练器保持一致：适配器初始为恒等更新，A 从
+        # N(0, 1/r) 采样，B 初始化为零。分叉 RNG 可以在不改变
+        # 训练/数据 RNG 流的情况下，使每个 DDP rank 上的初始化
+        # 完全相同。
         from peft.tuners.lora.layer import LoraLayer
 
         lora_layers = [

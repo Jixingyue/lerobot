@@ -26,7 +26,7 @@ from torch import Tensor, nn
 
 from lerobot.utils.import_utils import _transformers_available, require_package
 
-# Conditional import for type checking and lazy loading
+# 用于类型检查和延迟加载的条件导入
 if TYPE_CHECKING or _transformers_available:
     from transformers.models.auto import CONFIG_MAPPING
     from transformers.models.gemma import modeling_gemma
@@ -79,7 +79,7 @@ def _prepare_trained_rtc_prefix(
     inference_delay: int,
     training_max_delay: int,
 ) -> tuple[Tensor | None, Tensor | None]:
-    """Pad and validate a hard prefix for training-time RTC inference."""
+    """为训练时 RTC 推理填充并校验硬性前缀。"""
     if prev_chunk_left_over is None or inference_delay <= 0:
         return None, None
     if training_max_delay <= 0:
@@ -129,7 +129,7 @@ def _sample_training_rtc_prefix_mask(
     max_delay: int,
     device: torch.device,
 ) -> Tensor | None:
-    """Sample a clean action-prefix length independently for each training example."""
+    """为每个训练样本独立采样一个干净动作前缀长度。"""
     if max_delay <= 0:
         return None
     delays = torch.randint(0, max_delay + 1, (batch_size,), device=device)
@@ -143,7 +143,7 @@ def _build_flow_matching_inputs(
     time: Tensor,
     prefix_mask: Tensor | None,
 ) -> tuple[Tensor, Tensor]:
-    """Keep the sampled RTC prefix clean while noising the remaining action chunk."""
+    """保持采样得到的 RTC 前缀干净，同时对剩余的动作块加噪。"""
     if prefix_mask is None:
         model_time = time
         expanded_time = time[:, None, None]
@@ -160,7 +160,7 @@ def _reduce_training_rtc_loss(
     prefix_mask: Tensor | None,
     reduction: str,
 ) -> Tensor:
-    """Average flow loss over predicted postfix actions, excluding the clean RTC prefix."""
+    """对预测的后缀动作求 flow loss 的平均值，排除干净的 RTC 前缀。"""
     if reduction not in {"mean", "none"}:
         raise ValueError(f"Unsupported loss reduction: {reduction!r}")
     if prefix_mask is None:
@@ -174,7 +174,7 @@ def _reduce_training_rtc_loss(
     return (losses * postfix_mask).sum() / postfix_mask.sum().clamp(min=1)
 
 
-# Define the complete layer computation function for gradient checkpointing
+# 定义用于梯度检查点的完整层计算函数
 def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_cond, layers, rotary_emb):
     query_states = []
     key_states = []
@@ -192,7 +192,7 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         query_states.append(query_state)
         key_states.append(key_state)
         value_states.append(value_state)
-    # Concatenate and process attention
+    # 拼接并处理注意力
     query_states = torch.cat(query_states, dim=2)
     key_states = torch.cat(key_states, dim=2)
     value_states = torch.cat(value_states, dim=2)
@@ -210,7 +210,7 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
     batch_size = query_states.shape[0]
     paligemma_layer = layers[0]
     scaling = paligemma_layer.self_attn.scaling
-    # Attention computation
+    # 注意力计算
     att_output, _ = modeling_gemma.eager_attention_forward(
         paligemma_layer.self_attn,
         query_states,
@@ -219,10 +219,10 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         attention_mask,
         scaling,
     )
-    # Get head_dim from the current layer, not from the model
+    # 从当前层获取 head_dim，而不是从模型获取
     head_dim = paligemma_layer.self_attn.head_dim
     att_output = att_output.reshape(batch_size, -1, 1 * 8 * head_dim)
-    # Process layer outputs
+    # 处理各层输出
     outputs_embeds = []
     start_pos = 0
     for i, hidden_states in enumerate(inputs_embeds):
@@ -231,23 +231,23 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         if att_output.dtype != layer.self_attn.o_proj.weight.dtype:
             att_output = att_output.to(layer.self_attn.o_proj.weight.dtype)
         out_emb = layer.self_attn.o_proj(att_output[:, start_pos:end_pos])
-        # first residual
+        # 第一个残差
         out_emb = _gated_residual(hidden_states, out_emb, gates[i])
         after_first_residual = out_emb.clone()
         out_emb, gate = layernorm_forward(layer.post_attention_layernorm, out_emb, adarms_cond[i])
-        # Convert to bfloat16 if the next layer (mlp) uses bfloat16
+        # 如果下一层（mlp）使用 bfloat16，则转换为 bfloat16
         if layer.mlp.up_proj.weight.dtype == torch.bfloat16:
             out_emb = out_emb.to(dtype=torch.bfloat16)
         out_emb = layer.mlp(out_emb)
-        # second residual
+        # 第二个残差
         out_emb = _gated_residual(after_first_residual, out_emb, gate)
         outputs_embeds.append(out_emb)
         start_pos = end_pos
     return outputs_embeds
 
 
-class GemmaConfig:  # see openpi `gemma.py: Config`
-    """Configuration for Gemma model variants."""
+class GemmaConfig:  # 参见 openpi `gemma.py: Config`
+    """Gemma 模型变体的配置。"""
 
     def __init__(self, width, depth, mlp_dim, num_heads, num_kv_heads, head_dim):
         self.width = width
@@ -258,8 +258,8 @@ class GemmaConfig:  # see openpi `gemma.py: Config`
         self.head_dim = head_dim
 
 
-def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_config`
-    """Returns config for specified gemma variant."""
+def get_gemma_config(variant: str) -> GemmaConfig:  # 参见 openpi `gemma.py: get_config`
+    """返回指定 gemma 变体的配置。"""
     if variant == "gemma_300m":
         return GemmaConfig(
             width=1024,
@@ -284,8 +284,8 @@ def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_
 
 class PaliGemmaWithExpertModel(
     nn.Module
-):  # see openpi `gemma_pytorch.py: PaliGemmaWithExpertModel` this class is almost a exact copy of PaliGemmaWithExpertModel in openpi
-    """PaliGemma model with action expert for PI05."""
+):  # 参见 openpi `gemma_pytorch.py: PaliGemmaWithExpertModel`，此类几乎是 openpi 中 PaliGemmaWithExpertModel 的完全复制
+    """带有动作专家的 PaliGemma 模型，用于 PI05。"""
 
     def __init__(
         self,
@@ -353,8 +353,9 @@ class PaliGemmaWithExpertModel(
         else:
             raise ValueError(f"Invalid precision: {precision}")
 
-        # Keep full vision path in float32 so we never toggle (toggle causes optimizer
-        # "same dtype" error). Saves memory vs full float32; more memory than only 3 params.
+        # 将完整的视觉路径保留为 float32，这样我们永远不需要来回切换
+        # （切换会导致优化器报 "same dtype" 错误）。相比全部使用 float32 更省显存；
+        # 相比只保留 3 个参数则占用更多显存。
         params_to_keep_float32 = [
             "vision_tower",
             "multi_modal_projector",
@@ -391,7 +392,7 @@ class PaliGemmaWithExpertModel(
         frame_mask: torch.Tensor | None = None,
         temporal_attention_every: int = 4,
     ):
-        # Vision tower and multi_modal_projector are kept in float32 (params_to_keep_float32).
+        # 视觉塔和 multi_modal_projector 保持为 float32（params_to_keep_float32）。
         out_dtype = image.dtype
         if image.dtype != torch.float32:
             image = image.to(torch.float32)
@@ -456,14 +457,14 @@ class PaliGemmaWithExpertModel(
             gemma_expert_layers = self.gemma_expert.model.layers
             rotary_emb = self.paligemma.model.language_model.rotary_emb
 
-            # Check if gradient checkpointing is enabled for any of the models
+            # 检查任一模型是否启用了梯度检查点
             use_gradient_checkpointing = (
                 hasattr(self.gemma_expert.model, "gradient_checkpointing")
                 and self.gemma_expert.model.gradient_checkpointing
                 and self.training
             ) or (hasattr(self, "gradient_checkpointing") and self.gradient_checkpointing and self.training)
 
-            # Process all layers with gradient checkpointing if enabled
+            # 如果启用了梯度检查点，则使用梯度检查点处理所有层
             for layers in zip(paligemma_layers, gemma_expert_layers, strict=True):
                 if use_gradient_checkpointing:
                     inputs_embeds = torch.utils.checkpoint.checkpoint(
@@ -487,7 +488,7 @@ class PaliGemmaWithExpertModel(
                         rotary_emb=rotary_emb,
                     )
 
-            # final norm
+            # 最终 norm
             final_norms = (
                 self.paligemma.model.language_model.norm,
                 self.gemma_expert.model.norm,
@@ -500,7 +501,7 @@ class PaliGemmaWithExpertModel(
                     outputs_embeds.append(out_emb)
                 return outputs_embeds
 
-            # Apply gradient checkpointing to final norm if enabled
+            # 如果启用了梯度检查点，则对最终 norm 应用梯度检查点
             if use_gradient_checkpointing:
                 outputs_embeds = torch.utils.checkpoint.checkpoint(
                     compute_final_norms,
@@ -519,8 +520,8 @@ class PaliGemmaWithExpertModel(
         return [prefix_output, suffix_output], prefix_past_key_values
 
 
-class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
-    """Core PI05 PyTorch model."""
+class PI05Pytorch(nn.Module):  # 参见 openpi `PI0Pytorch`
+    """PI05 核心 PyTorch 模型。"""
 
     def __init__(self, config: PI05Config, rtc_processor: RTCProcessor | None = None):
         super().__init__()
@@ -556,18 +557,18 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             else None
         )
 
-        # Initialize gradient checkpointing flag
+        # 初始化梯度检查点标志
         self.gradient_checkpointing_enabled = False
 
-        # Compile model if requested
+        # 如有需要则编译模型
         if config.compile_model:
             torch.set_float32_matmul_precision("high")
             self.sample_actions = torch.compile(self.sample_actions, mode=config.compile_mode)
-            # Also compile the main forward pass used during training
+            # 同时编译训练时使用的主 forward 过程
             self.forward = torch.compile(self.forward, mode=config.compile_mode)
 
     def gradient_checkpointing_enable(self):
-        """Enable gradient checkpointing for memory optimization."""
+        """启用梯度检查点以优化显存。"""
         self.gradient_checkpointing_enabled = True
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing = True
         self.paligemma_with_expert.paligemma.model.vision_tower.gradient_checkpointing = True
@@ -575,7 +576,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         logging.info("Enabled gradient checkpointing for PI05Pytorch model")
 
     def gradient_checkpointing_disable(self):
-        """Disable gradient checkpointing."""
+        """禁用梯度检查点。"""
         self.gradient_checkpointing_enabled = False
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing = False
         self.paligemma_with_expert.paligemma.model.vision_tower.gradient_checkpointing = False
@@ -586,7 +587,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def _apply_checkpoint(self, func, *args, **kwargs):
-        """Helper method to apply gradient checkpointing if enabled."""
+        """辅助方法：如果启用了梯度检查点则应用之。"""
         if self.gradient_checkpointing_enabled and self.training:
             return torch.utils.checkpoint.checkpoint(
                 func, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
@@ -609,12 +610,12 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
     def embed_prefix(
         self, images, img_masks, tokens, masks, states=None, state_masks=None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Embed images, optional MEM state history, and language tokens."""
+        """嵌入图像、可选的 MEM 状态历史以及语言 token。"""
         embs = []
         pad_masks = []
         att_masks = []
 
-        # Process images
+        # 处理图像
         for img, img_mask in zip(images, img_masks, strict=True):
 
             def image_embed_func(img, img_mask):
@@ -643,7 +644,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             pad_masks.append(state_masks)
             att_masks += [0] * state_embs.shape[1]
 
-        # Process language tokens
+        # 处理语言 token
         def lang_embed_func(tokens):
             lang_emb = self.paligemma_with_expert.embed_language_tokens(tokens)
             return lang_emb
@@ -665,10 +666,10 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         return embs, pad_masks, att_masks
 
     def embed_suffix(self, noisy_actions, timestep):
-        """Embed noisy_actions, timestep to prepare for Expert Gemma processing."""
+        """嵌入 noisy_actions 和 timestep，为 Expert Gemma 处理做准备。"""
         att_masks = []
 
-        # Embed timestep using sine-cosine positional encoding
+        # 使用正弦-余弦位置编码嵌入 timestep
         time_emb = create_sinusoidal_pos_embedding(
             timestep,
             self.action_in_proj.out_features,
@@ -678,7 +679,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         )
         time_emb = time_emb.type(dtype=timestep.dtype)
 
-        # Fuse timestep + action information using an MLP
+        # 使用 MLP 融合 timestep + 动作信息
         def action_proj_func(noisy_actions):
             return self.action_in_proj(noisy_actions)
 
@@ -696,7 +697,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         bsize, action_time_dim = action_emb.shape[:2]
         pad_masks = torch.ones(bsize, action_time_dim, dtype=torch.bool, device=timestep.device)
 
-        # Set attention masks so that image, language and state inputs do not attend to action tokens
+        # 设置注意力掩码，使图像、语言和状态输入不会关注动作 token
         att_masks += [1] + ([0] * (self.config.chunk_size - 1))
         att_masks = torch.tensor(att_masks, dtype=action_emb.dtype, device=action_emb.device)
         att_masks = att_masks[None, :].expand(bsize, len(att_masks))
@@ -716,7 +717,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         states=None,
         state_masks=None,
     ) -> Tensor:
-        """Do a full training forward pass and compute the loss."""
+        """执行完整的训练前向传播并计算损失。"""
         x_t, model_time = _build_flow_matching_inputs(actions, noise, time, prefix_mask)
         u_t = noise - actions
 
@@ -765,7 +766,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         return F.mse_loss(u_t, v_t, reduction="none")
 
-    @torch.no_grad()  # see openpi `sample_actions` (slightly adapted)
+    @torch.no_grad()  # 参见 openpi `sample_actions`（略有改动）
     def sample_actions(
         self,
         images,
@@ -778,7 +779,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         num_steps=None,
         **kwargs: Unpack[ActionSelectKwargs],
     ) -> Tensor:
-        """Do a full inference forward and compute the action."""
+        """执行完整的推理前向传播并计算动作。"""
         if num_steps is None:
             num_steps = self.config.num_inference_steps
 
@@ -786,12 +787,12 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         device = tokens.device
 
         if noise is None:
-            # Sample noise with padded dimension as expected by action_in_proj
+            # 按照 action_in_proj 的期望，使用填充后的维度采样噪声
             actions_shape = (
                 bsize,
                 self.config.chunk_size,
                 self.config.max_action_dim,
-            )  # Use config max_action_dim for internal processing
+            )  # 内部处理使用配置中的 max_action_dim
             noise = self.sample_noise(actions_shape, device)
 
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
@@ -854,7 +855,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         x_t,
         timestep,
     ):
-        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        """在给定 timestep 下对噪声 `x_t` 应用一步去噪。"""
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
@@ -888,7 +889,7 @@ class PI05Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
 
 class PI05Policy(PreTrainedPolicy):
-    """PI05 Policy for LeRobot."""
+    """LeRobot 的 PI05 策略。"""
 
     config_class = PI05Config
     name = "pi05"
@@ -903,18 +904,18 @@ class PI05Policy(PreTrainedPolicy):
     ):
         """
         Args:
-            config: Policy configuration class instance.
+            config: 策略配置类实例。
         """
         require_package("transformers", extra="pi")
         super().__init__(config)
         config.validate_features()
         self.config = config
 
-        # Initialize the core PI05 model
+        # 初始化核心 PI05 模型
         self.init_rtc_processor()
         self.model = PI05Pytorch(config, rtc_processor=self.rtc_processor)
 
-        # Enable gradient checkpointing if requested
+        # 如有需要则启用梯度检查点
         if config.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
 
@@ -938,7 +939,7 @@ class PI05Policy(PreTrainedPolicy):
         strict: bool = True,
         **kwargs,
     ) -> T:
-        """Override the from_pretrained method to handle key remapping and display important disclaimer."""
+        """重写 from_pretrained 方法，以处理键名重映射并显示重要免责声明。"""
         print(
             "The PI05 model is a direct port of the OpenPI implementation. \n"
             "This implementation follows the original OpenPI structure for compatibility. \n"
@@ -947,7 +948,7 @@ class PI05Policy(PreTrainedPolicy):
         if pretrained_name_or_path is None:
             raise ValueError("pretrained_name_or_path is required")
 
-        # Use provided config if available, otherwise create default config
+        # 如果提供了配置则使用之，否则创建默认配置
         if config is None:
             config = PreTrainedConfig.from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,
@@ -961,11 +962,11 @@ class PI05Policy(PreTrainedPolicy):
                 **kwargs,
             )
 
-        # Initialize model without loading weights
-        # Check if dataset_stats were provided in kwargs
+        # 在不加载权重的情况下初始化模型
+        # 检查 kwargs 中是否提供了 dataset_stats
         model = cls(config, **kwargs)
 
-        # Load state dict (expects keys with "model." prefix)
+        # 加载 state dict（期望键名带有 "model." 前缀）
         try:
             print(f"Loading model from: {pretrained_name_or_path}")
             try:
@@ -991,10 +992,10 @@ class PI05Policy(PreTrainedPolicy):
                 print("Returning model without loading pretrained weights")
                 return model
 
-            # First, fix any key differences (see openpi model.py, _fix_pytorch_state_dict_keys)
+            # 首先，修复键名差异（参见 openpi model.py, _fix_pytorch_state_dict_keys）
             fixed_state_dict = model._fix_pytorch_state_dict_keys(original_state_dict, model.config)
 
-            # Then add "model." prefix for all keys that don't already have it
+            # 然后，为所有尚未带 "model." 前缀的键添加该前缀
             remapped_state_dict = {}
             remap_count = 0
 
@@ -1011,7 +1012,7 @@ class PI05Policy(PreTrainedPolicy):
 
             remapped_state_dict = model._prepare_pretrained_state_dict(remapped_state_dict)
 
-            # Load the remapped state dict into the model
+            # 将重映射后的 state dict 加载到模型中
             missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=strict)
 
             if missing_keys:
@@ -1043,9 +1044,8 @@ class PI05Policy(PreTrainedPolicy):
         return model
 
     def _prepare_pretrained_state_dict(self, state_dict: dict[str, Tensor]) -> dict[str, Tensor]:
-        # MEM's continuous proprioceptive projection is new relative to
-        # lerobot/pi05_base. Preserve its fresh initialization on first load,
-        # while loading learned values from subsequent MEM checkpoints.
+        # MEM 的连续本体感知投影相对于 lerobot/pi05_base 是新增的。
+        # 首次加载时保留其全新初始化，而从后续的 MEM 检查点中加载已学习的值。
         if getattr(self.config, "use_proprioceptive_memory", False):
             current = self.state_dict()
             for key in (
@@ -1057,8 +1057,8 @@ class PI05Policy(PreTrainedPolicy):
 
     def _fix_pytorch_state_dict_keys(
         self, state_dict, model_config
-    ):  # see openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
-        """Fix state dict keys to match current model architecture."""
+    ):  # 参见 openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
+        """修复 state dict 键名以匹配当前模型架构。"""
         import re
 
         fixed_state_dict = {}
@@ -1066,13 +1066,13 @@ class PI05Policy(PreTrainedPolicy):
         for key, value in state_dict.items():
             new_key = key
 
-            # Handle layer norm structure changes: .weight -> .dense.weight + .dense.bias
-            # For gemma expert layers
+            # 处理 layer norm 结构变化：.weight -> .dense.weight + .dense.bias
+            # 针对 gemma expert 层
             if re.match(
                 r"paligemma_with_expert\.gemma_expert\.model\.layers\.\d+\.(input_layernorm|post_attention_layernorm)\.weight",
                 key,
             ):
-                # Check if the model actually has adaRMS enabled for the expert
+                # 检查模型是否实际为 expert 启用了 adaRMS
                 expert_uses_adarms = getattr(
                     self.model.paligemma_with_expert.gemma_expert.config, "use_adarms", False
                 )
@@ -1081,7 +1081,7 @@ class PI05Policy(PreTrainedPolicy):
                     continue
 
             if re.match(r"paligemma_with_expert\.gemma_expert\.model\.norm\.weight", key):
-                # Check if the model actually has adaRMS enabled for the expert
+                # 检查模型是否实际为 expert 启用了 adaRMS
                 expert_uses_adarms = getattr(
                     self.model.paligemma_with_expert.gemma_expert.config, "use_adarms", False
                 )
@@ -1089,20 +1089,20 @@ class PI05Policy(PreTrainedPolicy):
                     logging.warning(f"Skipping norm key (adaRMS mismatch): {key}")
                     continue
 
-            # Handle MLP naming changes for pi05
-            # pi05 model expects time_mlp_*, but checkpoint might have action_time_mlp_*
+            # 处理 pi05 的 MLP 命名变化
+            # pi05 模型期望 time_mlp_*，但检查点中可能是 action_time_mlp_*
             if key.startswith("action_time_mlp_in."):
                 new_key = key.replace("action_time_mlp_in.", "time_mlp_in.")
             elif key.startswith("action_time_mlp_out."):
                 new_key = key.replace("action_time_mlp_out.", "time_mlp_out.")
-            # Also handle state_proj which shouldn't exist in pi05
+            # 同时处理不应存在于 pi05 中的 state_proj
             if key.startswith("state_proj."):
                 logging.warning(f"Skipping state_proj key in pi05 mode: {key}")
                 continue
 
-            # Handle vision tower embedding layer potential differences
+            # 处理视觉塔嵌入层可能存在的差异
             if "patch_embedding" in key:
-                # Some checkpoints might have this, but current model expects different structure
+                # 某些检查点可能包含此键，但当前模型期望不同的结构
                 logging.warning(f"Vision embedding key might need handling: {key}")
 
             if (
@@ -1121,22 +1121,20 @@ class PI05Policy(PreTrainedPolicy):
         return self.parameters()
 
     def reset(self):
-        """Reset internal state at the shared boundary of a batched rollout.
+        """在批量化 rollout 的共享边界处重置内部状态。
 
-        ``lerobot-eval`` calls this before every rollout and before resetting the
-        vector environment. MEM inference queues therefore assume all batch rows
-        share episode boundaries; independently autoresetting rows is unsupported.
+        ``lerobot-eval`` 会在每次 rollout 之前以及重置向量化环境之前调用此方法。
+        因此 MEM 推理队列假设所有批次行共享回合边界；不支持各行独立自动重置。
         """
         self._action_queue = deque(maxlen=self.config.n_action_steps)
         self._queues = {
             ACTION: deque(maxlen=self.config.n_action_steps),
         }
         if self.config.use_visual_memory or self.config.use_proprioceptive_memory:
-            # The sampled ages are relative to the current step, so every step shifts
-            # all of them: a dense ring buffer spanning the whole horizon is the
-            # smallest structure that keeps inference aligned with the training
-            # `delta_indices`. Storing only `memory_frames` observations would pin the
-            # history to an absolute grid and drift up to `memory_stride` out of phase.
+            # 采样的年龄是相对于当前步的，因此每一步都会移动所有年龄：
+            # 覆盖整个时域的稠密环形缓冲区是保持推理与训练 `delta_indices`
+            # 对齐的最小结构。只存储 `memory_frames` 个观测会将历史固定在
+            # 绝对网格上，并产生最多 `memory_stride` 的相位漂移。
             history_length = (self.config.memory_frames - 1) * self.config.memory_stride + 1
             memory_keys = []
             if self.config.use_visual_memory:
@@ -1148,11 +1146,11 @@ class PI05Policy(PreTrainedPolicy):
             self._memory_batch_size = None
 
     def init_rtc_processor(self):
-        """Initialize RTC processor if RTC is enabled in config."""
+        """如果配置中启用了 RTC，则初始化 RTC 处理器。"""
         self.rtc_processor = None
 
-        # Create processor if config provided
-        # If RTC is not enabled - we can still track the denoising data
+        # 如果提供了配置则创建处理器
+        # 即使未启用 RTC，我们仍然可以跟踪去噪数据
         if self.config.rtc_config is not None:
             self.rtc_processor = RTCProcessor(
                 self.config.rtc_config,
@@ -1167,15 +1165,15 @@ class PI05Policy(PreTrainedPolicy):
         return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def _preprocess_images(self, batch: dict[str, Tensor]) -> tuple[list[Tensor], list[Tensor]]:
-        """Preprocess images for the model.
+        """为模型预处理图像。
 
-        Images from LeRobot are typically in [B, C, H, W] format and normalized to [0, 1].
-        PaliGemma expects images in [B, C, H, W] format and normalized to [-1, 1].
+        来自 LeRobot 的图像通常为 [B, C, H, W] 格式，且归一化到 [0, 1]。
+        PaliGemma 期望图像为 [B, C, H, W] 格式，且归一化到 [-1, 1]。
         """
         images = []
         img_masks = []
 
-        # Get device from model parameters
+        # 从模型参数获取设备
         device = next(self.parameters()).device
 
         present_img_keys = [key for key in self.config.image_features if key in batch]
@@ -1187,19 +1185,19 @@ class PI05Policy(PreTrainedPolicy):
                 f"(batch: {batch.keys()}) (image_features: {self.config.image_features})"
             )
 
-        # Preprocess image features present in the batch
+        # 预处理批次中存在的图像特征
         for key in present_img_keys:
             img = batch[key]
 
-            # Ensure tensor is on the same device as the model
+            # 确保张量与模型在同一设备上
             if img.device != device:
                 img = img.to(device)
 
-            # Ensure float32 dtype for consistency
+            # 为保持一致，确保 dtype 为 float32
             if img.dtype != torch.float32:
                 img = img.to(torch.float32)
 
-            # Handle [B,C,H,W], [B,H,W,C], and their [B,T,...] memory variants.
+            # 处理 [B,C,H,W]、[B,H,W,C] 及其 [B,T,...] 记忆变体。
             is_video = img.ndim == 5
             channel_dim = 2 if is_video else 1
             is_channels_first = img.shape[channel_dim] == 3
@@ -1207,7 +1205,7 @@ class PI05Policy(PreTrainedPolicy):
             if is_channels_first:
                 img = img.permute(0, 1, 3, 4, 2) if is_video else img.permute(0, 2, 3, 1)
 
-            # from openpi preprocess_observation_pytorch: Resize with padding if needed
+            # 来自 openpi preprocess_observation_pytorch：如有需要，带填充地缩放
             spatial_shape = img.shape[2:4] if is_video else img.shape[1:3]
             if spatial_shape != self.config.image_resolution:
                 if is_video:
@@ -1218,10 +1216,10 @@ class PI05Policy(PreTrainedPolicy):
                 else:
                     img = resize_with_pad_torch(img, *self.config.image_resolution)
 
-            # Normalize from [0,1] to [-1,1] as expected by siglip
+            # 按照 siglip 的期望，从 [0,1] 归一化到 [-1,1]
             img = img * 2.0 - 1.0
 
-            # from openpi preprocess_observation_pytorch: Convert back to [B, C, H, W] format if it was originally channels-first
+            # 来自 openpi preprocess_observation_pytorch：如果原本是 channels-first，则转换回 [B, C, H, W] 格式
             if is_channels_first:
                 img = img.permute(0, 1, 4, 2, 3) if is_video else img.permute(0, 3, 1, 2)
 
@@ -1235,10 +1233,10 @@ class PI05Policy(PreTrainedPolicy):
                 mask = torch.ones(mask_shape, dtype=torch.bool, device=device)
             img_masks.append(mask)
 
-        # Create image features not present in the batch as fully 0 padded images
+        # 将批次中不存在的图像特征创建为全 0 填充的图像
         for _num_empty_cameras in range(len(missing_img_keys)):
-            img = torch.ones_like(img) * -1  # Padded with -1 for SigLIP
-            mask = torch.zeros_like(mask)  # Mask is zero for empty cameras
+            img = torch.ones_like(img) * -1  # 为 SigLIP 填充 -1
+            mask = torch.zeros_like(mask)  # 空相机的掩码为零
             images.append(img)
             img_masks.append(mask)
 
@@ -1259,7 +1257,7 @@ class PI05Policy(PreTrainedPolicy):
         return states, state_masks
 
     def _stack_inference_memory(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Record one homogeneous-batch observation and attach MEM histories."""
+        """记录一个同质批次的观测，并附加 MEM 历史。"""
         if not (self.config.use_visual_memory or self.config.use_proprioceptive_memory):
             return batch
         result = dict(batch)
@@ -1276,8 +1274,8 @@ class PI05Policy(PreTrainedPolicy):
                     f"expected {self._memory_batch_size}, got {batch_size}"
                 )
             if not queue:
-                # Queue entries are snapshots that are never mutated in place, so the
-                # pre-episode fill can share one clone instead of `maxlen` copies.
+                # 队列条目是从不原地修改的快照，因此回合前的填充可以共享
+                # 一个 clone，而不是复制 `maxlen` 份。
                 queue.extend([value.clone()] * queue.maxlen)
             else:
                 queue.append(value.clone())
@@ -1291,13 +1289,13 @@ class PI05Policy(PreTrainedPolicy):
         return result
 
     def prepare_action(self, batch):
-        """Pad action"""
+        """填充动作"""
         actions = pad_vector(batch[ACTION], self.config.max_action_dim)
         return actions
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select a single action given environment observations."""
+        """根据环境观测选择单个动作。"""
         assert not self._rtc_enabled(), (
             "RTC is not supported for select_action, use it with predict_action_chunk"
         )
@@ -1306,21 +1304,21 @@ class PI05Policy(PreTrainedPolicy):
         if self.config.use_visual_memory or self.config.use_proprioceptive_memory:
             batch = self._stack_inference_memory(batch)
 
-        # Action queue logic for n_action_steps > 1
+        # n_action_steps > 1 时的动作队列逻辑
         if len(self._action_queue) == 0:
             actions = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
-            # Transpose to get shape (n_action_steps, batch_size, action_dim)
+            # 转置以获得形状 (n_action_steps, batch_size, action_dim)
             self._action_queue.extend(actions.transpose(0, 1))
 
         return self._action_queue.popleft()
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs: Unpack[ActionSelectKwargs]) -> Tensor:
-        """Predict a chunk of actions given environment observations."""
+        """根据环境观测预测一个动作块。"""
         self.eval()
 
-        # Direct chunk callers provide single observations. ``select_action``
-        # already supplies a temporal batch, so avoid recording it twice.
+        # 直接调用 chunk 的调用方提供的是单个观测。``select_action``
+        # 已经提供了时间批次，因此避免重复记录。
         has_temporal_input = any(
             key in batch and batch[key].ndim == 5 for key in self.config.image_features
         ) or (OBS_STATE in batch and batch[OBS_STATE].ndim == 3)
@@ -1329,32 +1327,32 @@ class PI05Policy(PreTrainedPolicy):
         ) and not has_temporal_input:
             batch = self._stack_inference_memory(batch)
 
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
         states, state_masks = self._prepare_memory_states(batch)
         tokens, masks = batch[f"{OBS_LANGUAGE_TOKENS}"], batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
 
-        # Sample actions using the model (pass through RTC kwargs, no separate state needed for PI05)
+        # 使用模型采样动作（透传 RTC kwargs，PI05 不需要单独的 state）
         actions = self.model.sample_actions(
             images, img_masks, tokens, masks, states=states, state_masks=state_masks, **kwargs
         )
 
-        # Unpad actions to actual action dimension
+        # 将动作去填充到实际动作维度
         original_action_dim = self.config.output_features[ACTION].shape[0]
         actions = actions[:, :, :original_action_dim]
 
         return actions
 
     def forward(self, batch: dict[str, Tensor], reduction: str = "mean") -> tuple[Tensor, dict]:
-        """Run the batch through the model and compute the loss for training.
+        """将批次输入模型并计算训练损失。
 
         Args:
-            batch: Training batch containing observations and actions.
-            reduction: How to reduce the loss. Options:
-                - "mean": Return scalar mean loss (default, backward compatible)
-                - "none": Return per-sample losses of shape (batch_size,) for RA-BC weighting
+            batch: 包含观测和动作的训练批次。
+            reduction: 损失的归约方式。可选项：
+                - "mean"：返回标量平均损失（默认，向后兼容）
+                - "none"：返回形状为 (batch_size,) 的逐样本损失，用于 RA-BC 加权
         """
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
         states, state_masks = self._prepare_memory_states(batch)
         tokens, masks = batch[f"{OBS_LANGUAGE_TOKENS}"], batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
@@ -1370,7 +1368,7 @@ class PI05Policy(PreTrainedPolicy):
             actions.device,
         )
 
-        # Compute loss (no separate state needed for PI05)
+        # 计算损失（PI05 不需要单独的 state）
         losses = self.model.forward(
             images,
             img_masks,
@@ -1384,7 +1382,7 @@ class PI05Policy(PreTrainedPolicy):
             state_masks=state_masks,
         )
 
-        # Truncate losses to actual action dimensions
+        # 将损失截断到实际动作维度
         original_action_dim = self.config.output_features[ACTION].shape[0]
         losses = losses[:, :, :original_action_dim]
 
@@ -1405,13 +1403,12 @@ class PI05Policy(PreTrainedPolicy):
         return loss, loss_dict
 
     def _get_default_peft_targets(self) -> dict[str, any]:
-        """Return default PEFT target modules for PI0.5 fine-tuning."""
+        """返回 PI0.5 微调的默认 PEFT 目标模块。"""
         common_projections = "state_proj|action_in_proj|action_out_proj|time_mlp_in|time_mlp_out"
         target_modules = rf"(.*\.gemma_expert\..*\.self_attn\.(q|v)_proj|model\.({common_projections}))"
-        # MEM's proprioceptive projection does not exist in `lerobot/pi05_base`, so a
-        # LoRA adapter cannot start from pretrained weights for it. Train and save it
-        # in full, otherwise it stays frozen at its random init and is absent from
-        # adapter checkpoints.
+        # MEM 的本体感知投影在 `lerobot/pi05_base` 中不存在，因此 LoRA 适配器
+        # 无法从预训练权重开始。必须完整训练并保存它，否则它会保持随机初始化的
+        # 冻结状态，并且不会出现在适配器检查点中。
         modules_to_save = ["model.proprio_history_proj"] if self.config.use_proprioceptive_memory else []
         return {
             "target_modules": target_modules,

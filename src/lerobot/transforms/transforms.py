@@ -29,16 +29,16 @@ from torchvision.transforms.v2 import (
 
 
 class RandomSubsetApply(Transform):
-    """Apply a random subset of N transformations from a list of transformations.
+    """从变换列表中随机应用 N 个变换的子集。
 
     Args:
-        transforms: list of transformations.
-        p: represents the multinomial probabilities (with no replacement) used for sampling the transform.
-            If the sum of the weights is not 1, they will be normalized. If ``None`` (default), all transforms
-            have the same probability.
-        n_subset: number of transformations to apply. If ``None``, all transforms are applied.
-            Must be in [1, len(transforms)].
-        random_order: apply transformations in a random order.
+        transforms: 变换列表。
+        p: 表示用于采样变换的多项分布概率（无放回）。
+            如果权重之和不为 1，将被归一化。如果为 ``None``（默认），所有变换
+            具有相同的概率。
+        n_subset: 要应用的变换数量。如果为 ``None``，则应用所有变换。
+            必须在 [1, len(transforms)] 范围内。
+        random_order: 以随机顺序应用变换。
     """
 
     def __init__(
@@ -98,23 +98,23 @@ class RandomSubsetApply(Transform):
 
 
 class SharpnessJitter(Transform):
-    """Randomly change the sharpness of an image or video.
+    """随机改变图像或视频的锐度。
 
-    Similar to a v2.RandomAdjustSharpness with p=1 and a sharpness_factor sampled randomly.
-    While v2.RandomAdjustSharpness applies — with a given probability — a fixed sharpness_factor to an image,
-    SharpnessJitter applies a random sharpness_factor each time. This is to have a more diverse set of
-    augmentations as a result.
+    类似于 p=1 且随机采样 sharpness_factor 的 v2.RandomAdjustSharpness。
+    v2.RandomAdjustSharpness 以给定概率对图像应用固定的 sharpness_factor，
+    而 SharpnessJitter 每次都应用随机的 sharpness_factor。这样可以得到
+    更多样化的增强结果。
 
-    A sharpness_factor of 0 gives a blurred image, 1 gives the original image while 2 increases the sharpness
-    by a factor of 2.
+    sharpness_factor 为 0 得到模糊图像，为 1 得到原始图像，为 2 则锐度
+    提升 2 倍。
 
-    If the input is a :class:`torch.Tensor`,
-    it is expected to have [..., 1 or 3, H, W] shape, where ... means an arbitrary number of leading dimensions.
+    如果输入是 :class:`torch.Tensor`，
+    其形状应为 [..., 1 or 3, H, W]，其中 ... 表示任意数量的前导维度。
 
     Args:
-        sharpness: How much to jitter sharpness. sharpness_factor is chosen uniformly from
-            [max(0, 1 - sharpness), 1 + sharpness] or the given
-            [min, max]. Should be non negative numbers.
+        sharpness: 锐度抖动的幅度。sharpness_factor 从
+            [max(0, 1 - sharpness), 1 + sharpness] 或给定的
+            [min, max] 区间内均匀选取。应为非负数。
     """
 
     def __init__(self, sharpness: float | Sequence[float]) -> None:
@@ -147,13 +147,13 @@ class SharpnessJitter(Transform):
 
 
 class GaussianNoise(Transform):
-    """Add Gaussian noise to simulate camera sensor noise.
+    """添加高斯噪声以模拟相机传感器噪声。
 
-    Models readout noise from ADC quantization, which increases in low-light conditions.
-    Common in real-robot setups where wrist cameras operate in suboptimal lighting.
+    模拟 ADC 量化产生的读出噪声，该噪声在低光照条件下会增大。
+    在腕部相机工作于次优光照环境的真实机器人场景中很常见。
 
     Args:
-        std: Range (min, max) for noise standard deviation in pixel-value scale (0-255).
+        std: 噪声标准差的范围 (min, max)，以像素值尺度 (0-255) 计。
     """
 
     def __init__(self, std: float | Sequence[float] = (5.0, 25.0)) -> None:
@@ -182,12 +182,12 @@ class GaussianNoise(Transform):
 
 
 class MotionBlur(Transform):
-    """Apply directional motion blur to simulate fast robot or object movement.
+    """应用方向性运动模糊以模拟机器人或物体的快速移动。
 
-    Generates a 1D averaging kernel along a random direction, applied via depthwise convolution.
+    沿随机方向生成一维平均核，通过深度卷积应用。
 
     Args:
-        kernel_size: An odd kernel size or a range containing at least one odd kernel size.
+        kernel_size: 奇数核大小，或至少包含一个奇数核大小的范围。
     """
 
     def __init__(self, kernel_size: int | Sequence[int] = (3, 11)) -> None:
@@ -236,12 +236,12 @@ class MotionBlur(Transform):
 
 
 class JPEGCompression(Transform):
-    """Simulate JPEG compression artifacts (block artifacts, color banding).
+    """模拟 JPEG 压缩伪影（块状伪影、色带）。
 
-    Models quality degradation from video compression in network-streamed camera feeds.
+    模拟网络串流相机画面中视频压缩造成的质量下降。
 
     Args:
-        quality: Range (min, max) for JPEG quality factor (lower = more artifacts).
+        quality: JPEG 质量因子的范围 (min, max)（越低 = 伪影越多）。
     """
 
     def __init__(self, quality: int | Sequence[int] = (15, 75)) -> None:
@@ -278,15 +278,15 @@ class JPEGCompression(Transform):
 
 
 class GaussianPatchBrightness(Transform):
-    """Apply spatially-varying brightness with Gaussian patches.
+    """使用高斯斑块应用空间变化的亮度。
 
-    Simulates uneven overhead lighting, spotlights, and shadow patches commonly
-    encountered in real robot workspaces with multiple light sources.
+    模拟在具有多个光源的真实机器人工作空间中常见的
+    不均匀顶部照明、聚光灯和阴影斑块。
 
     Args:
-        num_patches: Range (min, max) for number of brightness patches.
-        sigma_range: Range for Gaussian sigma as fraction of image size.
-        factor_range: Range for brightness factor (< 1 darkens, > 1 brightens).
+        num_patches: 亮度斑块数量的范围 (min, max)。
+        sigma_range: 高斯 sigma 的范围，以图像尺寸的比例表示。
+        factor_range: 亮度因子的范围（< 1 变暗，> 1 变亮）。
     """
 
     def __init__(
@@ -341,13 +341,13 @@ class GaussianPatchBrightness(Transform):
 
 
 class RandomShadow(Transform):
-    """Add random vertical band shadow with smooth edges.
+    """添加边缘平滑的随机垂直条带阴影。
 
-    Simulates cast shadows from objects or people near the robot workspace.
-    Symmetric: randomly brightens or darkens to prevent BatchNorm stats shift.
+    模拟机器人工作空间附近物体或人员投射的阴影。
+    对称性：随机变亮或变暗，以防止 BatchNorm 统计量偏移。
 
     Args:
-        opacity: Range (min, max) for shadow/highlight opacity.
+        opacity: 阴影/高亮不透明度的范围 (min, max)。
     """
 
     def __init__(self, opacity: float | Sequence[float] = (0.3, 0.6)) -> None:
@@ -395,16 +395,16 @@ class RandomShadow(Transform):
 
 
 class CoarseDropout(Transform):
-    """Drop random rectangular patches to simulate partial occlusion.
+    """丢弃随机矩形斑块以模拟部分遮挡。
 
-    Models objects, hands, or cables passing through the camera field of view
-    during robot manipulation.
+    模拟机器人操作过程中物体、手部或线缆
+    穿过相机视野的情况。
 
     Args:
-        max_holes: Maximum number of rectangular patches to drop.
-        max_height_frac: Maximum patch height as fraction of image height.
-        max_width_frac: Maximum patch width as fraction of image width.
-        fill_value: Value to fill dropped regions with.
+        max_holes: 要丢弃的矩形斑块的最大数量。
+        max_height_frac: 斑块最大高度，以图像高度的比例表示。
+        max_width_frac: 斑块最大宽度，以图像宽度的比例表示。
+        fill_value: 用于填充丢弃区域的值。
     """
 
     def __init__(
@@ -457,14 +457,14 @@ class CoarseDropout(Transform):
 
 
 class GammaCorrection(Transform):
-    """Apply random gamma correction to simulate exposure variation.
+    """应用随机伽马校正以模拟曝光变化。
 
-    Models different camera auto-exposure settings and sensor response curves.
-    Uses log-symmetric sampling so brightening and darkening are equally likely,
-    preventing BatchNorm statistics shift.
+    模拟不同的相机自动曝光设置和传感器响应曲线。
+    使用对数对称采样，使变亮和变暗的概率相等，
+    防止 BatchNorm 统计量偏移。
 
     Args:
-        gamma: Range (min, max) for gamma value. Values < 1 brighten, > 1 darken.
+        gamma: 伽马值的范围 (min, max)。值 < 1 变亮，> 1 变暗。
     """
 
     def __init__(self, gamma: float | Sequence[float] = (0.5, 2.0)) -> None:
@@ -493,7 +493,7 @@ class GammaCorrection(Transform):
         return inpt
 
 
-# From the paper authors' MIT-licensed reference implementation:
+# 来自论文作者的 MIT 许可参考实现：
 # https://github.com/TheZino/PlanckianJitter
 _PLANCKIAN_BLACKBODY_COEFFICIENTS = (
     (0.6743, 0.4029, 0.0013),
@@ -528,17 +528,16 @@ _PLANCKIAN_TEMPERATURE_STEP = 500
 
 
 class PlanckianJitter(Transform):
-    """Simulate color temperature shift along the Planckian locus.
+    """模拟沿普朗克轨迹的色温偏移。
 
-    Samples one black-body temperature and applies the corresponding correlated red
-    and blue channel scaling while preserving the green channel. Coefficients between
-    the tabulated 500 K intervals are linearly interpolated.
+    采样一个黑体温度，并应用相应的相关红通道和蓝通道缩放，
+    同时保持绿通道不变。表格中 500 K 间隔之间的系数通过线性插值得到。
 
-    Reference: Zini et al., "Planckian Jitter", CVPR 2022 Workshop.
+    参考文献：Zini et al., "Planckian Jitter", CVPR 2022 Workshop.
 
     Args:
-        temperature: A fixed color temperature or range in Kelvin. Supported values
-            are between 3000 K and 15000 K.
+        temperature: 固定的色温或以开尔文为单位的范围。支持的值
+            在 3000 K 到 15000 K 之间。
     """
 
     def __init__(self, temperature: int | Sequence[int] = (3_000, 15_000)) -> None:
@@ -614,14 +613,13 @@ _CUSTOM_TRANSFORMS: dict[str, type[Transform]] = {
 @dataclass
 class ImageTransformConfig:
     """
-    For each transform, the following parameters are available:
-      weight: This represents the multinomial probability (with no replacement)
-            used for sampling the transform. If the sum of the weights is not 1,
-            they will be normalized.
-      type: The name of the class used. This is either a class available under torchvision.transforms.v2 or a
-            custom transform defined here.
-      kwargs: Lower & upper bound respectively used for sampling the transform's parameter
-            (following uniform distribution) when it's applied.
+    对于每个变换，以下参数可用：
+      weight: 表示用于采样该变换的多项分布概率（无放回）。
+            如果权重之和不为 1，将被归一化。
+      type: 所用类的名称。可以是 torchvision.transforms.v2 下可用的类，
+            也可以是此处定义的自定义变换。
+      kwargs: 应用变换时分别用于采样变换参数（按均匀分布）的
+            下界和上界。
     """
 
     weight: float = 1.0
@@ -632,19 +630,19 @@ class ImageTransformConfig:
 @dataclass
 class ImageTransformsConfig:
     """
-    These transforms are all using standard torchvision.transforms.v2
-    You can find out how these transformations affect images here:
+    这些变换都使用标准的 torchvision.transforms.v2
+    你可以在这里查看这些变换对图像的影响：
     https://pytorch.org/vision/0.18/auto_examples/transforms/plot_transforms_illustrations.html
-    We use a custom RandomSubsetApply container to sample them.
+    我们使用自定义的 RandomSubsetApply 容器对它们进行采样。
     """
 
-    # Set this flag to `true` to enable transforms during training
+    # 将此标志设为 `true` 以在训练期间启用变换
     enable: bool = False
-    # This is the maximum number of transforms (sampled from these below) that will be applied to each frame.
-    # It's an integer in the interval [1, number_of_available_transforms].
+    # 这是将应用于每一帧的最大变换数量（从下方这些变换中采样）。
+    # 它是区间 [1, number_of_available_transforms] 内的整数。
     max_num_transforms: int = 3
-    # By default, transforms are applied in Torchvision's suggested order (shown below).
-    # Set this to True to apply them in a random order.
+    # 默认情况下，变换按 Torchvision 建议的顺序（如下所示）应用。
+    # 将此设为 True 则以随机顺序应用。
     random_order: bool = False
     tfs: dict[str, ImageTransformConfig] = field(
         default_factory=lambda: {
@@ -698,7 +696,7 @@ def make_transform_from_config(cfg: ImageTransformConfig) -> Transform:
 
 
 class ImageTransforms(Transform):
-    """A class to compose image transforms based on configuration."""
+    """根据配置组合图像变换的类。"""
 
     def __init__(self, cfg: ImageTransformsConfig) -> None:
         super().__init__()

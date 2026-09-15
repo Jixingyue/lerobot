@@ -23,5 +23,5 @@ from ..config import TeleoperatorConfig
 @dataclass
 class GamepadTeleopConfig(TeleoperatorConfig):
     use_gripper: bool = True
-    # Use hidapi instead of pygame for controllers that pygame cannot detect reliably.
+    # 对于 pygame 无法可靠检测的手柄，使用 hidapi 代替 pygame。
     hidapi_fallback: bool = False

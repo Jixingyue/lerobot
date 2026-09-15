@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Lance storage backend for :class:`~lerobot.datasets.lerobot_dataset.LeRobotDataset`.
+"""供 :class:`~lerobot.datasets.lerobot_dataset.LeRobotDataset` 使用的 Lance 存储后端。
 
-Serves datasets whose ``meta/info.json`` declares ``"storage_format": "lance"``:
-tabular features live in a ``frames.lance`` table and mp4 files in a blob-encoded
-``videos.lance`` table, next to the standard ``meta/`` directory. Tables are read
-in place — locally, from the Hub (``hf://``), or from any object store.
+服务于 ``meta/info.json`` 中声明 ``"storage_format": "lance"`` 的数据集：
+表格特征存放在 ``frames.lance`` 表中，mp4 文件存放在经过 blob 编码的
+``videos.lance`` 表中，两者与标准的 ``meta/`` 目录并列。表采用就地读取
+方式——可以从本地、Hub（``hf://``）或任意对象存储读取。
 
-Everything here is an implementation detail of the ``"lance"`` storage format;
-the public entry point is ``LeRobotDataset`` (see :mod:`lerobot.datasets.storage`).
+此处的所有内容都是 ``"lance"`` 存储格式的实现细节；
+公共入口是 ``LeRobotDataset``（参见 :mod:`lerobot.datasets.storage`）。
 """
 
 from __future__ import annotations
@@ -50,8 +50,8 @@ from .dataset_reader import BaseDatasetReader
 from .depth_utils import dequantize_depth
 from .feature_utils import check_delta_timestamps, get_delta_indices
 
-# Re-exported: storage.py resolves localize_root on this module; the others are
-# this format's public helpers (converters, DataLoader worker context).
+# 重新导出：storage.py 会在本模块上解析 localize_root；其余的是
+# 该格式的公共辅助工具（转换器、DataLoader worker 上下文）。
 from .lance_utils import (  # noqa: F401
     _OPEN_PROBE_BYTES,
     _RANGE_SLACK,
@@ -74,29 +74,29 @@ from .video_utils import FrameTimestampError, decode_video_frames_pyav
 
 
 class LanceDatasetReader(BaseDatasetReader):
-    """Dataset reader serving Lance-formatted LeRobot datasets.
+    """服务于 Lance 格式 LeRobot 数据集的数据集读取器。
 
-    Instantiated by :class:`LeRobotDataset` through the reader lookup table
-    (see :mod:`lerobot.datasets.storage`); returns the same item dicts as the
-    default parquet/mp4 pipeline.
+    由 :class:`LeRobotDataset` 通过读取器查找表实例化
+    （参见 :mod:`lerobot.datasets.storage`）；返回与默认
+    parquet/mp4 流水线相同的条目字典。
 
     Args:
-        meta: Already-loaded dataset metadata (never rebuilt or mutated here).
-        root: Local dir with ``meta/`` and ``.lance`` tables, or an object-store
-            URI with the same layout. ``None`` streams the tables from the Hub
-            repo ``meta.repo_id`` over ``hf://``.
-        episodes: Episode indices to select. ``None`` means all.
-        image_transforms: Optional torchvision v2 transform for camera frames.
-        delta_timestamps: Feature key -> relative timestamp offsets (seconds), as
-            in :class:`LeRobotDataset`.
-        tolerance_s: Timestamp synchronization tolerance in seconds.
-        revision: Hub revision, as passed to :class:`LeRobotDataset`.
-        return_uint8: Return RGB frames as raw uint8 instead of normalized float32.
-        depth_output_unit: Unit depth features dequantize to (``'mm'`` or ``'m'``).
-            Depth decodes through pyav (16-bit planes torchcodec cannot emit).
-        storage_options: Extra options forwarded to ``lancedb.connect``.
-        video_decoder_cache_size: Max decoders per worker (default 16, also
-            bounded by a 2 GiB per-worker byte budget).
+        meta: 已加载的数据集元数据（此处绝不会重建或修改）。
+        root: 包含 ``meta/`` 和 ``.lance`` 表的本地目录，或具有相同
+            布局的对象存储 URI。``None`` 表示通过 ``hf://`` 从
+            Hub 仓库 ``meta.repo_id`` 流式读取表。
+        episodes: 要选择的 episode 索引。``None`` 表示全部。
+        image_transforms: 可选的、用于相机帧的 torchvision v2 变换。
+        delta_timestamps: 特征键 -> 相对时间戳偏移量（秒），含义同
+            :class:`LeRobotDataset`。
+        tolerance_s: 时间戳同步容差（秒）。
+        revision: Hub 版本，与传给 :class:`LeRobotDataset` 的一致。
+        return_uint8: 以原始 uint8 而非归一化的 float32 返回 RGB 帧。
+        depth_output_unit: 深度特征反量化后的单位（``'mm'`` 或 ``'m'``）。
+            深度视频通过 pyav 解码（torchcodec 无法输出 16 位平面）。
+        storage_options: 转发给 ``lancedb.connect`` 的额外选项。
+        video_decoder_cache_size: 每个 worker 的最大解码器数量（默认 16，
+            同时受每个 worker 2 GiB 字节预算限制）。
     """
 
     def __init__(
@@ -138,7 +138,7 @@ class LanceDatasetReader(BaseDatasetReader):
                     "on this platform. Video lance datasets cannot be read here; the default "
                     "storage format supports video_backend='pyav'."
                 ) from error
-        # Depth videos decode through pyav over the same prefetched sources.
+        # 深度视频通过 pyav 在相同的预取数据源上解码。
         self._depth_output_unit = depth_output_unit
         self._depth_encoder_configs = {
             key: DepthEncoderConfig.from_video_info(self.meta.features[key].get("info"))
@@ -158,7 +158,7 @@ class LanceDatasetReader(BaseDatasetReader):
 
         self._ep_from = self._episode_numpy("dataset_from_index", np.int64)
         self._ep_to = self._episode_numpy("dataset_to_index", np.int64)
-        # episode ranges must tile [0, total_frames) exactly
+        # episode 范围必须恰好铺满 [0, total_frames)
         if len(self._ep_from) and (
             int(self._ep_from[0]) != 0
             or int(self._ep_to[-1]) != self.meta.total_frames
@@ -170,8 +170,8 @@ class LanceDatasetReader(BaseDatasetReader):
             )
 
         if self.episodes is not None:
-            # Rows are served in storage order regardless of the episodes list
-            # order, matching the default reader's parquet predicate pushdown.
+            # 无论 episodes 列表的顺序如何，行都按存储顺序提供，
+            # 与默认读取器的 parquet 谓词下推保持一致。
             self._rel_to_abs = np.concatenate(
                 [np.arange(self._ep_from[ep], self._ep_to[ep]) for ep in sorted(self.episodes)]
             )
@@ -193,8 +193,8 @@ class LanceDatasetReader(BaseDatasetReader):
         self._feature_shapes = {
             key: tuple(self.meta.features[key].get("shape") or ()) for key in self._tabular_keys
         }
-        # String features pass through as python strings, language columns
-        # (list<struct>, lerobot#3467) as python lists of dicts, like upstream.
+        # 字符串特征以 Python 字符串形式透传，语言列
+        # （list<struct>，lerobot#3467）以 Python 字典列表形式透传，与上游一致。
         self._string_keys = {
             key for key in self._tabular_keys if self.meta.features[key].get("dtype") == "string"
         }
@@ -202,8 +202,8 @@ class LanceDatasetReader(BaseDatasetReader):
             key for key in self._tabular_keys if self.meta.features[key].get("dtype") == "language"
         }
 
-        # Which (chunk, file) mp4 holds each episode and where it starts inside
-        # it (episodes share files in v3.0; timestamps shift by from_timestamp).
+        # 每个 episode 对应的 mp4 位于哪个 (chunk, file)，以及它在该文件内的
+        # 起始位置（v3.0 中多个 episode 共享文件；时间戳会按 from_timestamp 偏移）。
         self._video_locator = {
             key: (
                 self._episode_numpy(f"videos/{key}/chunk_index", np.int64),
@@ -221,10 +221,10 @@ class LanceDatasetReader(BaseDatasetReader):
         self._decode_pool: ThreadPoolExecutor | None = None
         if video_decoder_cache_size is None:
             video_decoder_cache_size = 16
-        self._decoder_cache = _VideoDecoderLRU(video_decoder_cache_size, byte_budget=2 << 30)  # 2GB cap
+        self._decoder_cache = _VideoDecoderLRU(video_decoder_cache_size, byte_budget=2 << 30)  # 上限 2GB
 
     def _episode_numpy(self, name: str, dtype: type[np.generic]) -> np.ndarray:
-        # Read straight from the underlying Arrow column, not HF Dataset __getitem__
+        # 直接从底层 Arrow 列读取，而不是通过 HF Dataset 的 __getitem__
         column = self.meta.episodes.data.column(name).to_numpy(zero_copy_only=False)
         return column.astype(dtype, copy=False)
 
@@ -247,7 +247,7 @@ class LanceDatasetReader(BaseDatasetReader):
         )
         if self.meta.video_keys:
             self._videos_table = db.open_table(VIDEOS_TABLE)
-            # future TODO: resolve row ids lazily per batch.
+            # 未来的 TODO：按批次惰性解析 row id。
             index = (
                 self._videos_table.search()
                 .select(["video_key", "chunk_index", "file_index"])
@@ -285,7 +285,7 @@ class LanceDatasetReader(BaseDatasetReader):
         return state
 
     def close(self) -> None:
-        """Shut down worker threads and drop table handles; reads reopen lazily."""
+        """关闭工作线程并释放表句柄；读取时会惰性地重新打开。"""
         for name in ("_prefetch_pool", "_decode_pool"):
             pool = getattr(self, name, None)
             if pool is not None:
@@ -314,14 +314,14 @@ class LanceDatasetReader(BaseDatasetReader):
         return self.get_items([idx])[0]
 
     def get_items(self, indices: list[int]) -> list[dict]:
-        """Batched fetch: one deduplicated frames-table read and one blob fetch per batch."""
+        """批量获取：每个批次执行一次去重的 frames 表读取和一次 blob 获取。"""
         self._ensure_open()
         plans = self._plan_batch(indices)
         rows, row_pos = self._batch_rows(plans)
 
-        # Video prep (byte-index, header ranges, decoder creation, frame-window fetch)
-        # needs only the batch's files, so it overlaps the frames-table fetch. A wrong
-        # speculative range costs a re-fetch via the ranged-read fallback, never a wrong frame.
+        # 视频准备工作（字节索引、头部范围、解码器创建、帧窗口获取）
+        # 只需要本批次涉及的文件，因此可以与 frames 表的获取并行。错误的
+        # 推测范围只会触发范围读取回退来重新获取，绝不会返回错误的帧。
         prepared_future = None
         if self.meta.video_keys:
             windows = self._plan_file_windows(plans)
@@ -343,10 +343,10 @@ class LanceDatasetReader(BaseDatasetReader):
         return items
 
     def _plan_file_windows(self, plans: list[dict]) -> dict[tuple, list[tuple[int, int]]]:
-        """Map each batch sample's video windows to (file key -> frame spans).
+        """将批次中每个样本的视频窗口映射为（文件键 -> 帧跨度）。
 
-        Positions come from episode metadata alone; stage 2 re-derives ranges
-        from real timestamps and fetches anything missed.
+        位置仅来自 episode 元数据；阶段 2 会根据真实时间戳
+        重新推导范围，并获取所有遗漏的部分。
         """
         fps = float(self.meta.fps)
         windows: dict[tuple, list[tuple[int, int]]] = {}
@@ -358,7 +358,7 @@ class LanceDatasetReader(BaseDatasetReader):
         return windows
 
     def _plan_batch(self, indices: list[int]) -> list[dict]:
-        """Resolve each sample to the absolute rows it needs and its padding masks."""
+        """将每个样本解析为它所需的绝对行及其填充掩码。"""
         plans = []
         for idx in indices:
             abs_idx = self._resolve_abs_idx(idx)
@@ -435,7 +435,7 @@ class LanceDatasetReader(BaseDatasetReader):
         row_pos: dict[int, int],
         prepared: dict[tuple, tuple],
     ) -> list[dict[str, torch.Tensor]]:
-        """Decode all camera frames a batch needs, one blob fetch + one decode pass per file."""
+        """解码一个批次所需的全部相机帧，每个文件执行一次 blob 获取和一遍解码。"""
         requests = self._build_video_requests(plans, columns["timestamp"], row_pos)
         entries = prepared
 
@@ -488,8 +488,8 @@ class LanceDatasetReader(BaseDatasetReader):
     def _prepare_files(
         self, file_keys: list[tuple], windows: dict[tuple, list[tuple[int, int]]] | None = None
     ) -> dict[tuple, tuple]:
-        """Stage 1 of video decoding: everything that doesn't need timestamps"""
-        # Lazy load torchcodec
+        """视频解码的阶段 1：所有不需要时间戳的工作"""
+        # 惰性加载 torchcodec
         from torchcodec.decoders import VideoDecoder
 
         self._load_file_meta([key for key in file_keys if key not in self._file_meta])
@@ -515,7 +515,7 @@ class LanceDatasetReader(BaseDatasetReader):
                 meta = self._file_meta[key]
                 spans = [
                     (0, min(_OPEN_PROBE_BYTES, meta["file_size"])),
-                    # Slack past the moov covers the next box header ffmpeg reads.
+                    # moov 之后的余量用于覆盖 ffmpeg 接下来要读取的 box 头部。
                     (
                         meta["moov_offset"],
                         min(meta["moov_offset"] + meta["moov_size"] + _RANGE_SLACK, meta["file_size"]),
@@ -552,7 +552,7 @@ class LanceDatasetReader(BaseDatasetReader):
                     window_spans[key] = spans
             self._fetch_spans(window_spans, {key: prepared[key][1] for key in window_spans})
 
-        # Insert/refresh each file in the decoder cache.
+        # 将每个文件插入解码器缓存或刷新其缓存状态。
         for key, (decoder, source) in prepared.items():
             self._decoder_cache.put(key, (decoder, source), nbytes=source.buffered)
         return prepared
@@ -574,7 +574,7 @@ class LanceDatasetReader(BaseDatasetReader):
         return [base + float(timestamps[row_pos[row]]) for row in window]
 
     def _decode_depth_window(self, source, shifted_ts: list[float], file_key: tuple) -> torch.Tensor:
-        """Decode one depth window with upstream's pyav decoder over our sparse source."""
+        """在我们的稀疏数据源上，使用上游的 pyav 解码器解码一个深度窗口。"""
         source.seek(0)
         frames = decode_video_frames_pyav(
             source, shifted_ts, self.tolerance_s, return_uint8=False, is_depth=True
@@ -605,7 +605,7 @@ class LanceDatasetReader(BaseDatasetReader):
             sources[key].add(offset, payload.as_py())
 
     def _load_file_meta(self, missing: list[tuple]) -> None:
-        """Fetch byte-index columns for files not yet in the per-worker cache."""
+        """为尚未进入各 worker 缓存的文件获取字节索引列。"""
         if not missing:
             return
         row_ids = [self._video_row_ids[file_key] for file_key in missing]
@@ -643,7 +643,7 @@ class LanceDatasetReader(BaseDatasetReader):
             self._file_meta.popitem(last=False)
 
     def _window_byte_range(self, key: str, meta: dict, first_frame: int, last_frame: int) -> tuple[int, int]:
-        """Byte range covering frames [first, last]: preceding keyframe to next keyframe."""
+        """覆盖帧 [first, last] 的字节范围：从前一个关键帧到下一个关键帧。"""
         kf_indices, kf_positions = meta["kf_indices"], meta["kf_positions"]
         start_idx = max(int(np.searchsorted(kf_indices, first_frame, side="right")) - 1, 0)
         end_idx = int(np.searchsorted(kf_indices, last_frame, side="right"))
@@ -689,5 +689,5 @@ class LanceDatasetReader(BaseDatasetReader):
         )
 
 
-# The class lerobot.datasets.storage instantiates for storage_format "lance".
+# lerobot.datasets.storage 在 storage_format 为 "lance" 时实例化的类。
 DATASET_READER = LanceDatasetReader

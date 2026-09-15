@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Private writer component for LeRobotDataset. Handles sequential recording (episode buffer, ParquetWriter, image writer, video encoding)."""
+"""LeRobotDataset 的私有写入组件。负责处理顺序录制（episode 缓冲区、ParquetWriter、图像写入器、视频编码）。"""
 
 from __future__ import annotations
 
@@ -99,10 +99,10 @@ def _encode_video_worker(
 
 
 class DatasetWriter:
-    """Encapsulates write-side state and methods for LeRobotDataset.
+    """封装 LeRobotDataset 写入侧的状态和方法。
 
-    Owns: episode_buffer, image_writer, _pq_writer (ParquetWriter), _latest_episode,
-    _current_file_start_frame, _streaming_encoder, _episodes_since_last_encoding, _recorded_frames.
+    持有：episode_buffer、image_writer、_pq_writer（ParquetWriter）、_latest_episode、
+    _current_file_start_frame、_streaming_encoder、_episodes_since_last_encoding、_recorded_frames。
     """
 
     def __init__(
@@ -116,24 +116,24 @@ class DatasetWriter:
         streaming_encoder: StreamingVideoEncoder | None = None,
         initial_frames: int = 0,
     ):
-        """Initialize the writer with metadata, codec, and encoder config.
+        """使用元数据、编解码器和编码器配置初始化写入器。
 
         Args:
-            meta: Dataset metadata instance (used for feature schema, chunk
-                settings, and episode persistence).
-            root: Local dataset root directory.
-            rgb_encoder: Video encoder settings applied to RGB cameras. When
-                ``None``, :func:`~lerobot.configs.video.rgb_encoder_defaults` is used.
-            depth_encoder: Video encoder settings applied to depth cameras, including
-                the quantization parameters. When ``None``,
-                :func:`~lerobot.configs.video.depth_encoder_defaults` is used.
-            encoder_threads: Number of encoder threads (global). ``None``
-                lets the codec decide.
-            batch_encoding_size: Number of episodes to accumulate before
-                batch-encoding videos.
-            streaming_encoder: Optional pre-built :class:`StreamingVideoEncoder`
-                for real-time encoding. ``None`` disables streaming mode.
-            initial_frames: Starting frame count (non-zero when resuming).
+            meta: 数据集元数据实例（用于特征模式、分片
+                设置以及 episode 持久化）。
+            root: 本地数据集根目录。
+            rgb_encoder: 应用于 RGB 相机的视频编码器设置。为
+                ``None`` 时使用 :func:`~lerobot.configs.video.rgb_encoder_defaults`。
+            depth_encoder: 应用于深度相机的视频编码器设置，包括
+                量化参数。为 ``None`` 时使用
+                :func:`~lerobot.configs.video.depth_encoder_defaults`。
+            encoder_threads: 编码器线程数（全局）。``None``
+                表示由编解码器自行决定。
+            batch_encoding_size: 在批量编码视频之前需要累积的
+                episode 数量。
+            streaming_encoder: 可选的预先构建的 :class:`StreamingVideoEncoder`，
+                用于实时编码。``None`` 表示禁用流式模式。
+            initial_frames: 起始帧计数（断点续录时非零）。
         """
         self._meta = meta
         self._root = root
@@ -143,7 +143,7 @@ class DatasetWriter:
         self._batch_encoding_size = batch_encoding_size
         self._streaming_encoder = streaming_encoder
 
-        # Writer state
+        # 写入器状态
         self.image_writer: AsyncImageWriter | None = None
         self.episode_buffer: dict = self._create_episode_buffer()
         self._pq_writer: pq.ParquetWriter | None = None
@@ -174,8 +174,8 @@ class DatasetWriter:
 
     def _get_episode_buffer_index(self) -> int:
         episode_index = self.episode_buffer["episode_index"]
-        # episode_index is `int` when freshly created, but becomes `np.ndarray` after
-        # save_episode() mutates the buffer. Handle both types here.
+        # episode_index 在刚创建时是 `int`，但在 save_episode() 修改缓冲区后
+        # 会变成 `np.ndarray`。这里同时处理这两种类型。
         if isinstance(episode_index, np.ndarray):
             episode_index = episode_index.item() if episode_index.size == 1 else episode_index[0]
         return int(episode_index)
@@ -201,16 +201,15 @@ class DatasetWriter:
 
     def add_frame(self, frame: dict) -> None:
         """
-        Add a single frame to the current episode buffer.
+        向当前 episode 缓冲区添加单帧数据。
 
-        Apart from images written to a temporary directory, nothing is written to disk
-        until ``save_episode()`` is called.
+        除了写入临时目录的图像之外，在调用 ``save_episode()`` 之前不会向磁盘
+        写入任何内容。
 
-        The caller must provide all user-defined features plus ``"task"``, and must
-        not provide ``"timestamp"`` or ``"frame_index"``; those are computed
-        automatically.
+        调用方必须提供所有用户自定义特征以及 ``"task"``，且不得提供
+        ``"timestamp"`` 或 ``"frame_index"``；这两个字段会自动计算。
         """
-        # Convert torch to numpy if needed
+        # 必要时将 torch 张量转换为 numpy 数组
         for name in frame:
             if isinstance(frame[name], torch.Tensor):
                 frame[name] = frame[name].numpy()
@@ -220,14 +219,14 @@ class DatasetWriter:
         if self.episode_buffer is None:
             self.episode_buffer = self._create_episode_buffer()
 
-        # Automatically add frame_index and timestamp to episode buffer
+        # 自动向 episode 缓冲区添加 frame_index 和 timestamp
         frame_index = self.episode_buffer["size"]
         timestamp = frame_index / self._meta.fps
         self.episode_buffer["frame_index"].append(frame_index)
         self.episode_buffer["timestamp"].append(timestamp)
         self.episode_buffer["task"].append(frame.pop("task"))
 
-        # Record each depth feature's input unit once, inferred from the first frame's dtype.
+        # 根据第一帧的 dtype 推断并记录一次每个深度特征的输入单位。
         if frame_index == 0:
             for depth_key in self._meta.depth_keys:
                 if depth_key not in frame:
@@ -236,7 +235,7 @@ class DatasetWriter:
                 if info.get("depth_unit") is None:
                     info["depth_unit"] = infer_depth_unit(np.asarray(frame[depth_key]).dtype)
 
-        # Start streaming encoder on first frame of episode
+        # 在 episode 的第一帧启动流式编码器
         if frame_index == 0 and self._streaming_encoder is not None:
             self._streaming_encoder.start_episode(
                 video_keys=list(self._meta.video_keys),
@@ -244,7 +243,7 @@ class DatasetWriter:
                 temp_dir=self._root,
             )
 
-        # Add frame features to episode_buffer
+        # 将帧特征添加到 episode_buffer
         for key in frame:
             if key not in self._meta.features:
                 raise ValueError(
@@ -273,12 +272,12 @@ class DatasetWriter:
         episode_data: dict | None = None,
         parallel_encoding: bool = True,
     ) -> None:
-        """Save the current episode in self.episode_buffer to disk."""
+        """将 self.episode_buffer 中的当前 episode 保存到磁盘。"""
         episode_buffer = episode_data if episode_data is not None else self.episode_buffer
 
         validate_episode_buffer(episode_buffer, self._meta.total_episodes, self._meta.features)
 
-        # size and task are special cases that won't be added to hf_dataset
+        # size 和 task 是特殊情况，不会被添加到 hf_dataset 中
         episode_length = episode_buffer.pop("size")
         tasks = episode_buffer.pop("task")
         episode_tasks = list(set(tasks))
@@ -287,10 +286,10 @@ class DatasetWriter:
         episode_buffer["index"] = np.arange(self._meta.total_frames, self._meta.total_frames + episode_length)
         episode_buffer["episode_index"] = np.full((episode_length,), episode_index)
 
-        # Update tasks and task indices with new tasks if any
+        # 如果有新任务，则用新任务更新任务列表和任务索引
         self._meta.save_episode_tasks(episode_tasks)
 
-        # Given tasks in natural language, find their corresponding task indices
+        # 根据自然语言任务，查找其对应的任务索引
         episode_buffer["task_index"] = np.array([self._meta.get_task_index(task) for task in tasks])
 
         for key, ft in self._meta.features.items():
@@ -298,14 +297,14 @@ class DatasetWriter:
                 continue
             stacked_values = np.stack(episode_buffer[key])
 
-            # `shape=(1,)` numeric features are serialized as `datasets.Value`, which expects scalars.
-            # Normalizing to `(N,)` keeps save semantics stable across dependency versions.
+            # `shape=(1,)` 的数值特征会被序列化为 `datasets.Value`，后者期望标量。
+            # 将其归一化为 `(N,)` 可以在不同依赖版本之间保持保存语义稳定。
             if tuple(ft["shape"]) == (1,) and ft["dtype"] != "string":
                 stacked_values = stacked_values.reshape(episode_length)
 
             episode_buffer[key] = stacked_values
 
-        # Wait for image writer to end, so that episode stats over images can be computed
+        # 等待图像写入器结束，以便计算图像相关的 episode 统计信息
         self._wait_image_writer()
 
         has_video_keys = len(self._meta.video_keys) > 0
@@ -374,7 +373,7 @@ class DatasetWriter:
                 for video_key in self._meta.video_keys:
                     ep_metadata.update(self._save_episode_video(video_key, episode_index))
 
-        # `meta.save_episode` need to be executed after encoding the videos
+        # `meta.save_episode` 需要在视频编码完成之后执行
         self._meta.save_episode(episode_index, episode_length, episode_tasks, ep_stats, ep_metadata)
 
         if has_video_keys and use_batched_encoding:
@@ -386,15 +385,15 @@ class DatasetWriter:
                 self._episodes_since_last_encoding = 0
 
         if episode_data is None:
-            # Post-save cleanup deliberately does not go through clear_episode_buffer():
-            # staging frames of video cameras must survive here — the (possibly batched)
-            # encoder still needs them and deletes them once each video is written.
+            # 保存后的清理特意没有走 clear_episode_buffer()：
+            # 视频相机的暂存帧必须在这里保留——（可能是批量的）编码器
+            # 仍然需要这些帧，并在每个视频写入完成后删除它们。
             if len(self._meta.image_keys) > 0:
                 self._delete_camera_frame_dirs(self._meta.image_keys)
             self.episode_buffer = self._create_episode_buffer()
 
     def _batch_save_episode_video(self, start_episode: int, end_episode: int | None = None) -> None:
-        """Batch save videos for multiple episodes."""
+        """批量保存多个 episode 的视频。"""
         if end_episode is None:
             end_episode = self._meta.total_episodes
 
@@ -439,8 +438,8 @@ class DatasetWriter:
             self._meta.episodes = load_episodes(self._root)
 
     def _save_episode_data(self, episode_buffer: dict) -> dict:
-        """Save episode data to a parquet file."""
-        # Use metadata features as the authoritative schema
+        """将 episode 数据保存到 parquet 文件。"""
+        # 以元数据中的特征作为权威模式（schema）
         hf_features = get_hf_features_from_features(self._meta.features)
         ep_dict = {key: episode_buffer[key] for key in hf_features}
         ep_dataset = datasets.Dataset.from_dict(ep_dict, features=hf_features, split="train")
@@ -560,10 +559,10 @@ class DatasetWriter:
                     latest_path,
                 )
 
-        # Remove temporary directory
+        # 删除临时目录
         shutil.rmtree(str(ep_path.parent))
 
-        # Update video info (only needed when first episode is encoded)
+        # 更新视频信息（仅在编码第一个 episode 时需要）
         if episode_index == 0:
             self._meta.update_video_info(
                 video_key,
@@ -583,13 +582,13 @@ class DatasetWriter:
         return metadata
 
     def clear_episode_buffer(self, delete_images: bool = True) -> None:
-        """Discard the current episode buffer and optionally delete temp camera frames.
+        """丢弃当前 episode 缓冲区，并可选地删除临时相机帧。
 
         Args:
-            delete_images: If ``True``, remove temporary camera frame directories
-                written for the current episode.
+            delete_images: 如果为 ``True``，则删除为当前 episode
+                写入的临时相机帧目录。
         """
-        # Cancel streaming encoder if active
+        # 如果流式编码器处于活动状态，则取消它
         if self._streaming_encoder is not None:
             self._streaming_encoder.cancel_episode()
 
@@ -599,11 +598,11 @@ class DatasetWriter:
         self.episode_buffer = self._create_episode_buffer()
 
     def start_image_writer(self, num_processes: int = 0, num_threads: int = 4) -> None:
-        """Start an :class:`AsyncImageWriter` for background image persistence.
+        """启动 :class:`AsyncImageWriter` 以在后台持久化图像。
 
         Args:
-            num_processes: Number of subprocesses. ``0`` means threads only.
-            num_threads: Number of threads per process.
+            num_processes: 子进程数量。``0`` 表示仅使用线程。
+            num_threads: 每个进程的线程数。
         """
         if isinstance(self.image_writer, AsyncImageWriter):
             logger.warning(
@@ -616,18 +615,18 @@ class DatasetWriter:
         )
 
     def stop_image_writer(self) -> None:
-        """Stop the image writer (needed before pickling the dataset for DataLoader)."""
+        """停止图像写入器（在为 DataLoader 序列化数据集之前需要调用）。"""
         if self.image_writer is not None:
             self.image_writer.stop()
             self.image_writer = None
 
     def _wait_image_writer(self) -> None:
-        """Wait for asynchronous image writer to finish."""
+        """等待异步图像写入器完成。"""
         if self.image_writer is not None:
             self.image_writer.wait_until_done()
 
     def _encode_temporary_episode_video(self, video_key: str, episode_index: int) -> Path:
-        """Use ffmpeg to convert frames stored as png/tiff into mp4 videos."""
+        """使用 ffmpeg 将以 png/tiff 格式存储的帧转换为 mp4 视频。"""
         is_depth = video_key in self._meta.depth_keys
         return _encode_video_worker(
             video_key,
@@ -639,16 +638,16 @@ class DatasetWriter:
         )
 
     def close_writer(self) -> None:
-        """Close and cleanup the parquet writer if it exists."""
+        """如果 parquet 写入器存在，则关闭并清理它。"""
         if self._pq_writer is not None:
             self._pq_writer.close()
             self._pq_writer = None
 
     def flush_pending_videos(self) -> None:
-        """Flush any pending video encoding (streaming or batch).
+        """刷新所有挂起的视频编码任务（流式或批量）。
 
-        For streaming encoding: closes the encoder.
-        For batch encoding: encodes any remaining episodes that haven't been batch-encoded yet.
+        对于流式编码：关闭编码器。
+        对于批量编码：编码所有尚未进行批量编码的剩余 episode。
         """
         if self._streaming_encoder is not None:
             self._streaming_encoder.close()
@@ -662,12 +661,12 @@ class DatasetWriter:
             self._batch_save_episode_video(start_ep, end_ep)
 
     def cancel_pending_videos(self) -> None:
-        """Cancel any in-progress streaming encoding without flushing."""
+        """取消任何正在进行的流式编码，而不执行刷新。"""
         if self._streaming_encoder is not None:
             self._streaming_encoder.cancel_episode()
 
     def cleanup_interrupted_episode(self, episode_index: int) -> None:
-        """Remove temporary image directories for an interrupted episode."""
+        """删除被中断 episode 的临时图像目录。"""
         for key in self._meta.camera_keys:
             img_dir = self._get_image_file_path(
                 episode_index=episode_index, image_key=key, frame_index=0
@@ -679,27 +678,27 @@ class DatasetWriter:
                 shutil.rmtree(img_dir)
 
     def finalize(self) -> None:
-        """Flush all pending work and release all resources.
+        """刷新所有挂起的工作并释放全部资源。
 
-        Idempotent — safe to call multiple times.
+        幂等——可安全地多次调用。
         """
         if getattr(self, "_finalized", False):
             return
-        # 1. Wait for async image writes to complete, then stop
+        # 1. 等待异步图像写入完成，然后停止
         if self.image_writer is not None:
             self.image_writer.wait_until_done()
             self.image_writer.stop()
             self.image_writer = None
-        # 2. Flush pending video encoding (streaming or batch)
+        # 2. 刷新挂起的视频编码（流式或批量）
         self.flush_pending_videos()
-        # 3. Close own parquet writer
+        # 3. 关闭自身的 parquet 写入器
         self.close_writer()
-        # 4. Finalize metadata (idempotent)
+        # 4. 终结元数据（幂等）
         self._meta.finalize()
         self._finalized = True
 
     def __del__(self):
-        """Safety net: release resources on garbage collection."""
-        # During interpreter shutdown, referenced objects may already be collected.
+        """安全兜底：在垃圾回收时释放资源。"""
+        # 在解释器关闭期间，被引用的对象可能已经被回收。
         with contextlib.suppress(Exception):
             self.finalize()

@@ -40,10 +40,10 @@ logger = logging.getLogger(__name__)
 
 class LeKiwi(Robot):
     """
-    The robot includes a three omniwheel mobile base and a remote follower arm.
-    The leader arm is connected locally (on the laptop) and its joint positions are recorded and then
-    forwarded to the remote follower arm (after applying a safety clamp).
-    In parallel, keyboard teleoperation is used to generate raw velocity commands for the wheels.
+    该机器人包含一个三轮全向移动底盘和一个远程从动机械臂。
+    主臂在本地连接（笔记本电脑上），其关节位置被记录下来，然后
+    转发给远程从动机械臂（在施加安全限位之后）。
+    同时，键盘遥操作用于生成底盘的原始速度指令。
     """
 
     config_class = LeKiwiConfig
@@ -56,14 +56,14 @@ class LeKiwi(Robot):
         self.bus = FeetechMotorsBus(
             port=self.config.port,
             motors={
-                # arm
+                # 机械臂
                 "arm_shoulder_pan": Motor(1, "sts3215", norm_mode_body),
                 "arm_shoulder_lift": Motor(2, "sts3215", norm_mode_body),
                 "arm_elbow_flex": Motor(3, "sts3215", norm_mode_body),
                 "arm_wrist_flex": Motor(4, "sts3215", norm_mode_body),
                 "arm_wrist_roll": Motor(5, "sts3215", norm_mode_body),
                 "arm_gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
-                # base
+                # 底盘
                 "base_left_wheel": Motor(7, "sts3215", MotorNormMode.RANGE_M100_100),
                 "base_back_wheel": Motor(8, "sts3215", MotorNormMode.RANGE_M100_100),
                 "base_right_wheel": Motor(9, "sts3215", MotorNormMode.RANGE_M100_100),
@@ -136,7 +136,7 @@ class LeKiwi(Robot):
 
     def calibrate(self) -> None:
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用现有校准还是运行新的校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )
@@ -186,16 +186,16 @@ class LeKiwi(Robot):
         print("Calibration saved to", self.calibration_fpath)
 
     def configure(self):
-        # Set-up arm actuators (position mode)
-        # We assume that at connection time, arm is in a rest position,
-        # and torque can be safely disabled to run calibration.
+        # 设置机械臂执行器（位置模式）
+        # 我们假设在连接时，机械臂处于静止位置，
+        # 并且可以安全地禁用力矩来运行校准。
         self.bus.disable_torque()
         self.bus.configure_motors()
         for name in self.arm_motors:
             self.bus.write("Operating_Mode", name, OperatingMode.POSITION.value)
-            # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
+            # 将 P_Coefficient 设置为较低的值以避免抖动（默认值为 32）
             self.bus.write("P_Coefficient", name, 16)
-            # Set I_Coefficient and D_Coefficient to default value 0 and 32
+            # 将 I_Coefficient 和 D_Coefficient 设置为默认值 0 和 32
             self.bus.write("I_Coefficient", name, 0)
             self.bus.write("D_Coefficient", name, 32)
 
@@ -215,11 +215,11 @@ class LeKiwi(Robot):
         steps_per_deg = 4096.0 / 360.0
         speed_in_steps = degps * steps_per_deg
         speed_int = int(round(speed_in_steps))
-        # Cap the value to fit within signed 16-bit range (-32768 to 32767)
+        # 将值限制在有符号 16 位范围内（-32768 到 32767）
         if speed_int > 0x7FFF:
-            speed_int = 0x7FFF  # 32767 -> maximum positive value
+            speed_int = 0x7FFF  # 32767 -> 最大正值
         elif speed_int < -0x8000:
-            speed_int = -0x8000  # -32768 -> minimum negative value
+            speed_int = -0x8000  # -32768 -> 最小负值
         return speed_int
 
     @staticmethod
@@ -239,45 +239,44 @@ class LeKiwi(Robot):
         max_raw: int = 3000,
     ) -> dict:
         """
-        Convert desired body-frame velocities into wheel raw commands.
+        将期望的机体坐标系速度转换为轮子原始指令。
 
         Parameters:
-          x_cmd      : Linear velocity in x (m/s).
-          y_cmd      : Linear velocity in y (m/s).
-          theta_cmd  : Rotational velocity (deg/s).
-          wheel_radius: Radius of each wheel (meters).
-          base_radius : Distance from the center of rotation to each wheel (meters).
-          max_raw    : Maximum allowed raw command (ticks) per wheel.
+          x_cmd      : x 方向的线速度（m/s）。
+          y_cmd      : y 方向的线速度（m/s）。
+          theta_cmd  : 旋转角速度（deg/s）。
+          wheel_radius: 每个轮子的半径（米）。
+          base_radius : 旋转中心到每个轮子的距离（米）。
+          max_raw    : 每个轮子允许的最大原始指令（tick）。
 
         Returns:
-          A dictionary with wheel raw commands:
-             {"base_left_wheel": value, "base_back_wheel": value, "base_right_wheel": value}.
+          包含轮子原始指令的字典：
+             {"base_left_wheel": value, "base_back_wheel": value, "base_right_wheel": value}。
 
         Notes:
-          - Internally, the method converts theta_cmd to rad/s for the kinematics.
-          - The raw command is computed from the wheels angular speed in deg/s
-            using _degps_to_raw(). If any command exceeds max_raw, all commands
-            are scaled down proportionally.
+          - 在内部，该方法将 theta_cmd 转换为 rad/s 以进行运动学计算。
+          - 原始指令由轮子的角速度（deg/s）通过 _degps_to_raw() 计算得出。
+            如果任何指令超过 max_raw，则所有指令将按比例缩小。
         """
-        # Convert rotational velocity from deg/s to rad/s.
+        # 将旋转角速度从 deg/s 转换为 rad/s。
         theta_rad = theta * (np.pi / 180.0)
-        # Create the body velocity vector [x, y, theta_rad].
+        # 创建机体速度向量 [x, y, theta_rad]。
         velocity_vector = np.array([x, y, theta_rad])
 
-        # Define the wheel mounting angles with a -90° offset.
+        # 定义轮子安装角度，带 -90° 偏移。
         angles = np.radians(np.array([240, 0, 120]) - 90)
-        # Build the kinematic matrix: each row maps body velocities to a wheel’s linear speed.
-        # The third column (base_radius) accounts for the effect of rotation.
+        # 构建运动学矩阵：每一行将机体速度映射到一个轮子的线速度。
+        # 第三列（base_radius）考虑了旋转的影响。
         m = np.array([[np.cos(a), np.sin(a), base_radius] for a in angles])
 
-        # Compute each wheel’s linear speed (m/s) and then its angular speed (rad/s).
+        # 计算每个轮子的线速度（m/s），然后计算其角速度（rad/s）。
         wheel_linear_speeds = m.dot(velocity_vector)
         wheel_angular_speeds = wheel_linear_speeds / wheel_radius
 
-        # Convert wheel angular speeds from rad/s to deg/s.
+        # 将轮子角速度从 rad/s 转换为 deg/s。
         wheel_degps = wheel_angular_speeds * (180.0 / np.pi)
 
-        # Scaling
+        # 缩放
         steps_per_deg = 4096.0 / 360.0
         raw_floats = [abs(degps) * steps_per_deg for degps in wheel_degps]
         max_raw_computed = max(raw_floats)
@@ -285,7 +284,7 @@ class LeKiwi(Robot):
             scale = max_raw / max_raw_computed
             wheel_degps = wheel_degps * scale
 
-        # Convert each wheel’s angular speed (deg/s) to a raw integer.
+        # 将每个轮子的角速度（deg/s）转换为原始整数。
         wheel_raw = [self._degps_to_raw(deg) for deg in wheel_degps]
 
         return {
@@ -303,18 +302,18 @@ class LeKiwi(Robot):
         base_radius: float = 0.125,
     ) -> dict[str, Any]:
         """
-        Convert wheel raw command feedback back into body-frame velocities.
+        将轮子原始指令反馈转换回机体坐标系速度。
 
         Parameters:
-          wheel_raw   : Vector with raw wheel commands ("base_left_wheel", "base_back_wheel", "base_right_wheel").
-          wheel_radius: Radius of each wheel (meters).
-          base_radius : Distance from the robot center to each wheel (meters).
+          wheel_raw   : 包含原始轮子指令的向量（"base_left_wheel"、"base_back_wheel"、"base_right_wheel"）。
+          wheel_radius: 每个轮子的半径（米）。
+          base_radius : 机器人中心到每个轮子的距离（米）。
 
         Returns:
-          A dict (x.vel, y.vel, theta.vel) all in m/s
+          一个字典（x.vel, y.vel, theta.vel），单位均为 m/s
         """
 
-        # Convert each raw command back to an angular speed in deg/s.
+        # 将每个原始指令转换回角速度（deg/s）。
         wheel_degps = np.array(
             [
                 self._raw_to_degps(left_wheel_speed),
@@ -323,16 +322,16 @@ class LeKiwi(Robot):
             ]
         )
 
-        # Convert from deg/s to rad/s.
+        # 从 deg/s 转换为 rad/s。
         wheel_radps = wheel_degps * (np.pi / 180.0)
-        # Compute each wheel’s linear speed (m/s) from its angular speed.
+        # 根据每个轮子的角速度计算其线速度（m/s）。
         wheel_linear_speeds = wheel_radps * wheel_radius
 
-        # Define the wheel mounting angles with a -90° offset.
+        # 定义轮子安装角度，带 -90° 偏移。
         angles = np.radians(np.array([240, 0, 120]) - 90)
         m = np.array([[np.cos(a), np.sin(a), base_radius] for a in angles])
 
-        # Solve the inverse kinematics: body_velocity = M⁻¹ · wheel_linear_speeds.
+        # 求解逆运动学：body_velocity = M⁻¹ · wheel_linear_speeds。
         m_inv = np.linalg.inv(m)
         velocity_vector = m_inv.dot(wheel_linear_speeds)
         x, y, theta_rad = velocity_vector
@@ -341,11 +340,11 @@ class LeKiwi(Robot):
             "x.vel": x,
             "y.vel": y,
             "theta.vel": theta,
-        }  # m/s and deg/s
+        }  # m/s 和 deg/s
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
-        # Read actuators position for arm and vel for base
+        # 读取机械臂执行器位置和底盘速度
         start = time.perf_counter()
         arm_pos = self.bus.sync_read(
             "Present_Position", self.arm_motors, num_retry=self.config.num_read_retries
@@ -367,7 +366,7 @@ class LeKiwi(Robot):
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             start = time.perf_counter()
             obs_dict[cam_key] = cam.read_latest()
@@ -378,17 +377,17 @@ class LeKiwi(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Command lekiwi to move to a target joint configuration.
+        """命令 lekiwi 移动到目标关节配置。
 
-        The relative action magnitude may be clipped depending on the configuration parameter
-        `max_relative_target`. In this case, the action sent differs from original action.
-        Thus, this function always returns the action actually sent.
+        相对动作幅度可能会根据配置参数 ``max_relative_target`` 进行裁剪。
+        在这种情况下，发送的动作与原始动作不同。
+        因此，该函数始终返回实际发送的动作。
 
         Raises:
-            RobotDeviceNotConnectedError: if robot is not connected.
+            RobotDeviceNotConnectedError: 如果机器人未连接。
 
         Returns:
-            RobotAction: the action sent to the motors, potentially clipped.
+            RobotAction: 发送给电机的动作，可能经过裁剪。
         """
 
         arm_goal_pos = {k: v for k, v in action.items() if k.endswith(".pos")}
@@ -398,20 +397,20 @@ class LeKiwi(Robot):
             base_goal_vel["x.vel"], base_goal_vel["y.vel"], base_goal_vel["theta.vel"]
         )
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
+        # 当目标位置距离当前位置太远时进行限制。
+        # /!\ 由于需要从从动端读取，预计帧率会降低。
         if self.config.max_relative_target is not None:
             present_pos = self.bus.sync_read(
                 "Present_Position", self.arm_motors, num_retry=self.config.num_read_retries
             )
-            # `arm_goal_pos` is keyed with the ".pos" suffix, `present_pos` with bare motor names.
+            # ``arm_goal_pos`` 的键带有 ".pos" 后缀，而 ``present_pos`` 使用纯电机名称。
             goal_present_pos = {
                 key: (g_pos, present_pos[key.removesuffix(".pos")]) for key, g_pos in arm_goal_pos.items()
             }
             arm_safe_goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
             arm_goal_pos = arm_safe_goal_pos
 
-        # Send goal position to the actuators
+        # 将目标位置发送给执行器
         arm_goal_pos_raw = {k.replace(".pos", ""): v for k, v in arm_goal_pos.items()}
         self.bus.sync_write("Goal_Position", arm_goal_pos_raw)
         self.bus.sync_write("Goal_Velocity", base_wheel_goal_vel)

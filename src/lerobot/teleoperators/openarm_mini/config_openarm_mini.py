@@ -21,13 +21,13 @@ from ..config import TeleoperatorConfig
 
 @dataclass
 class OpenArmMiniConfigBase:
-    """Base configuration for the OpenArm Mini teleoperator (Feetech STS3215, 7DOF + gripper)."""
+    """OpenArm Mini 遥操作设备（Feetech STS3215，7 自由度 + 夹爪）的基础配置。"""
 
-    # Serial port for the Feetech bus (e.g., "/dev/ttyUSB0").
+    # Feetech 总线的串口（例如 "/dev/ttyUSB0"）。
     port: str
 
-    # Side of the arm: "left" or "right". Controls per-joint direction flips applied
-    # during readout. If `None`, no flipping is applied.
+    # 手臂侧别："left" 或 "right"。控制读取时应用的逐关节方向翻转。
+    # 如果为 `None`，则不应用翻转。
     side: str | None = None
 
     use_degrees: bool = True

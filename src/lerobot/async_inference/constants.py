@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Client side: The environment evolves with a time resolution equal to 1/fps"""
+"""客户端：环境以等于 1/fps 的时间分辨率演化"""
 
 DEFAULT_FPS = 30
 
-"""Server side: Running inference on (at most) 1/fps"""
+"""服务端：以（最多）1/fps 的频率运行推理"""
 DEFAULT_INFERENCE_LATENCY = 1 / DEFAULT_FPS
 
-"""Server side: Timeout for observation queue in seconds"""
+"""服务端：观测队列超时时间，单位为秒"""
 DEFAULT_OBS_QUEUE_TIMEOUT = 2
 
-# All action chunking policies
+# 所有支持动作分块（action chunking）的策略
 SUPPORTED_POLICIES = ["act", "smolvla", "diffusion", "tdmpc", "vqbet", "pi0", "pi05", "groot"]
 
-# TODO: Add all other robots
+# TODO: 添加所有其他机器人
 SUPPORTED_ROBOTS = ["so100_follower", "so101_follower", "bi_so_follower", "omx_follower"]

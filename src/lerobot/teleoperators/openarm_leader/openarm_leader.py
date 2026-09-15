@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 class OpenArmLeader(Teleoperator):
     """
-    OpenArm Leader/Teleoperator Arm with Damiao motors.
+    使用 Damiao 电机的 OpenArm 主臂/遥操作臂。
 
-    This teleoperator uses CAN bus communication to read positions from
-    Damiao motors that are manually moved (torque disabled).
+    该遥操作设备使用 CAN 总线通信，从手动移动（力矩禁用）的
+    Damiao 电机读取位置。
     """
 
     config_class = OpenArmLeaderConfig
@@ -44,12 +44,12 @@ class OpenArmLeader(Teleoperator):
         super().__init__(config)
         self.config = config
 
-        # Arm motors
+        # 手臂电机
         motors: dict[str, Motor] = {}
         for motor_name, (send_id, recv_id, motor_type_str) in config.motor_config.items():
             motor = Motor(
                 send_id, motor_type_str, MotorNormMode.DEGREES
-            )  # Always use degrees for Damiao motors
+            )  # Damiao 电机始终使用角度
             motor.recv_id = recv_id
             motor.motor_type_str = motor_type_str
             motors[motor_name] = motor
@@ -66,7 +66,7 @@ class OpenArmLeader(Teleoperator):
 
     @property
     def action_features(self) -> dict[str, type]:
-        """Features produced by this teleoperator."""
+        """该遥操作设备产生的特征。"""
         features: dict[str, type] = {}
         for motor in self.bus.motors:
             features[f"{motor}.pos"] = float
@@ -77,28 +77,28 @@ class OpenArmLeader(Teleoperator):
 
     @property
     def feedback_features(self) -> dict[str, type]:
-        """Feedback features (not implemented for OpenArms)."""
+        """反馈特征（OpenArms 未实现）。"""
         return {}
 
     @property
     def is_connected(self) -> bool:
-        """Check if teleoperator is connected."""
+        """检查遥操作设备是否已连接。"""
         return self.bus.is_connected
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """
-        Connect to the teleoperator.
+        连接到遥操作设备。
 
-        For manual control, we disable torque after connecting so the
-        arm can be moved by hand.
+        对于手动控制，我们在连接后禁用力矩，以便可以
+        用手移动手臂。
         """
 
-        # Connect to CAN bus
+        # 连接到 CAN 总线
         logger.info(f"Connecting arm on {self.config.port}...")
         self.bus.connect()
 
-        # Run calibration if needed
+        # 如有需要则运行校准
         if not self.is_calibrated and calibrate:
             logger.info(
                 "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
@@ -114,22 +114,22 @@ class OpenArmLeader(Teleoperator):
 
     @property
     def is_calibrated(self) -> bool:
-        """Check if teleoperator is calibrated."""
+        """检查遥操作设备是否已校准。"""
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
         """
-        Run calibration procedure for OpenArms leader.
+        运行 OpenArms 主臂的校准流程。
 
-        The calibration procedure:
-        1. Disable torque (if not already disabled)
-        2. Ask user to position arm in zero position (hanging with gripper closed)
-        3. Set this as zero position
-        4. Record range of motion for each joint
-        5. Save calibration
+        校准流程：
+        1. 禁用力矩（如果尚未禁用）
+        2. 要求用户将手臂置于零位（自然下垂且夹爪闭合）
+        3. 将该位置设为零位
+        4. 记录每个关节的运动范围
+        5. 保存校准
         """
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用它还是重新运行校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )
@@ -141,7 +141,7 @@ class OpenArmLeader(Teleoperator):
         logger.info(f"\nRunning calibration for {self}")
         self.bus.disable_torque()
 
-        # Step 1: Set zero position
+        # 第 1 步：设置零位
         input(
             "\nCalibration: Set Zero Position)\n"
             "Position the arm in the following configuration:\n"
@@ -150,12 +150,12 @@ class OpenArmLeader(Teleoperator):
             "Press ENTER when ready..."
         )
 
-        # Set current position as zero for all motors
+        # 将所有电机的当前位置设为零位
         self.bus.set_zero_position()
         logger.info("Arm zero position set.")
 
         logger.info("Setting range: -90° to +90° by default for all joints")
-        # TODO(Steven, Pepijn): Check if MotorCalibration is actually needed here given that we only use Degrees
+        # TODO(Steven, Pepijn): 鉴于我们只使用角度，检查这里是否真的需要 MotorCalibration
         for motor_name, motor in self.bus.motors.items():
             self.calibration[motor_name] = MotorCalibration(
                 id=motor.id,
@@ -171,9 +171,9 @@ class OpenArmLeader(Teleoperator):
 
     def configure(self) -> None:
         """
-        Configure motors for manual teleoperation.
+        为手动遥操作配置电机。
 
-        For manual control, we disable torque so the arm can be moved by hand.
+        对于手动控制，我们禁用力矩，以便可以用手移动手臂。
         """
 
         return self.bus.disable_torque() if self.config.manual_control else self.bus.configure_motors()
@@ -186,18 +186,18 @@ class OpenArmLeader(Teleoperator):
     @check_if_not_connected
     def get_action(self) -> RobotAction:
         """
-        Get current action from the leader arm.
+        从主臂获取当前动作。
 
-        This is the main method for teleoperators - it reads the current state
-        of the leader arm and returns it as an action that can be sent to a follower.
+        这是遥操作设备的主要方法——它读取主臂的当前状态，
+        并将其作为可发送给从动臂的动作返回。
 
-        Reads all motor states (pos/vel/torque) in one CAN refresh cycle.
+        在一个 CAN 刷新周期内读取所有电机状态（pos/vel/torque）。
         """
         start = time.perf_counter()
 
         action_dict: dict[str, Any] = {}
 
-        # Use sync_read_all_states to get pos/vel/torque in one go
+        # 使用 sync_read_all_states 一次性获取 pos/vel/torque
         states = self.bus.sync_read_all_states()
         for motor in self.bus.motors:
             state = states.get(motor, {})
@@ -216,9 +216,9 @@ class OpenArmLeader(Teleoperator):
 
     @check_if_not_connected
     def disconnect(self) -> None:
-        """Disconnect from teleoperator."""
+        """断开与遥操作设备的连接。"""
 
-        # Disconnect CAN bus
-        # For manual control, ensure torque is disabled before disconnecting
+        # 断开 CAN 总线
+        # 对于手动控制，在断开连接前确保力矩已禁用
         self.bus.disconnect(disable_torque=self.config.manual_control)
         logger.info(f"{self} disconnected.")

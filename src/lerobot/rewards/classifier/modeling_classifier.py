@@ -24,7 +24,7 @@ from .configuration_classifier import RewardClassifierConfig
 
 
 class ClassifierOutput:
-    """Wrapper for classifier outputs with additional metadata."""
+    """分类器输出的包装类，附带额外的元数据。"""
 
     def __init__(
         self,
@@ -47,13 +47,13 @@ class ClassifierOutput:
 class SpatialLearnedEmbeddings(nn.Module):
     def __init__(self, height, width, channel, num_features=8):
         """
-        PyTorch implementation of learned spatial embeddings
+        可学习空间嵌入的 PyTorch 实现
 
         Args:
-            height: Spatial height of input features
-            width: Spatial width of input features
-            channel: Number of input channels
-            num_features: Number of output embedding dimensions
+            height: 输入特征的空间高度
+            width: 输入特征的空间宽度
+            channel: 输入通道数
+            num_features: 输出嵌入的维度数
         """
         super().__init__()
         self.height = height
@@ -67,30 +67,30 @@ class SpatialLearnedEmbeddings(nn.Module):
 
     def forward(self, features):
         """
-        Forward pass for spatial embedding
+        空间嵌入的前向传播
 
         Args:
-            features: Input tensor of shape [B, H, W, C] or [H, W, C] if no batch
+            features: 形状为 [B, H, W, C] 的输入张量；无批次维度时为 [H, W, C]
         Returns:
-            Output tensor of shape [B, C*F] or [C*F] if no batch
+            形状为 [B, C*F] 的输出张量；无批次维度时为 [C*F]
         """
 
         features = features.last_hidden_state
 
         original_shape = features.shape
         if features.dim() == 3:
-            features = features.unsqueeze(0)  # Add batch dim
+            features = features.unsqueeze(0)  # 添加批次维度
 
         features_expanded = features.unsqueeze(-1)  # [B, H, W, C, 1]
         kernel_expanded = self.kernel.unsqueeze(0)  # [1, H, W, C, F]
 
-        # Element-wise multiplication and spatial reduction
-        output = (features_expanded * kernel_expanded).sum(dim=(2, 3))  # Sum H,W
+        # 逐元素相乘并在空间维度上归约
+        output = (features_expanded * kernel_expanded).sum(dim=(2, 3))  # 对 H、W 求和
 
-        # Reshape to combine channel and feature dimensions
+        # 重塑形状以合并通道维度和特征维度
         output = output.view(output.size(0), -1)  # [B, C*F]
 
-        # Remove batch dim
+        # 移除批次维度
         if len(original_shape) == 3:
             output = output.squeeze(0)
 
@@ -98,7 +98,7 @@ class SpatialLearnedEmbeddings(nn.Module):
 
 
 class Classifier(PreTrainedRewardModel):
-    """Image classifier built on top of a pre-trained encoder."""
+    """构建在预训练编码器之上的图像分类器。"""
 
     name = "reward_classifier"
     config_class = RewardClassifierConfig
@@ -113,9 +113,9 @@ class Classifier(PreTrainedRewardModel):
         super().__init__(config)
         self.config = config
 
-        # Set up encoder
+        # 设置编码器
         encoder = AutoModel.from_pretrained(self.config.model_name, trust_remote_code=True)
-        # Extract vision model if we're given a multimodal model
+        # 如果给定的是多模态模型，则提取视觉模型
         if hasattr(encoder, "vision_model"):
             logging.info("Multimodal model detected - using vision encoder only")
             self.encoder = encoder.vision_model
@@ -124,16 +124,16 @@ class Classifier(PreTrainedRewardModel):
             self.encoder = encoder
             self.vision_config = getattr(encoder, "config", None)
 
-        # Model type from config
+        # 从配置中获取模型类型
         self.is_cnn = self.config.model_type == "cnn"
 
-        # For CNNs, initialize backbone
+        # 对于 CNN，初始化骨干网络
         if self.is_cnn:
             self._setup_cnn_backbone()
 
         self._freeze_encoder()
 
-        # Extract image keys from input_features
+        # 从 input_features 中提取图像键
         self.image_keys = [
             key.replace(".", "_") for key in config.input_features if key.startswith(OBS_IMAGE)
         ]
@@ -147,17 +147,17 @@ class Classifier(PreTrainedRewardModel):
         self._build_classifier_head()
 
     def _setup_cnn_backbone(self):
-        """Set up CNN encoder"""
+        """设置 CNN 编码器"""
         if hasattr(self.encoder, "fc"):
             self.feature_dim = self.encoder.fc.in_features
             self.encoder = nn.Sequential(*list(self.encoder.children())[:-1])
         elif hasattr(self.encoder.config, "hidden_sizes"):
-            self.feature_dim = self.encoder.config.hidden_sizes[-1]  # Last channel dimension
+            self.feature_dim = self.encoder.config.hidden_sizes[-1]  # 最后一个通道维度
         else:
             raise ValueError("Unsupported CNN architecture")
 
     def _freeze_encoder(self) -> None:
-        """Freeze the encoder parameters."""
+        """冻结编码器参数。"""
         for param in self.encoder.parameters():
             param.requires_grad = False
 
@@ -179,11 +179,11 @@ class Classifier(PreTrainedRewardModel):
         return encoder
 
     def _build_classifier_head(self) -> None:
-        """Initialize the classifier head architecture."""
-        # Get input dimension based on model type
+        """初始化分类头结构。"""
+        # 根据模型类型获取输入维度
         if self.is_cnn:
             input_dim = self.config.latent_dim
-        else:  # Transformer models
+        else:  # Transformer 模型
             if hasattr(self.encoder.config, "hidden_size"):
                 input_dim = self.encoder.config.hidden_size
             else:
@@ -201,26 +201,26 @@ class Classifier(PreTrainedRewardModel):
         )
 
     def _get_encoder_output(self, x: torch.Tensor, image_key: str) -> torch.Tensor:
-        """Extract the appropriate output from the encoder."""
+        """从编码器中提取合适的输出。"""
         with torch.no_grad():
             if self.is_cnn:
-                # The HF ResNet applies pooling internally
+                # HF ResNet 会在内部应用池化
                 outputs = self.encoders[image_key](x)
                 return outputs
-            else:  # Transformer models
+            else:  # Transformer 模型
                 outputs = self.encoder(x)
                 return outputs.last_hidden_state[:, 0, :]
 
     def extract_images_and_labels(self, batch: dict[str, Tensor]) -> tuple[list, Tensor]:
-        """Extract image tensors and label tensors from batch."""
-        # Check for both OBS_IMAGE and OBS_IMAGES prefixes
+        """从批次中提取图像张量和标签张量。"""
+        # 检查 OBS_IMAGE 和 OBS_IMAGES 两种前缀
         images = [batch[key] for key in self.config.input_features if key.startswith(OBS_IMAGE)]
         labels = batch[REWARD]
 
         return images, labels
 
     def predict(self, xs: list) -> ClassifierOutput:
-        """Forward pass of the classifier for inference."""
+        """用于推理的分类器前向传播。"""
         encoder_outputs = torch.hstack(
             [self._get_encoder_output(x, img_key) for x, img_key in zip(xs, self.image_keys, strict=True)]
         )
@@ -235,7 +235,7 @@ class Classifier(PreTrainedRewardModel):
         return ClassifierOutput(logits=logits, probabilities=probabilities, hidden_states=encoder_outputs)
 
     def compute_reward(self, batch: dict[str, Tensor]) -> Tensor:
-        """Returns 1.0 for success, 0.0 for failure based on image observations."""
+        """根据图像观测，成功返回 1.0，失败返回 0.0。"""
         images = [batch[key] for key in self.config.input_features if key.startswith(OBS_IMAGE)]
         output = self.predict(images)
 
@@ -245,29 +245,29 @@ class Classifier(PreTrainedRewardModel):
             return torch.argmax(output.probabilities, dim=1).float()
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict[str, Tensor]]:
-        """Standard forward pass for training compatible with train.py."""
-        # Extract images and labels
+        """与 train.py 兼容的标准训练前向传播。"""
+        # 提取图像和标签
         images, labels = self.extract_images_and_labels(batch)
 
-        # Get predictions
+        # 获取预测结果
         outputs = self.predict(images)
 
-        # Calculate loss
+        # 计算损失
         if self.config.num_classes == 2:
-            # Binary classification
+            # 二分类
             loss = nn.functional.binary_cross_entropy_with_logits(outputs.logits, labels)
             predictions = (torch.sigmoid(outputs.logits) > 0.5).float()
         else:
-            # Multi-class classification
+            # 多分类
             loss = nn.functional.cross_entropy(outputs.logits, labels.long())
             predictions = torch.argmax(outputs.logits, dim=1)
 
-        # Calculate accuracy for logging
+        # 计算准确率用于日志记录
         correct = (predictions == labels).sum().item()
         total = labels.size(0)
         accuracy = 100 * correct / total
 
-        # Return loss and metrics for logging
+        # 返回损失和用于日志记录的指标
         output_dict = {
             "accuracy": accuracy,
             "correct": correct,
@@ -277,8 +277,8 @@ class Classifier(PreTrainedRewardModel):
         return loss, output_dict
 
     def predict_reward(self, batch, threshold=0.5):
-        """Eval method. Returns predicted reward with the decision threshold as argument."""
-        # Extract images from batch dict
+        """评估方法。返回预测的奖励，决策阈值作为参数传入。"""
+        # 从批次字典中提取图像
         images = [batch[key] for key in self.config.input_features if key.startswith(OBS_IMAGE)]
 
         if self.config.num_classes == 2:

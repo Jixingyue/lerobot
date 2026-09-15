@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Highlight Reel strategy: on-demand recording via ring buffer."""
+"""精彩片段（Highlight Reel）策略：通过环形缓冲区按需录制。"""
 
 from __future__ import annotations
 
@@ -38,18 +38,18 @@ logger = logging.getLogger(__name__)
 
 
 class HighlightStrategy(RolloutStrategy):
-    """Autonomous rollout with on-demand recording via ring buffer.
+    """自主 rollout，并通过环形缓冲区按需录制。
 
-    The robot runs autonomously while a memory-bounded ring buffer
-    captures continuous telemetry.  When the user presses the save key:
+    机器人自主运行，同时一个有内存上限的环形缓冲区持续捕获遥测
+    数据。当用户按下保存键时：
 
-    1. The ring buffer is flushed to the dataset (last *Z* seconds).
-    2. Live recording continues until the save key is pressed again.
-    3. The episode is saved and the ring buffer resumes capturing.
+    1. 环形缓冲区的内容被刷新到数据集（最近 *Z* 秒）。
+    2. 继续实时录制，直到再次按下保存键。
+    3. 保存该回合，环形缓冲区恢复捕获。
 
-    Requires ``streaming_encoding=True`` (enforced in config validation)
-    so that ``dataset.add_frame`` is a non-blocking queue put — flushing
-    the entire ring buffer in one tick must not stall the control loop.
+    要求 ``streaming_encoding=True``（在配置校验中强制执行），这样
+    ``dataset.add_frame`` 就是一次非阻塞的队列放入操作——在一个节拍内
+    刷新整个环形缓冲区绝不能拖慢控制循环。
     """
 
     config: HighlightStrategyConfig
@@ -66,7 +66,7 @@ class HighlightStrategy(RolloutStrategy):
         self._episode_lock = Lock()
 
     def setup(self, ctx: RolloutContext) -> None:
-        """Initialise the inference engine, ring buffer, and keyboard listener."""
+        """初始化推理引擎、环形缓冲区和键盘监听器。"""
         self._init_engine(ctx)
 
         self._ring = RolloutRingBuffer(
@@ -90,7 +90,7 @@ class HighlightStrategy(RolloutStrategy):
         )
 
     def run(self, ctx: RolloutContext) -> None:
-        """Run the autonomous loop, buffering frames and recording on demand."""
+        """运行自主循环，缓冲帧并按需录制。"""
         engine = self._engine
         cfg = ctx.runtime.cfg
         robot = ctx.hardware.robot_wrapper
@@ -136,12 +136,10 @@ class HighlightStrategy(RolloutStrategy):
                             logger.info("Push requested by user")
                             self._background_push(dataset, cfg)
 
-                        # Record (buffer or live) once per interpolation cycle so
-                        # the frame cadence matches the dataset's declared fps and
-                        # the ring buffer's fps-based sizing; interpolated ticks
-                        # only send commands to the robot.  Save toggles are also
-                        # handled here so an episode boundary always lands on a
-                        # recorded frame.
+                        # 每个插值周期录制一次（缓冲或实时），使帧节拍与数据集
+                        # 声明的 fps 以及环形缓冲区基于 fps 的容量相匹配；被
+                        # 插值的节拍只向机器人发送指令。保存开关的切换也在
+                        # 这里处理，从而保证回合边界总是落在一帧已录制的数据上。
                         if interpolator.emitted_policy_action:
                             with timer.section("record"):
                                 obs_frame = build_dataset_frame(features, obs_processed, prefix=OBS_STR)
@@ -150,10 +148,10 @@ class HighlightStrategy(RolloutStrategy):
 
                                 toggled = False
                                 frame_consumed = False
-                                # NOTE: ``is_set()`` then ``clear()`` is not atomic
-                                # against the keyboard thread setting the flag again
-                                # in between — but that is benign: we lose at most one
-                                # toggle, processed on the next iteration.
+                                # 注意：先 ``is_set()`` 再 ``clear()`` 对于键盘线程
+                                # 在两者之间再次设置标志的情况并不是原子的——但这
+                                # 并无大碍：我们至多丢失一次切换，它会在下一次迭代
+                                # 中被处理。
                                 if self._save_requested.is_set():
                                     self._save_requested.clear()
                                     toggled = True
@@ -183,10 +181,9 @@ class HighlightStrategy(RolloutStrategy):
                                     else:
                                         ring.append(frame)
 
-                            # Draining the ring buffer and finalising an episode both
-                            # block for a good fraction of a second inside the timed
-                            # loop body.  They are operator events, not steady-state
-                            # cost, so drop the partial group and the gap they opened.
+                            # 排空环形缓冲区和终结回合都会在被计时的循环体中
+                            # 阻塞相当一部分秒。它们属于操作员触发的事件，而不是
+                            # 稳态开销，因此丢弃不完整的分组以及它们造成的空隙。
                             if toggled:
                                 if frame_consumed:
                                     timer.log_episode_summary(f"episode {dataset.num_episodes}")
@@ -203,7 +200,7 @@ class HighlightStrategy(RolloutStrategy):
                         dataset.save_episode()
 
     def teardown(self, ctx: RolloutContext) -> None:
-        """Stop listeners, finalise the dataset, and disconnect hardware."""
+        """停止监听器、终结数据集，并断开硬件连接。"""
         play_sounds = ctx.runtime.cfg.play_sounds
         logger.info("Stopping highlight recording")
         log_say("Stopping highlight recording", play_sounds)
@@ -237,16 +234,17 @@ class HighlightStrategy(RolloutStrategy):
         logger.info("Highlight strategy teardown complete")
 
     def _setup_keyboard(self, shutdown_event: ThreadingEvent) -> None:
-        """Set up a keyboard listener for the save and push keys.
+        """为保存键和推送键设置键盘监听器。
 
-        Backend selection (pynput on X11 / trusted-macOS / Windows, a terminal reader on
-        Wayland / headless TTY) is delegated to :func:`create_key_listener`.
+        后端的选择（在 X11 / 受信任的 macOS / Windows 上使用 pynput，在
+        Wayland / 无头 TTY 上使用终端读取器）委托给
+        :func:`create_key_listener`。
         """
         save_key = self.config.save_key
         push_key = self.config.push_key
 
         def dispatch(name: str) -> None:
-            """Apply a resolved key name to the highlight events."""
+            """将解析出的按键名应用到 highlight 的各个事件上。"""
             if name == save_key:
                 self._save_requested.set()
             elif name == push_key:
@@ -260,7 +258,7 @@ class HighlightStrategy(RolloutStrategy):
         )
 
     def _background_push(self, dataset, cfg) -> None:
-        """Queue a Hub push on the single-worker executor."""
+        """在单工作线程执行器上排队一次 Hub 推送。"""
         if self._push_executor is None:
             return
 

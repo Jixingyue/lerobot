@@ -1,17 +1,17 @@
-"""RoboMME environment wrapper for LeRobot evaluation.
+"""用于 LeRobot 评估的 RoboMME 环境包装器。
 
-Wraps the RoboMME ``BenchmarkEnvBuilder`` into a Gymnasium-compatible
-``VectorEnv`` suitable for ``lerobot_eval``.
+将 RoboMME 的 ``BenchmarkEnvBuilder`` 包装为与 Gymnasium 兼容的
+``VectorEnv``，适用于 ``lerobot_eval``。
 
-RoboMME tasks:
-  Counting:    BinFill, PickXtimes, SwingXtimes, StopCube
-  Permanence:  VideoUnmask, VideoUnmaskSwap, ButtonUnmask, ButtonUnmaskSwap
-  Reference:   PickHighlight, VideoRepick, VideoPlaceButton, VideoPlaceOrder
-  Imitation:   MoveCube, InsertPeg, PatternLock, RouteStick
+RoboMME 任务：
+  Counting（计数）:    BinFill, PickXtimes, SwingXtimes, StopCube
+  Permanence（持久性）:  VideoUnmask, VideoUnmaskSwap, ButtonUnmask, ButtonUnmaskSwap
+  Reference（参照）:   PickHighlight, VideoRepick, VideoPlaceButton, VideoPlaceOrder
+  Imitation（模仿）:   MoveCube, InsertPeg, PatternLock, RouteStick
 
-Dataset: lerobot/robomme (LeRobot v3.0, 1,600 episodes)
-Install: see docker/Dockerfile.benchmark.robomme  (Linux only — mani-skill vs numpy pin conflict)
-Benchmark: https://github.com/RoboMME/robomme_benchmark
+数据集：lerobot/robomme（LeRobot v3.0，1,600 个 episode）
+安装：见 docker/Dockerfile.benchmark.robomme（仅 Linux——mani-skill 与 numpy 的版本固定冲突）
+基准测试：https://github.com/RoboMME/robomme_benchmark
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ ROBOMME_TASKS = [
 
 
 class RoboMMEGymEnv(gym.Env):
-    """Thin Gymnasium wrapper around a single RoboMME episode env."""
+    """对单个 RoboMME episode 环境的轻量 Gymnasium 包装。"""
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 10}
 
@@ -87,10 +87,10 @@ class RoboMMEGymEnv(gym.Env):
 
         action_dim = 8 if action_space_type == "joint_angle" else 7
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(action_dim,), dtype=np.float32)
-        # `pixels` must be a nested Dict so `preprocess_observation()` in
-        # envs/utils.py picks it up and maps each camera to
-        # `observation.images.<cam>`. A flat layout (`pixels/image`,
-        # `pixels/wrist_image`) silently drops every image from the batch.
+        # `pixels` 必须是嵌套的 Dict，这样 envs/utils.py 中的
+        # `preprocess_observation()` 才能识别它，并将每个相机映射到
+        # `observation.images.<cam>`。扁平布局（`pixels/image`、
+        # `pixels/wrist_image`）会静默地从批次中丢弃所有图像。
         self.observation_space = spaces.Dict(
             {
                 "pixels": spaces.Dict(
@@ -105,9 +105,9 @@ class RoboMMEGymEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        # A wrapper may be reset more than once when n_episodes > n_envs. Close
-        # the previous SAPIEN environment before replacing it; otherwise every
-        # reset retains Vulkan file descriptors and fence allocations.
+        # 当 n_episodes > n_envs 时，一个包装器可能会被多次 reset。
+        # 在替换之前先关闭之前的 SAPIEN 环境；否则每次
+        # reset 都会保留 Vulkan 文件描述符和 fence 分配。
         self.close()
         self._env = self._builder.make_env_for_episode(
             episode_idx=self._episode_idx,
@@ -122,7 +122,7 @@ class RoboMMEGymEnv(gym.Env):
         return self._convert_obs(obs), self._convert_info(info)
 
     def close(self):
-        """Release the underlying ManiSkill/SAPIEN environment immediately."""
+        """立即释放底层的 ManiSkill/SAPIEN 环境。"""
         if self._env is not None:
             try:
                 self._env.close()
@@ -145,7 +145,7 @@ class RoboMMEGymEnv(gym.Env):
         return self._convert_obs(obs), float(reward), terminated_bool, truncated_bool, conv_info
 
     def render(self) -> np.ndarray | None:
-        """Return the front camera image from the last observation for video recording."""
+        """返回上一次观测中的前置相机图像，用于视频录制。"""
         if self._last_raw_obs is None:
             return np.zeros((256, 256, 3), dtype=np.uint8)
         front = self._last_raw_obs.get("front_rgb_list")
@@ -203,7 +203,7 @@ def _make_env_fns(
     front_camera_name: str,
     wrist_camera_name: str,
 ) -> list[Callable[[], RoboMMEGymEnv]]:
-    """Build n_envs factory callables for one RoboMME task id."""
+    """为一个 RoboMME 任务 id 构建 n_envs 个工厂可调用对象。"""
 
     def _make_one(episode_index: int) -> RoboMMEGymEnv:
         return RoboMMEGymEnv(
@@ -230,13 +230,13 @@ def create_robomme_envs(
     wrist_camera_name: str = "camera2",
     env_cls: Callable[[Sequence[Callable[[], Any]]], Any] | None = None,
 ) -> dict[str, dict[int, gym.vector.VectorEnv]]:
-    """Create vectorized RoboMME environments for evaluation.
+    """创建用于评估的向量化 RoboMME 环境。
 
-    `task` may be a single RoboMME task name (e.g. "PickXtimes") or a
-    comma-separated list (e.g. "PickXtimes,BinFill,StopCube"). Each task
-    becomes its own suite in the returned mapping.
+    `task` 可以是单个 RoboMME 任务名（例如 "PickXtimes"），也可以是
+    逗号分隔的列表（例如 "PickXtimes,BinFill,StopCube"）。每个任务
+    在返回的映射中对应独立的测试套件。
 
-    Returns {suite_name: {task_id: VectorEnv}} matching lerobot's expected format.
+    返回 {suite_name: {task_id: VectorEnv}}，与 lerobot 期望的格式一致。
     """
     if env_cls is None or not callable(env_cls):
         raise ValueError("env_cls must be a callable that wraps a list of env factory callables.")

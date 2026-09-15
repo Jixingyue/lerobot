@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def make_robot_from_config(config: RobotConfig) -> Robot:
-    # TODO(Steven): Consider just using the make_device_from_device_class for all types
+    # TODO(Steven): 考虑对所有类型直接使用 make_device_from_device_class
     if config.type == "koch_follower":
         from .koch_follower import KochFollower
 
@@ -89,11 +89,11 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
             raise ValueError(f"Error creating robot with config {config}: {e}") from e
 
 
-# TODO(pepijn): Move to pipeline step to make sure we don't have to do this in the robot code and send action to robot is clean for use in dataset
+# TODO(pepijn): 移到 pipeline step 中，以确保不必在机器人代码中执行此操作，并且发送给机器人的动作可直接用于数据集
 def ensure_safe_goal_position(
     goal_present_pos: dict[str, tuple[float, float]], max_relative_target: float | dict[str, float]
 ) -> dict[str, float]:
-    """Caps relative action target magnitude for safety."""
+    """出于安全考虑限制相对动作目标的大小。"""
 
     if isinstance(max_relative_target, float):
         diff_cap = dict.fromkeys(goal_present_pos, max_relative_target)

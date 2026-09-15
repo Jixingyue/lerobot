@@ -26,16 +26,17 @@ _VALID_REDUCTIONS = ("none", "max", "mean", "sum")
 
 class AverageMeter:
     """
-    Computes and stores the average and current value
-    Adapted from https://github.com/pytorch/examples/blob/main/imagenet/main.py
+    计算并存储平均值和当前值
+    改编自 https://github.com/pytorch/examples/blob/main/imagenet/main.py
 
-    Args:
-        name: Display name of the metric.
-        fmt: Format string used when rendering the metric.
-        reduction: Cross-process reduction applied by :meth:`MetricsTracker.reduce_across_ranks`
-            before logging. One of ``"none"`` (per-rank value, default), ``"max"``, ``"mean"``,
-            or ``"sum"``. Use ``"max"`` for bottleneck-style metrics (e.g. dataloading or
-            update wall time) so multi-GPU runs report the slowest rank rather than rank 0.
+    参数:
+        name: 指标的显示名称。
+        fmt: 渲染该指标时使用的格式字符串。
+        reduction: 在记录日志之前由
+            :meth:`MetricsTracker.reduce_across_ranks` 应用的跨进程归约。
+            取值为 ``"none"``（各 rank 自身的值，默认）、``"max"``、``"mean"``
+            或 ``"sum"`` 之一。对于瓶颈类指标（例如数据加载或
+            更新的挂钟时间），请使用 ``"max"``，这样多 GPU 运行报告的是最慢的 rank 而不是 rank 0。
     """
 
     def __init__(self, name: str, fmt: str = ":f", reduction: str = "none"):
@@ -67,24 +68,24 @@ class AverageMeter:
 
 class MetricsTracker:
     """
-    A helper class to track and log metrics over time.
+    一个用于随时间跟踪和记录指标的辅助类。
 
-    Args:
-        batch_size (int): Per-process batch size (samples per micro-batch on each
-            data-parallel worker).
-        num_frames (int): Total number of frames in the training dataset.
-        num_episodes (int): Total number of episodes in the training dataset.
-        metrics (dict[str, AverageMeter]): The meters to track, keyed by metric name.
-        initial_step (int): Step counter to start from (non-zero when resuming a run).
-            Defaults to 0.
-        dp_world_size (int): Number of distinct data-parallel workers
-            (`dp_replicate * dp_shard`), used to scale sample accounting; context-parallel
-            peers consume the same batch and must not be double counted. Defaults to 1.
+    参数:
+        batch_size (int): 每进程批次大小（每个数据并行工作进程上
+            每个微批次的样本数）。
+        num_frames (int): 训练数据集中的总帧数。
+        num_episodes (int): 训练数据集中的总 episode 数。
+        metrics (dict[str, AverageMeter]): 要跟踪的计量器，以指标名为键。
+        initial_step (int): 起始步计数器（恢复运行时非零）。
+            默认为 0。
+        dp_world_size (int): 相互独立的数据并行工作进程数
+            （`dp_replicate * dp_shard`），用于缩放样本计数；上下文并行的
+            各 peer 消费同一批次，不能被重复计数。默认为 1。
 
-    Usage pattern:
+    使用模式：
 
     ```python
-    # initialize, potentially with non-zero initial step (e.g. if resuming run)
+    # 初始化，起始步可能非零（例如恢复运行时）
     metrics = {"loss": AverageMeter("loss", ":.3f")}
     train_metrics = MetricsTracker(
         batch_size,
@@ -95,20 +96,20 @@ class MetricsTracker:
         dp_world_size=dp_world,
     )
 
-    # update metrics derived from step (samples, episodes, epochs) at each training step
+    # 在每个训练步更新由 step 派生的指标（样本数、episode 数、epoch 数）
     train_metrics.step()
 
-    # update various metrics
+    # 更新各类指标
     loss = policy.forward(batch)
     train_metrics.loss = loss
 
-    # display current metrics
+    # 显示当前指标
     logging.info(train_metrics)
 
-    # export for wandb
+    # 导出到 wandb
     wandb.log(train_metrics.to_dict())
 
-    # reset averages after logging
+    # 记录日志后重置平均值
     train_metrics.reset_averages()
     ```
     """
@@ -139,21 +140,21 @@ class MetricsTracker:
         self._batch_size = batch_size
         self._num_frames = num_frames
         self._avg_samples_per_ep = num_frames / num_episodes
-        # Sample accounting scales by the number of DISTINCT data-parallel workers, which is
-        # dp_replicate * dp_shard — not the world size: context-parallel peers consume the same
-        # batch and must not be double counted. `step` counts micro-batches, so no
-        # grad-accumulation factor belongs here either.
+        # 样本计数按相互独立的数据并行工作进程数缩放，即
+        # dp_replicate * dp_shard——而不是 world 大小：上下文并行的各 peer
+        # 消费同一批次，不能被重复计数。`step` 计数的是微批次，因此
+        # 这里同样不应包含梯度累积因子。
         self._dp_world_size = dp_world_size
         self.metrics = metrics
 
         self.steps = initial_step
-        # A sample is an (observation,action) pair, where observation and action
-        # can be on multiple timestamps. In a batch, we have `batch_size` number of samples.
+        # 一个样本是一对 (observation, action)，其中观测和动作
+        # 可以跨越多个时间戳。在一个批次中，我们有 `batch_size` 个样本。
         self.samples = self.steps * self._batch_size * self._dp_world_size
         self.episodes = self.samples / self._avg_samples_per_ep
         self.epochs = self.samples / self._num_frames
-        # Meter names the caller registered up front. update_metrics() leaves these untouched, so a
-        # policy that echoes e.g. "loss" in its output dict can't clobber the aggregated meter.
+        # 调用方预先注册的计量器名称。update_metrics() 不会触碰这些计量器，
+        # 因此在输出字典中回传例如 "loss" 的策略不会覆盖已聚合的计量器。
         self._caller_metrics: set[str] = set(self.metrics)
 
     def __getattr__(self, name: str) -> int | dict[str, AverageMeter] | AverageMeter | Any:
@@ -174,7 +175,7 @@ class MetricsTracker:
 
     def step(self) -> None:
         """
-        Updates metrics that depend on 'step' for one step.
+        将依赖于 'step' 的指标向前更新一步。
         """
         self.steps += 1
         self.samples += self._batch_size * self._dp_world_size
@@ -182,10 +183,10 @@ class MetricsTracker:
         self.epochs = self.samples / self._num_frames
 
     def update_metrics(self, values: dict[str, Any]) -> None:
-        """Accumulate a dict of scalar metrics, auto-registering a meter for each new key.
+        """累积一个标量指标字典，并为每个新键自动注册一个计量器。
 
-        Non-numeric values and bools are ignored.
-        Caller-registered metrics (those passed to the constructor) are never overridden.
+        非数值和布尔值会被忽略。
+        调用方注册的指标（即传给构造函数的那些）永远不会被覆盖。
         """
         for name, value in values.items():
             if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -198,18 +199,18 @@ class MetricsTracker:
 
     def reduce_across_ranks(self) -> None:
         """
-        Synchronises the running averages of every metric whose ``reduction`` is not ``"none"``
-        across all distributed processes (in-place).
+        在所有分布式进程之间（原地）同步每个 ``reduction`` 不为 ``"none"``
+        的指标的运行平均值。
 
-        This is a collective operation and MUST be invoked on every rank — typically just before
-        logging. Outside distributed runs it is a no-op. Without it, metrics reported by the
-        main process only reflect rank 0; for bottleneck-style timings (``dataloading_s``,
-        ``update_s``, ...) that means the slowest worker's stall is invisible.
+        这是一个集合操作，必须在每个 rank 上调用——通常就在
+        记录日志之前。在非分布式运行中它是空操作。没有它，主进程
+        报告的指标只反映 rank 0；对于瓶颈类计时（``dataloading_s``、
+        ``update_s``……），这意味着最慢工作进程的卡顿将不可见。
 
-        Torch-native on purpose: metrics code carries no Accelerator dependency.
-        Note the reduction spans the WORLD group — correct for count-free averages (loss values
-        are identical within a context-parallel group, so including CP peers is a weighted
-        no-op).
+        有意使用 Torch 原生实现：指标代码不携带任何 Accelerator 依赖。
+        请注意归约跨越的是 WORLD 组——对于与计数无关的平均值这是正确的
+        （在一个上下文并行组内损失值相同，因此包含 CP peer 是一次加权后
+        的空操作）。
         """
         if not dist.is_initialized() or dist.get_world_size() <= 1:
             return
@@ -236,19 +237,19 @@ class MetricsTracker:
             dist.all_reduce(tensor, op=reduce_ops[reduction])
             for name, value in zip(names, tensor.tolist(), strict=True):
                 meter = self.metrics[name]
-                # Preserve avg == sum / count so a later .update() on this meter accumulates
-                # against the cluster view, not the stale per-rank history.
+                # 保持 avg == sum / count，这样稍后对此计量器调用 .update()
+                # 时会基于集群视角累积，而不是基于过时的逐 rank 历史。
                 meter.avg = value
                 meter.sum = value * meter.count
 
     def __str__(self) -> str:
         display_list = [
             f"step:{format_big_number(self.steps)}",
-            # number of samples seen during training
+            # 训练期间见到的样本数
             f"smpl:{format_big_number(self.samples)}",
-            # number of episodes seen during training
+            # 训练期间见到的 episode 数
             f"ep:{format_big_number(self.episodes)}",
-            # number of time all unique samples are seen
+            # 所有唯一样本被见到的次数
             f"epch:{self.epochs:.2f}",
             *[str(m) for m in self.metrics.values()],
         ]
@@ -256,7 +257,7 @@ class MetricsTracker:
 
     def to_dict(self, use_avg: bool = True) -> dict[str, int | float]:
         """
-        Returns the current metric values (or averages if `use_avg=True`) as a dict.
+        以字典形式返回当前指标值（当 `use_avg=True` 时返回平均值）。
         """
         return {
             "steps": self.steps,
@@ -267,6 +268,6 @@ class MetricsTracker:
         }
 
     def reset_averages(self) -> None:
-        """Resets average meters."""
+        """重置各平均计量器。"""
         for m in self.metrics.values():
             m.reset()

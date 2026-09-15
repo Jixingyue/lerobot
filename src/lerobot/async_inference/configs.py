@@ -25,7 +25,7 @@ from .constants import (
     DEFAULT_OBS_QUEUE_TIMEOUT,
 )
 
-# Aggregate function registry for CLI usage
+# 聚合函数注册表，供 CLI 使用
 AGGREGATE_FUNCTIONS = {
     "weighted_average": lambda old, new: 0.3 * old + 0.7 * new,
     "latest_only": lambda old, new: new,
@@ -35,7 +35,7 @@ AGGREGATE_FUNCTIONS = {
 
 
 def get_aggregate_function(name: str) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
-    """Get aggregate function by name from registry."""
+    """根据名称从注册表中获取聚合函数。"""
     if name not in AGGREGATE_FUNCTIONS:
         available = list(AGGREGATE_FUNCTIONS.keys())
         raise ValueError(f"Unknown aggregate function '{name}'. Available: {available}")
@@ -44,17 +44,17 @@ def get_aggregate_function(name: str) -> Callable[[torch.Tensor, torch.Tensor], 
 
 @dataclass
 class PolicyServerConfig:
-    """Configuration for PolicyServer.
+    """PolicyServer 的配置。
 
-    This class defines all configurable parameters for the PolicyServer,
-    including networking settings and action chunking specifications.
+    该类定义了 PolicyServer 的所有可配置参数，
+    包括网络设置和动作分块（action chunking）规范。
     """
 
-    # Networking configuration
+    # 网络配置
     host: str = field(default="localhost", metadata={"help": "Host address to bind the server to"})
     port: int = field(default=8080, metadata={"help": "Port number to bind the server to"})
 
-    # Timing configuration
+    # 时序配置
     fps: int = field(default=DEFAULT_FPS, metadata={"help": "Frames per second"})
     inference_latency: float = field(
         default=DEFAULT_INFERENCE_LATENCY, metadata={"help": "Target inference latency in seconds"}
@@ -65,7 +65,7 @@ class PolicyServerConfig:
     )
 
     def __post_init__(self):
-        """Validate configuration after initialization."""
+        """初始化后验证配置。"""
         if self.port < 1 or self.port > 65535:
             raise ValueError(f"Port must be between 1 and 65535, got {self.port}")
 
@@ -80,16 +80,16 @@ class PolicyServerConfig:
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "PolicyServerConfig":
-        """Create a PolicyServerConfig from a dictionary."""
+        """从字典创建 PolicyServerConfig。"""
         return cls(**config_dict)
 
     @property
     def environment_dt(self) -> float:
-        """Environment time step, in seconds"""
+        """环境时间步长，单位为秒"""
         return 1 / self.fps
 
     def to_dict(self) -> dict:
-        """Convert the configuration to a dictionary."""
+        """将配置转换为字典。"""
         return {
             "host": self.host,
             "port": self.port,
@@ -101,30 +101,30 @@ class PolicyServerConfig:
 
 @dataclass
 class RobotClientConfig:
-    """Configuration for RobotClient.
+    """RobotClient 的配置。
 
-    This class defines all configurable parameters for the RobotClient,
-    including network connection, policy settings, and control behavior.
+    该类定义了 RobotClient 的所有可配置参数，
+    包括网络连接、策略设置和控制行为。
     """
 
-    # Policy configuration
+    # 策略配置
     policy_type: str = field(metadata={"help": "Type of policy to use"})
     pretrained_name_or_path: str = field(metadata={"help": "Pretrained model name or path"})
 
-    # Robot configuration (for CLI usage - robot instance will be created from this)
+    # 机器人配置（供 CLI 使用——将从此配置创建机器人实例）
     robot: RobotConfig = field(metadata={"help": "Robot configuration"})
 
-    # Policies typically output K actions at max, but we can use less to avoid wasting bandwidth (as actions
-    # would be aggregated on the client side anyway, depending on the value of `chunk_size_threshold`)
+    # 策略通常最多输出 K 个动作，但我们可以使用更少的动作以避免浪费带宽（因为动作无论如何
+    # 都会在客户端聚合，具体取决于 `chunk_size_threshold` 的值）
     actions_per_chunk: int = field(metadata={"help": "Number of actions per chunk"})
 
-    # Task instruction for the robot to execute (e.g., 'fold my tshirt')
+    # 要机器人执行的任务指令（例如 'fold my tshirt'）
     task: str = field(default="", metadata={"help": "Task instruction for the robot to execute"})
 
-    # Network configuration
+    # 网络配置
     server_address: str = field(default="localhost:8080", metadata={"help": "Server address to connect to"})
 
-    # Device configuration
+    # 设备配置
     policy_device: str = field(default="cpu", metadata={"help": "Device for policy inference"})
     client_device: str = field(
         default="cpu",
@@ -133,28 +133,28 @@ class RobotClientConfig:
         },
     )
 
-    # Control behavior configuration
+    # 控制行为配置
     chunk_size_threshold: float = field(default=0.5, metadata={"help": "Threshold for chunk size control"})
     fps: int = field(default=DEFAULT_FPS, metadata={"help": "Frames per second"})
 
-    # Aggregate function configuration (CLI-compatible)
+    # 聚合函数配置（兼容 CLI）
     aggregate_fn_name: str = field(
         default="weighted_average",
         metadata={"help": f"Name of aggregate function to use. Options: {list(AGGREGATE_FUNCTIONS.keys())}"},
     )
 
-    # Debug configuration
+    # 调试配置
     debug_visualize_queue_size: bool = field(
         default=False, metadata={"help": "Visualize the action queue size"}
     )
 
     @property
     def environment_dt(self) -> float:
-        """Environment time step, in seconds"""
+        """环境时间步长，单位为秒"""
         return 1 / self.fps
 
     def __post_init__(self):
-        """Validate configuration after initialization."""
+        """初始化后验证配置。"""
         if not self.server_address:
             raise ValueError("server_address cannot be empty")
 
@@ -183,11 +183,11 @@ class RobotClientConfig:
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "RobotClientConfig":
-        """Create a RobotClientConfig from a dictionary."""
+        """从字典创建 RobotClientConfig。"""
         return cls(**config_dict)
 
     def to_dict(self) -> dict:
-        """Convert the configuration to a dictionary."""
+        """将配置转换为字典。"""
         return {
             "server_address": self.server_address,
             "policy_type": self.policy_type,

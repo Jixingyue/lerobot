@@ -27,37 +27,34 @@ from .config_phone import PhoneOS
 @dataclass
 class MapPhoneActionToRobotAction(RobotActionProcessorStep):
     """
-    Maps calibrated phone pose actions to standardized robot action inputs.
+    将校准后的手机位姿动作映射为标准的机器人动作输入。
 
-    This processor step acts as a bridge between the phone teleoperator's output
-    and the robot's expected action format. It remaps the phone's 6-DoF pose
-    (position and rotation) to the robot's target end-effector pose, applying
-    necessary axis inversions and swaps. It also interprets platform-specific
-    button presses to generate a gripper command.
+    该处理步骤充当手机遥操作设备输出与机器人期望的动作格式之间的桥梁。
+    它将手机的 6 自由度位姿（位置和旋转）重映射为机器人的目标末端执行器位姿，
+    并应用必要的轴反转和交换。它还会解析平台特定的按键输入以生成夹爪命令。
 
     Attributes:
-        platform: The operating system of the phone (iOS or Android), used
-            to determine the correct button mappings for the gripper.
+        platform: 手机的操作系统（iOS 或 Android），用于确定夹爪的正确按键映射。
     """
 
-    # TODO(Steven): Gripper vel could be output of phone_teleop directly
+    # TODO(Steven): 夹爪速度可以直接作为 phone_teleop 的输出
     platform: PhoneOS
     _enabled_prev: bool = field(default=False, init=False, repr=False)
 
     def action(self, action: RobotAction) -> RobotAction:
         """
-        Processes the phone action dictionary to create a robot action dictionary.
+        处理手机动作字典以创建机器人动作字典。
 
         Args:
-            act: The input action dictionary from the phone teleoperator.
+            act: 来自手机遥操作设备的输入动作字典。
 
         Returns:
-            A new action dictionary formatted for the robot controller.
+            为机器人控制器格式化的新动作字典。
 
         Raises:
-            ValueError: If 'pos' or 'rot' keys are missing from the input action.
+            ValueError: 如果输入动作中缺少 'pos' 或 'rot' 键。
         """
-        # Pop them from the action
+        # 将它们从动作中弹出
         enabled = bool(action.pop("phone.enabled"))
         pos = action.pop("phone.pos")
         rot = action.pop("phone.rot")
@@ -66,9 +63,9 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         if pos is None or rot is None:
             raise ValueError("pos and rot must be present in action")
 
-        rotvec = rot.as_rotvec()  # Absolute orientation as rotvec
+        rotvec = rot.as_rotvec()  # 以旋转向量表示的绝对方向
 
-        # Map certain inputs to certain actions
+        # 将特定输入映射到特定动作
         if self.platform == PhoneOS.IOS:
             gripper_vel = float(inputs.get("a3", 0.0))
         else:
@@ -76,9 +73,9 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
             b = float(inputs.get("reservedButtonB", 0.0))
             gripper_vel = (
                 a - b
-            )  # Positive if a is pressed, negative if b is pressed, 0 if both or neither are pressed
+            )  # 按下 a 时为正，按下 b 时为负，两者都按或都未按则为 0
 
-        # For some actions we need to invert the axis
+        # 对于某些动作，我们需要反转轴
         action["enabled"] = enabled
         action["target_x"] = -pos[1] if enabled else 0.0
         action["target_y"] = pos[0] if enabled else 0.0
@@ -86,7 +83,7 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
         action["target_wx"] = rotvec[1] if enabled else 0.0
         action["target_wy"] = rotvec[0] if enabled else 0.0
         action["target_wz"] = -rotvec[2] if enabled else 0.0
-        action["gripper_vel"] = gripper_vel  # Still send gripper action when disabled
+        action["gripper_vel"] = gripper_vel  # 禁用时仍发送夹爪动作
         return action
 
     def transform_features(

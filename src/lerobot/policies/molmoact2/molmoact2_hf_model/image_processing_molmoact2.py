@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-"""Image processor class for MolmoAct2"""
+"""MolmoAct2 的图像处理器类"""
 
 import einops
 import numpy as np
@@ -87,32 +87,32 @@ def resize_image(
 
 
 def select_tiling(h, w, patch_size, max_num_crops):
-    """Divide in image of size [w, h] in up to max_num_patches of size patch_size"""
+    """将尺寸为 [w, h] 的图像划分为最多 max_num_patches 个尺寸为 patch_size 的块"""
     original_size = np.stack([h, w])  # [1, 2]
     tilings = []
     for i in range(1, max_num_crops + 1):
         for j in range(1, max_num_crops + 1):
             if i * j <= max_num_crops:
                 tilings.append((i, j))
-    # sort so argmin and argmax favour smaller tilings in the event of a tie
+    # 排序，使得出现并列时 argmin 和 argmax 倾向于更小的平铺方案
     tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
     candidate_tilings = np.array(tilings, dtype=np.int32)  # [n_resolutions, 2]
     candidate_resolutions = candidate_tilings * patch_size  # [n_resolutions, 2]
 
-    # How much we would need to scale the image to fit exactly in each tiling
+    # 要使图像恰好放入每种平铺方案所需的缩放比例
     original_size = np.stack([h, w], dtype=np.float32)  # [1, 2]
 
-    # The original size can be zero in rare cases if the image is smaller than the margin
-    # In those cases letting the scale become infinite means the tiling is based on the
-    # other side, or falls back to the smallest tiling
+    # 在罕见情况下，如果图像比边距还小，原始尺寸可能为零
+    # 在这些情况下，让缩放比例变为无穷大意味着平铺将基于
+    # 另一条边，或者回退到最小的平铺方案
     with np.errstate(divide="ignore"):
         required_scale_d = (candidate_resolutions.astype(np.float32) / original_size,)
     required_scale = np.min(required_scale_d, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
-        # We are forced to downscale, so try to minimize the amount of downscaling
+        # 我们被迫缩小图像，因此尽量减少缩小的幅度
         ix = np.argmax(required_scale)
     else:
-        # Pick the resolution that required the least upscaling so that it most closely fits the image
+        # 选择所需放大倍数最小的分辨率，使其最贴近图像
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
         ix = np.argmin(required_scale)
     return candidate_tilings[ix]
@@ -150,28 +150,28 @@ def build_overlapping_crops(
     image_std: list[float],
     image_patch_size: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Decompose an image into a set of overlapping crops
+    """将图像分解为一组相互重叠的裁剪块
 
-    :return crop_arr: [n_crops, h, w, 3] The crops
-    :return patch_idx: [overlap_patch_h, overlap_patch_w] For each patch in the resized image
-                        the crops were extracted from, what patch in `crop_arr` it corresponds to
+    :return crop_arr: [n_crops, h, w, 3] 裁剪块
+    :return patch_idx: [overlap_patch_h, overlap_patch_w] 对于裁剪来源的缩放图像中的
+                        每个块，记录它对应 `crop_arr` 中的哪个块
     """
     original_image_h, original_image_w = image.shape[:2]
     crop_size = base_image_input_size[0]
     assert base_image_input_size[0] == base_image_input_size[1]
 
     left_margin, right_margin = overlap_margins
-    total_margin_pixels = image_patch_size * (right_margin + left_margin)  # pixels removed per dim
-    crop_patches = base_image_input_size[0] // image_patch_size  # patches per crop dim
-    crop_window_patches = crop_patches - (right_margin + left_margin)  # usable patches
+    total_margin_pixels = image_patch_size * (right_margin + left_margin)  # 每个维度上移除的像素数
+    crop_patches = base_image_input_size[0] // image_patch_size  # 每个裁剪维度上的块数
+    crop_window_patches = crop_patches - (right_margin + left_margin)  # 可用的块数
     crop_window_size = crop_window_patches * image_patch_size
     crop_patch_w = base_image_input_size[1] // image_patch_size
     crop_patch_h = base_image_input_size[0] // image_patch_size
     original_image_h, original_image_w = image.shape[:2]
     crop_size = base_image_input_size[0]
 
-    # Decide how to tile the image, to account for the overlap margins we compute the tiling
-    # as if we had an image without the margins and were using a crop size without the margins
+    # 决定如何平铺图像。为了处理重叠边距，我们按照“图像不含边距、
+    # 且使用不含边距的裁剪尺寸”的方式来计算平铺
     tiling = select_tiling(
         original_image_h - total_margin_pixels,
         original_image_w - total_margin_pixels,
@@ -189,15 +189,15 @@ def build_overlapping_crops(
     )
     src = normalize_image(src, image_mean, image_std)
 
-    # Now we have to split the image into crops, and track what patches came from
-    # where in `patch_idx_arr`
+    # 现在需要将图像切分为多个裁剪块，并在 `patch_idx_arr` 中记录
+    # 各个块来自哪里
     n_crops = tiling[0] * tiling[1]
     crop_arr = np.zeros([n_crops, crop_size, crop_size, 3], dtype=src.dtype)
     patch_idx_arr = np.zeros([n_crops, crop_patch_h, crop_patch_w], dtype=np.int32)
     on_crop = 0
     for i in range(tiling[0]):
-        # Slide over `src` by `crop_window_size` steps, but extract crops of size `crops_size`
-        # which results in overlapping crop windows
+        # 以 `crop_window_size` 为步长在 `src` 上滑动，但提取尺寸为 `crop_size`
+        # 的裁剪块，从而产生重叠的裁剪窗口
         y0 = i * crop_window_size
         for j in range(tiling[1]):
             x0 = j * crop_window_size
@@ -205,7 +205,7 @@ def build_overlapping_crops(
             patch_idx = np.arange(crop_patch_w * crop_patch_h).reshape(crop_patch_h, crop_patch_w)
             patch_idx += on_crop * crop_patch_h * crop_patch_w
 
-            # Mask out idx that are in the overlap region
+            # 屏蔽位于重叠区域内的索引
             if i != 0:
                 patch_idx[:left_margin, :] = -1
             if j != 0:
@@ -217,14 +217,14 @@ def build_overlapping_crops(
             patch_idx_arr[on_crop] = patch_idx
             on_crop += 1
 
-    # `patch_idx_arr` is ordered crop-by-crop, here we transpose `patch_idx_arr`
-    # so it is ordered left-to-right order
+    # `patch_idx_arr` 按裁剪块逐个排序，这里对 `patch_idx_arr` 做转置，
+    # 使其按从左到右的顺序排列
     patch_idx_arr = np.reshape(patch_idx_arr, [tiling[0], tiling[1], crop_patch_h, crop_patch_w])
     patch_idx_arr = np.transpose(patch_idx_arr, [0, 2, 1, 3])
     patch_idx_arr = np.reshape(patch_idx_arr, [-1])
 
-    # Now get the parts not in the overlap region, so it should map each patch in `src`
-    # to the correct patch it should come from in `crop_arr`
+    # 现在取出不在重叠区域内的部分，这样它就能将 `src` 中的每个块
+    # 映射到 `crop_arr` 中其应来源的正确块
     patch_idx_arr = patch_idx_arr[patch_idx_arr >= 0].reshape(
         src.shape[0] // image_patch_size,
         src.shape[1] // image_patch_size,
@@ -233,7 +233,7 @@ def build_overlapping_crops(
 
 
 def batch_pixels_to_patches(array: np.ndarray, patch_size: int) -> np.ndarray:
-    """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
+    """将 [n_images, h, w, 3] 的图像重塑为 [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
         n_crops, h, w = array.shape
         h_patches = h // patch_size
@@ -282,10 +282,10 @@ def image_to_patches_and_grids(
     crop_mode: str = "overlap-and-resize-c2",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    :return image_grids, the shape of each (low-res, high-res) image after pooling
-    :return crops, the image crops to processes with the ViT
-    :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
-                                patches in `crops` to pool for that token, masked with -1
+    :return image_grids，每张（低分辨率、高分辨率）图像池化后的形状
+    :return crops，要用 ViT 处理的图像裁剪块
+    :return pooled_patch_idx，对于 `image_tokens` 中的每个 patch_id token，
+                                为该 token 做池化时所用 `crops` 中块的索引，用 -1 屏蔽
     """
     if isinstance(base_image_input_size, int):
         base_image_input_size = (base_image_input_size, base_image_input_size)
@@ -332,7 +332,7 @@ def image_to_patches_and_grids(
     h, w = pooling_idx.shape[:2]
     pooling_idx = pooling_idx.reshape([-1, pooling_h * pooling_w])
 
-    # Finally do the same for the global image
+    # 最后对全局图像执行同样的操作
     resized, resize_idx = build_resized_image(
         image,
         base_image_input_size,
@@ -347,7 +347,7 @@ def image_to_patches_and_grids(
     resized_h, resized_w = resize_idx.shape[:2]
     resize_idx = resize_idx.reshape([-1, pooling_h * pooling_w])
 
-    # Global image goes first, so the order of patches in previous crops gets increased
+    # 全局图像排在最前面，因此前面各裁剪块中块的序号相应后移
     pooling_idx = np.where(pooling_idx >= 0, pooling_idx + crop_patch_h * crop_patch_w, -1)
     pooling_idx = np.concatenate([resize_idx, pooling_idx])
     image_grid = [np.array([resized_h, resized_w, h, w])]
@@ -365,27 +365,27 @@ class MolmoAct2ImagesKwargs(ImagesKwargs, total=False):
 
 class MolmoAct2ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a MolmoAct2 image processor that preprocesses images for the model.
+    构造一个 MolmoAct2 图像处理器，用于为模型预处理图像。
 
-    Args:
-        size (`dict[str, int]` *optional*, defaults to `{"height": 378, "width": 378}`):
-            Size of the image after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use when resizing the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        max_crops (`int`, *optional*, defaults to `8`):
-            Maximum number of crops to use per image.
-        overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
-            Overlap margins to use.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
-            The pooling size of the vision adapter.
+    参数：
+        size (`dict[str, int]`，*可选*，默认为 `{"height": 378, "width": 378}`)：
+            图像缩放后的尺寸。
+        resample (`PILImageResampling`，*可选*，默认为 `Resampling.BILINEAR`)：
+            缩放图像时使用的重采样滤波器。
+        image_mean (`float` 或 `list[float]`，*可选*，默认为 `[0.5, 0.5, 0.5]`)：
+            归一化图像时使用的均值。这是一个浮点数，或对应图像每个通道的浮点数列表。
+        image_std (`float` 或 `list[float]`，*可选*，默认为 `[0.5, 0.5, 0.5]`)：
+            归一化图像时使用的标准差。这是一个浮点数，或对应图像每个通道的浮点数列表。
+        do_convert_rgb (`bool`，*可选*，默认为 `True`)：
+            是否将图像转换为 RGB。
+        max_crops (`int`，*可选*，默认为 `8`)：
+            每张图像最多使用的裁剪块数量。
+        overlap_margins (`list[int]`，*可选*，默认为 `[4, 4]`)：
+            使用的重叠边距。
+        patch_size (`int`，*可选*，默认为 14)：
+            视觉编码器的空间块尺寸。
+        pooling_size (`list[int]`，*可选*，默认为 `[2, 2]`)：
+            视觉适配器的池化尺寸。
     """
 
     model_input_names = ["pixel_values", "image_token_pooling", "image_grids", "image_num_crops"]
@@ -441,43 +441,43 @@ class MolmoAct2ImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         """
-        Args:
-            images (`ImageInput`):
-                Image to preprocess.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use when resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            max_crops (`int`, *optional*, defaults to `self.max_crops`):
-                Maximum number of crops to use per image.
-            overlap_margins (`list[int]`, *optional*, defaults to `self.overlap_margins`):
-                Overlap margins to use.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            pooling_size (`list[int]`, *optional*, defaults to `self.pooling_size`):
-                The pooling size of the vision adapter.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        参数：
+            images (`ImageInput`)：
+                要预处理的图像。
+            size (`dict[str, int]`，*可选*，默认为 `self.size`)：
+                图像缩放后的尺寸。
+            resample (`PILImageResampling`，*可选*，默认为 `self.resample`)：
+                缩放图像时使用的重采样滤波器。可以是 `PILImageResampling` 枚举之一。
+                仅在 `do_resize` 设为 `True` 时生效。
+            image_mean (`float` 或 `list[float]`，*可选*，默认为 `self.image_mean`)：
+                归一化使用的图像均值。仅在 `do_normalize` 设为 `True` 时生效。
+            image_std (`float` 或 `list[float]`，*可选*，默认为 `self.image_std`)：
+                归一化使用的图像标准差。仅在 `do_normalize` 设为
+                `True` 时生效。
+            do_convert_rgb (`bool`，*可选*，默认为 `self.do_convert_rgb`)：
+                是否将图像转换为 RGB。
+            max_crops (`int`，*可选*，默认为 `self.max_crops`)：
+                每张图像最多使用的裁剪块数量。
+            overlap_margins (`list[int]`，*可选*，默认为 `self.overlap_margins`)：
+                使用的重叠边距。
+            patch_size (`int`，*可选*，默认为 `self.patch_size`)：
+                视觉编码器的空间块尺寸。
+            pooling_size (`list[int]`，*可选*，默认为 `self.pooling_size`)：
+                视觉适配器的池化尺寸。
+            return_tensors (`str` 或 `TensorType`，*可选*)：
+                要返回的张量类型。可以是以下之一：
+                - 未设置：返回 `np.ndarray` 列表。
+                - `TensorType.TENSORFLOW` 或 `'tf'`：返回 `tf.Tensor` 类型的批次。
+                - `TensorType.PYTORCH` 或 `'pt'`：返回 `torch.Tensor` 类型的批次。
+                - `TensorType.NUMPY` 或 `'np'`：返回 `np.ndarray` 类型的批次。
+                - `TensorType.JAX` 或 `'jax'`：返回 `jax.numpy.ndarray` 类型的批次。
 
-        Returns:
-            A `BatchFeature` containing the following keys:
-                - `pixel_values`: The preprocessed images.
-                - `image_token_pooling`: The indices of the patches in `crops` to pool for each token in `image_tokens`.
-                - `image_grids`: The image grids.
-                - `image_num_crops`: The number of crops for each image.
+        返回：
+            包含以下键的 `BatchFeature`：
+                - `pixel_values`：预处理后的图像。
+                - `image_token_pooling`：`image_tokens` 中每个 token 做池化时所用 `crops` 中块的索引。
+                - `image_grids`：图像网格。
+                - `image_num_crops`：每张图像的裁剪块数量。
         """
         if size is not None:
             if "height" not in size or "width" not in size:
@@ -513,7 +513,7 @@ class MolmoAct2ImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        # All transformations expect numpy arrays.
+        # 所有变换都期望输入 numpy 数组。
         images = [to_numpy_array(image) for image in images]
 
         data = {}

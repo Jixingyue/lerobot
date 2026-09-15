@@ -15,22 +15,22 @@
 # limitations under the License.
 
 """
-This script augments existing LeRobot datasets with quantile statistics.
+本脚本为已有的 LeRobot 数据集增补分位数统计信息。
 
-Most datasets created before the quantile feature was added do not contain
-quantile statistics (q01, q10, q50, q90, q99) in their metadata. This script:
+在添加分位数功能之前创建的大多数数据集，其元数据中不包含
+分位数统计信息（q01、q10、q50、q90、q99）。本脚本会：
 
-1. Loads an existing LeRobot dataset in v3.0 format
-2. Checks if it already contains quantile statistics
-3. If missing, computes quantile statistics for all features
-4. Updates the dataset metadata with the new quantile statistics
+1. 加载 v3.0 格式的已有 LeRobot 数据集
+2. 检查它是否已包含分位数统计信息
+3. 若缺失，则为所有特征计算分位数统计信息
+4. 用新的分位数统计信息更新数据集元数据
 
-Statistics are accumulated into a single running histogram per feature across
-all episodes rather than aggregating per-episode quantile summaries. The
-resulting quantiles are histogram approximations, subject to discretization and
-range-rebinning error; image/video frames are sampled by default.
+统计信息在所有 episode 中累积到每个特征一个滚动直方图中，
+而不是聚合每个 episode 的分位数摘要。
+得到的分位数是直方图近似值，会受到离散化和区间重分箱误差的影响；
+图像/视频帧默认采用采样方式。
 
-Usage:
+用法：
 
 ```bash
 python src/lerobot/scripts/augment_dataset_quantile_stats.py \
@@ -60,13 +60,13 @@ from lerobot.utils.utils import init_logging
 
 
 def has_quantile_stats(stats: dict[str, dict] | None, quantile_list_keys: list[str] | None = None) -> bool:
-    """Check if dataset statistics already contain quantile information.
+    """检查数据集统计信息是否已包含分位数信息。
 
-    Args:
-        stats: Dataset statistics dictionary
+    参数：
+        stats: 数据集统计信息字典
 
-    Returns:
-        True if quantile statistics are present, False otherwise
+    返回：
+        若存在分位数统计信息则返回 True，否则返回 False
     """
     if quantile_list_keys is None:
         quantile_list_keys = [f"q{int(q * 100):02d}" for q in DEFAULT_QUANTILES]
@@ -87,26 +87,26 @@ def collect_episode_arrays(
     use_sampling: bool = True,
     skip_images: bool = False,
 ) -> dict[str, tuple[np.ndarray, int]]:
-    """Collect one episode's frames per feature, flattened to (num_samples, dim).
+    """按特征收集单个 episode 的帧，并展平为 (num_samples, dim)。
 
-    Args:
-        dataset: The LeRobot dataset
-        episode_idx: Index of the episode to read
-        use_sampling: If True, sub-sample image/video frames to bound memory.
-            If False, use every frame (higher memory).
-        skip_images: If True, skip image/video features entirely.
+    参数：
+        dataset: LeRobot 数据集
+        episode_idx: 要读取的 episode 的索引
+        use_sampling: 若为 True，则对图像/视频帧进行子采样以限制内存占用。
+            若为 False，则使用每一帧（内存占用更高）。
+        skip_images: 若为 True，则完全跳过图像/视频特征。
 
-    Returns:
-        Mapping of feature name to that episode's values and the number of frames
-        they came from (which differs from the row count for image features).
+    返回：
+        从特征名到该 episode 的值及其来源帧数的映射
+        （对于图像特征，帧数与行数不同）。
     """
     start_idx = dataset.meta.episodes[episode_idx]["dataset_from_index"]
     end_idx = dataset.meta.episodes[episode_idx]["dataset_to_index"]
 
     episode_len = end_idx - start_idx
 
-    # Images/video are the memory hog, so sub-sample those frames per episode;
-    # numeric columns are cheap, so read them in full (exact).
+    # 图像/视频是内存大户，因此对每个 episode 的这些帧进行子采样；
+    # 数值列开销小，因此完整读取（精确）。
     image_keys = [k for k in dataset.features if dataset.features[k]["dtype"] in ("image", "video")]
     numeric_keys = [
         k
@@ -116,13 +116,13 @@ def collect_episode_arrays(
 
     collected_data: dict[str, list] = {}
 
-    # Numeric features: every frame, read directly from the underlying table.
+    # 数值特征：每一帧都直接从底层表中读取。
     if numeric_keys:
         numeric_cols = dataset.hf_dataset.select_columns(numeric_keys)[start_idx:end_idx]
         for key in numeric_keys:
             collected_data[key] = [torch.as_tensor(v) for v in numeric_cols[key]]
 
-    # Image/video features: decode only a sampled subset of frames.
+    # 图像/视频特征：只解码采样子集的帧。
     if image_keys and not skip_images:
         sampled_offsets = sample_indices(episode_len) if use_sampling else list(range(episode_len))
         for offset in sampled_offsets:
@@ -137,7 +137,7 @@ def collect_episode_arrays(
         if dataset.features[key]["dtype"] in ["image", "video"]:
             if data.dtype == np.uint8:
                 data = data.astype(np.float32) / 255.0
-            # (N, C, H, W) -> (N * H * W, C) so quantiles are computed per channel.
+            # (N, C, H, W) -> (N * H * W, C)，以便按通道计算分位数。
             channels = data.shape[1]
             values = data.transpose(0, 2, 3, 1).reshape(-1, channels)
         else:
@@ -152,27 +152,27 @@ def compute_quantile_stats_for_dataset(
     use_sampling: bool = True,
     skip_images: bool = False,
 ) -> dict[str, dict]:
-    """Compute whole-dataset statistics with one running histogram per feature.
+    """使用每个特征一个滚动直方图来计算整个数据集的统计信息。
 
-    Args:
-        dataset: The LeRobot dataset to compute statistics for
-        use_sampling: If True, sub-sample image/video frames per episode to bound
-            memory. If False, use every frame (higher memory).
-        skip_images: If True, skip image/video features and leave their stats untouched.
+    参数：
+        dataset: 要计算统计信息的 LeRobot 数据集
+        use_sampling: 若为 True，则对每个 episode 的图像/视频帧进行子采样
+            以限制内存占用。若为 False，则使用每一帧（内存占用更高）。
+        skip_images: 若为 True，则跳过图像/视频特征并保持其统计信息不变。
 
-    Returns:
-        Dictionary containing statistics with histogram-based global quantile estimates
+    返回：
+        包含基于直方图的全局分位数估计的统计信息字典
 
-    Note:
-        Episodes are accumulated sequentially because the running accumulators are
-        shared across all of them.
+    注意：
+        由于滚动累加器在所有 episode 间共享，
+        因此各 episode 按顺序累积。
     """
     logging.info(f"Computing quantile statistics for dataset with {dataset.num_episodes} episodes")
 
     running_stats: dict[str, RunningQuantileStats] = {}
     frame_counts: dict[str, int] = {}
     row_counts: dict[str, int] = {}
-    # Kept only while a feature has a single row, so it can still be finalized.
+    # 仅当特征只有一行时保留，以便仍能完成收尾处理。
     single_row_arrays: dict[str, np.ndarray] = {}
 
     for episode_idx in tqdm(range(dataset.num_episodes), desc="Processing episodes"):
@@ -194,14 +194,14 @@ def compute_quantile_stats_for_dataset(
     aggregated_stats: dict[str, dict] = {}
     for key, accumulator in running_stats.items():
         if row_counts[key] < 2:
-            # Histograms need at least two samples; mirror get_feature_stats' basic-stats path.
+            # 直方图至少需要两个样本；与 get_feature_stats 的基础统计路径保持一致。
             stats = get_feature_stats(single_row_arrays[key], axis=0, keepdims=False)
         else:
             stats = accumulator.get_statistics()
         if dataset.features[key]["dtype"] in ["image", "video"]:
-            # Image stats are stored as (C, 1, 1) to broadcast over height and width.
+            # 图像统计信息以 (C, 1, 1) 存储，以便在高度和宽度上广播。
             stats = {k: v if k == "count" else v[:, np.newaxis, np.newaxis] for k, v in stats.items()}
-        # `get_feature_stats` counts frames, not the per-channel rows the accumulator sees.
+        # `get_feature_stats` 统计的是帧数，而不是累加器看到的按通道行数。
         stats["count"] = np.array([frame_counts[key]])
         aggregated_stats[key] = stats
 
@@ -216,15 +216,15 @@ def augment_dataset_with_quantile_stats(
     use_sampling: bool = True,
     skip_images: bool = False,
 ) -> None:
-    """Augment a dataset with quantile statistics if they are missing.
+    """若数据集缺少分位数统计信息，则为其增补。
 
-    Args:
-        repo_id: Repository ID of the dataset
-        root: Local root directory for the dataset
-        overwrite: Overwrite existing quantile statistics if they already exist
-        use_sampling: If True, sub-sample image/video frames per episode to bound
-            memory. If False, use every frame (higher memory).
-        skip_images: If True, skip image/video features and keep their existing stats
+    参数：
+        repo_id: 数据集的仓库 ID
+        root: 数据集的本地根目录
+        overwrite: 若分位数统计信息已存在则覆盖
+        use_sampling: 若为 True，则对每个 episode 的图像/视频帧进行子采样
+            以限制内存占用。若为 False，则使用每一帧（内存占用更高）。
+        skip_images: 若为 True，则跳过图像/视频特征并保留其已有统计信息
     """
     logging.info(f"Loading dataset: {repo_id}")
     dataset = LeRobotDataset(
@@ -265,7 +265,7 @@ def augment_dataset_with_quantile_stats(
 
 
 def main():
-    """Main function to run the augmentation script."""
+    """运行增补脚本的主函数。"""
     parser = argparse.ArgumentParser(description="Augment LeRobot dataset with quantile statistics")
 
     parser.add_argument(

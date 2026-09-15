@@ -68,24 +68,24 @@ def make_wall_x_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the Wall-X policy.
+    为 Wall-X 策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares input data for the model by:
-    1. Renaming features to match pretrained configurations
-    2. Adding a batch dimension
-    4. Normalizing input and output features based on dataset statistics
-    5. Moving all data to the specified device
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征以匹配预训练配置
+    2. 增加一个 batch 维度
+    4. 根据数据集统计信息对输入和输出特征进行归一化
+    5. 将所有数据移动到指定设备
 
-    The post-processing pipeline handles the model's output by:
-    1. Unnormalizing the output actions to their original scale
-    2. Moving data to the CPU
+    后处理流水线通过以下步骤处理模型输出：
+    1. 将输出动作反归一化到其原始尺度
+    2. 将数据移动到 CPU
 
     Args:
-        config: The configuration object for the Wall-X policy
-        dataset_stats: A dictionary of statistics for normalization
+        config: Wall-X 策略的配置对象
+        dataset_stats: 用于归一化的统计信息字典
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines
+        一个元组，其中包含配置好的预处理器和后处理器流水线
     """
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
@@ -94,7 +94,7 @@ def make_wall_x_pre_post_processors(
         RenderRuntimeMessagesStep(config.recipe),
         RenderTrainingMessagesStep(config.recipe),
         steps.rename_observations,
-        WallXTaskProcessor(),  # Process task description
+        WallXTaskProcessor(),  # 处理任务描述
         steps.add_batch_dim,
         steps.normalize,
         WallXPromptProcessorStep(image_keys=list(config.image_features), chunk_size=config.chunk_size),
@@ -124,9 +124,9 @@ def make_wall_x_pre_post_processors(
 @ProcessorStepRegistry.register(name="wall_x_task_processor")
 class WallXTaskProcessor(ComplementaryDataProcessorStep):
     """
-    A processor step that ensures the task description is properly formatted for Wall-X.
+    一个处理器步骤，用于确保任务描述的格式符合 Wall-X 的要求。
 
-    This step handles task preprocessing similar to Qwen-VL requirements.
+    该步骤以与 Qwen-VL 要求类似的方式处理任务预处理。
     """
 
     def complementary_data(self, complementary_data):
@@ -135,19 +135,19 @@ class WallXTaskProcessor(ComplementaryDataProcessorStep):
 
         task = complementary_data["task"]
         if task is None:
-            # Provide default task if none specified
+            # 如果未指定任务，则提供默认任务
             complementary_data["task"] = "Execute the robot action."
             return complementary_data
 
         new_complementary_data = dict(complementary_data)
 
-        # Handle both string and list of strings
+        # 同时处理字符串和字符串列表
         if isinstance(task, str):
-            # Single string: ensure proper formatting
+            # 单个字符串：确保格式正确
             if not task.endswith("."):
                 new_complementary_data["task"] = f"{task}."
         elif isinstance(task, list) and all(isinstance(t, str) for t in task):
-            # List of strings: format each
+            # 字符串列表：逐个设置格式
             new_complementary_data["task"] = [t if t.endswith(".") else f"{t}." for t in task]
 
         return new_complementary_data
@@ -161,7 +161,7 @@ class WallXTaskProcessor(ComplementaryDataProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="wall_x_prompt")
 class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
-    """Render Wall-X prompts and identify their explicitly supervised text segments."""
+    """渲染 Wall-X prompt，并标识其中被显式监督的文本片段。"""
 
     image_keys: list[str]
     chunk_size: int
@@ -265,7 +265,7 @@ class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
         return segments
 
     def _action_segments(self, task: str, image_labels: list[str]) -> list[dict[str, str | bool]]:
-        """Render WALL-OSS's native action prompt for rows without text supervision."""
+        """为没有文本监督的行渲染 WALL-OSS 原生的动作 prompt。"""
         return [
             {
                 "text": (
@@ -344,7 +344,7 @@ class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="wall_x_tokenizer")
 class WallXTokenizerStep(ProcessorStep):
-    """Build WALL-X token/image tensors for action, training, and text requests."""
+    """为动作、训练和文本请求构建 WALL-X 的 token/图像张量。"""
 
     processor_name: str
     image_keys: list[str]

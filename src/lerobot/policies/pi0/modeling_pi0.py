@@ -26,7 +26,7 @@ from torch import Tensor, nn
 
 from lerobot.utils.import_utils import _transformers_available, require_package
 
-# Conditional import for type checking and lazy loading
+# 用于类型检查和延迟加载的条件导入
 if TYPE_CHECKING or _transformers_available:
     from transformers.models.auto import CONFIG_MAPPING
     from transformers.models.gemma import modeling_gemma
@@ -74,7 +74,7 @@ class ActionSelectKwargs(TypedDict, total=False):
     execution_horizon: int | None
 
 
-# Define the complete layer computation function for gradient checkpointing
+# 定义用于梯度检查点的完整层计算函数
 def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_cond, layers, rotary_emb):
     query_states = []
     key_states = []
@@ -92,7 +92,7 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         query_states.append(query_state)
         key_states.append(key_state)
         value_states.append(value_state)
-    # Concatenate and process attention
+    # 拼接并处理注意力
     query_states = torch.cat(query_states, dim=2)
     key_states = torch.cat(key_states, dim=2)
     value_states = torch.cat(value_states, dim=2)
@@ -110,7 +110,7 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
     batch_size = query_states.shape[0]
     paligemma_layer = layers[0]
     scaling = paligemma_layer.self_attn.scaling
-    # Attention computation
+    # 注意力计算
     att_output, _ = modeling_gemma.eager_attention_forward(
         paligemma_layer.self_attn,
         query_states,
@@ -119,10 +119,10 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         attention_mask,
         scaling,
     )
-    # Get head_dim from the current layer, not from the model
+    # 从当前层获取 head_dim，而不是从模型获取
     head_dim = paligemma_layer.self_attn.head_dim
     att_output = att_output.reshape(batch_size, -1, 1 * 8 * head_dim)
-    # Process layer outputs
+    # 处理层输出
     outputs_embeds = []
     start_pos = 0
     for i, hidden_states in enumerate(inputs_embeds):
@@ -131,23 +131,23 @@ def compute_layer_complete(inputs_embeds, attention_mask, position_ids, adarms_c
         if att_output.dtype != layer.self_attn.o_proj.weight.dtype:
             att_output = att_output.to(layer.self_attn.o_proj.weight.dtype)
         out_emb = layer.self_attn.o_proj(att_output[:, start_pos:end_pos])
-        # first residual
+        # 第一个残差连接
         out_emb = _gated_residual(hidden_states, out_emb, gates[i])
         after_first_residual = out_emb.clone()
         out_emb, gate = layernorm_forward(layer.post_attention_layernorm, out_emb, adarms_cond[i])
-        # Convert to bfloat16 if the next layer (mlp) uses bfloat16
+        # 如果下一层（mlp）使用 bfloat16，则转换为 bfloat16
         if layer.mlp.up_proj.weight.dtype == torch.bfloat16:
             out_emb = out_emb.to(dtype=torch.bfloat16)
         out_emb = layer.mlp(out_emb)
-        # second residual
+        # 第二个残差连接
         out_emb = _gated_residual(after_first_residual, out_emb, gate)
         outputs_embeds.append(out_emb)
         start_pos = end_pos
     return outputs_embeds
 
 
-class GemmaConfig:  # see openpi `gemma.py: Config`
-    """Configuration for Gemma model variants."""
+class GemmaConfig:  # 参见 openpi `gemma.py: Config`
+    """Gemma 模型变体的配置。"""
 
     def __init__(self, width, depth, mlp_dim, num_heads, num_kv_heads, head_dim):
         self.width = width
@@ -158,8 +158,8 @@ class GemmaConfig:  # see openpi `gemma.py: Config`
         self.head_dim = head_dim
 
 
-def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_config`
-    """Returns config for specified gemma variant."""
+def get_gemma_config(variant: str) -> GemmaConfig:  # 参见 openpi `gemma.py: get_config`
+    """返回指定 gemma 变体的配置。"""
     if variant == "gemma_300m":
         return GemmaConfig(
             width=1024,
@@ -184,8 +184,8 @@ def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_
 
 class PaliGemmaWithExpertModel(
     nn.Module
-):  # see openpi `gemma_pytorch.py: PaliGemmaWithExpertModel` this class is almost a exact copy of PaliGemmaWithExpertModel in openpi
-    """PaliGemma model with action expert for PI0."""
+):  # 参见 openpi `gemma_pytorch.py: PaliGemmaWithExpertModel`，此类几乎是 openpi 中 PaliGemmaWithExpertModel 的完全拷贝
+    """带动作专家的 PaliGemma 模型，用于 PI0。"""
 
     def __init__(
         self,
@@ -253,8 +253,8 @@ class PaliGemmaWithExpertModel(
         else:
             raise ValueError(f"Invalid precision: {precision}")
 
-        # Keep full vision path in float32 so we never toggle (toggle causes optimizer
-        # "same dtype" error). Align with PI05.
+        # 将完整的视觉路径保持为 float32，以避免来回切换（切换会导致
+        # 优化器报 "same dtype" 错误）。与 PI05 保持一致。
         params_to_keep_float32 = [
             "vision_tower",
             "multi_modal_projector",
@@ -285,7 +285,7 @@ class PaliGemmaWithExpertModel(
             self.paligemma.eval()
 
     def embed_image(self, image: torch.Tensor):
-        # Vision tower and multi_modal_projector are kept in float32 (params_to_keep_float32). Align with PI05.
+        # 视觉塔（vision tower）和 multi_modal_projector 保持为 float32（params_to_keep_float32）。与 PI05 保持一致。
         out_dtype = image.dtype
         if image.dtype != torch.float32:
             image = image.to(torch.float32)
@@ -338,14 +338,14 @@ class PaliGemmaWithExpertModel(
             gemma_expert_layers = self.gemma_expert.model.layers
             rotary_emb = self.paligemma.model.language_model.rotary_emb
 
-            # Check if gradient checkpointing is enabled for any of the models
+            # 检查任一模型是否启用了梯度检查点
             use_gradient_checkpointing = (
                 hasattr(self.gemma_expert.model, "gradient_checkpointing")
                 and self.gemma_expert.model.gradient_checkpointing
                 and self.training
             ) or (hasattr(self, "gradient_checkpointing") and self.gradient_checkpointing and self.training)
 
-            # Process all layers with gradient checkpointing if enabled
+            # 如果启用了梯度检查点，则使用梯度检查点处理所有层
             for layers in zip(paligemma_layers, gemma_expert_layers, strict=True):
                 if use_gradient_checkpointing:
                     inputs_embeds = torch.utils.checkpoint.checkpoint(
@@ -369,7 +369,7 @@ class PaliGemmaWithExpertModel(
                         rotary_emb=rotary_emb,
                     )
 
-            # final norm
+            # 最终归一化
             final_norms = (
                 self.paligemma.model.language_model.norm,
                 self.gemma_expert.model.norm,
@@ -382,7 +382,7 @@ class PaliGemmaWithExpertModel(
                     outputs_embeds.append(out_emb)
                 return outputs_embeds
 
-            # Apply gradient checkpointing to final norm if enabled
+            # 如果启用了梯度检查点，则将其应用于最终归一化
             if use_gradient_checkpointing:
                 outputs_embeds = torch.utils.checkpoint.checkpoint(
                     compute_final_norms,
@@ -401,8 +401,8 @@ class PaliGemmaWithExpertModel(
         return [prefix_output, suffix_output], prefix_past_key_values
 
 
-class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
-    """Core PI0 PyTorch model."""
+class PI0Pytorch(nn.Module):  # 参见 openpi `PI0Pytorch`
+    """PI0 核心 PyTorch 模型。"""
 
     def __init__(self, config: PI0Config, rtc_processor: RTCProcessor | None = None):
         super().__init__()
@@ -434,18 +434,18 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         self.action_time_mlp_in = nn.Linear(2 * action_expert_config.width, action_expert_config.width)
         self.action_time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
 
-        # Initialize gradient checkpointing flag
+        # 初始化梯度检查点标志
         self.gradient_checkpointing_enabled = False
 
-        # Compile model if requested
+        # 如有需要则编译模型
         if config.compile_model:
             torch.set_float32_matmul_precision("high")
             self.sample_actions = torch.compile(self.sample_actions, mode=config.compile_mode)
-            # Also compile the main forward pass used during training
+            # 同时编译训练时使用的主前向传播
             self.forward = torch.compile(self.forward, mode=config.compile_mode)
 
     def gradient_checkpointing_enable(self):
-        """Enable gradient checkpointing for memory optimization."""
+        """启用梯度检查点以优化显存。"""
         self.gradient_checkpointing_enabled = True
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing = True
         self.paligemma_with_expert.paligemma.model.vision_tower.gradient_checkpointing = True
@@ -453,7 +453,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         logging.info("Enabled gradient checkpointing for PI0Pytorch model")
 
     def gradient_checkpointing_disable(self):
-        """Disable gradient checkpointing."""
+        """禁用梯度检查点。"""
         self.gradient_checkpointing_enabled = False
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing = False
         self.paligemma_with_expert.paligemma.model.vision_tower.gradient_checkpointing = False
@@ -464,7 +464,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def _apply_checkpoint(self, func, *args, **kwargs):
-        """Helper method to apply gradient checkpointing if enabled."""
+        """辅助方法：如果启用了梯度检查点则应用之。"""
         if self.gradient_checkpointing_enabled and self.training:
             return torch.utils.checkpoint.checkpoint(
                 func, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
@@ -487,12 +487,12 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
     def embed_prefix(
         self, images, img_masks, lang_tokens, lang_masks
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Embed images with SigLIP and language tokens with embedding layer."""
+        """使用 SigLIP 嵌入图像，并使用嵌入层嵌入语言 token。"""
         embs = []
         pad_masks = []
         att_masks = []
 
-        # Process images
+        # 处理图像
         for img, img_mask in zip(images, img_masks, strict=True):
 
             def image_embed_func(img):
@@ -505,7 +505,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
             pad_masks.append(img_mask[:, None].expand(bsize, num_img_embs))
             att_masks += [0] * num_img_embs
 
-        # Process language tokens
+        # 处理语言 token
         def lang_embed_func(lang_tokens):
             lang_emb = self.paligemma_with_expert.embed_language_tokens(lang_tokens)
             return lang_emb
@@ -527,7 +527,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         return embs, pad_masks, att_masks
 
     def embed_suffix(self, state, noisy_actions, timestep):
-        """Embed state, noisy_actions, timestep to prepare for Expert Gemma processing."""
+        """嵌入 state、noisy_actions、timestep，为专家 Gemma 处理做准备。"""
         embs = []
         pad_masks = []
         att_masks = []
@@ -547,7 +547,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         pad_masks.append(state_mask)
         att_masks += [1]
 
-        # Embed timestep using sine-cosine positional encoding
+        # 使用正弦-余弦位置编码嵌入时间步
         time_emb = create_sinusoidal_pos_embedding(
             timestep,
             self.action_in_proj.out_features,
@@ -557,7 +557,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         )
         time_emb = time_emb.type(dtype=timestep.dtype)
 
-        # Fuse timestep + action information using an MLP
+        # 使用 MLP 融合时间步 + 动作信息
         def action_proj_func(noisy_actions):
             return self.action_in_proj(noisy_actions)
 
@@ -579,7 +579,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         action_time_mask = torch.ones(bsize, action_time_dim, dtype=torch.bool, device=timestep.device)
         pad_masks.append(action_time_mask)
 
-        # Set attention masks so that image, language and state inputs do not attend to action tokens
+        # 设置注意力掩码，使图像、语言和状态输入不会关注动作 token
         att_masks += [1] + ([0] * (self.config.chunk_size - 1))
 
         embs = torch.cat(embs, dim=1)
@@ -590,7 +590,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         return embs, pad_masks, att_masks, adarms_cond
 
     def forward(self, images, img_masks, lang_tokens, lang_masks, state, actions, noise, time) -> Tensor:
-        """Do a full training forward pass and compute the loss."""
+        """执行完整的训练前向传播并计算损失。"""
         time_expanded = time[:, None, None]
         x_t = time_expanded * noise + (1 - time_expanded) * actions
         u_t = noise - actions
@@ -640,7 +640,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         return F.mse_loss(u_t, v_t, reduction="none")
 
-    @torch.no_grad()  # see openpi `sample_actions` (slightly adapted)
+    @torch.no_grad()  # 参见 openpi `sample_actions`（略有调整）
     def sample_actions(
         self,
         images,
@@ -652,7 +652,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         num_steps=None,
         **kwargs: Unpack[ActionSelectKwargs],
     ) -> Tensor:
-        """Do a full inference forward and compute the action."""
+        """执行完整的推理前向传播并计算动作。"""
         if num_steps is None:
             num_steps = self.config.num_inference_steps
 
@@ -660,12 +660,12 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         device = state.device
 
         if noise is None:
-            # Sample noise with padded dimension as expected by action_in_proj
+            # 按照 action_in_proj 的预期，以填充维度采样噪声
             actions_shape = (
                 bsize,
                 self.config.chunk_size,
                 self.config.max_action_dim,
-            )  # Use config max_action_dim for internal processing
+            )  # 内部处理使用配置中的 max_action_dim
             noise = self.sample_noise(actions_shape, device)
 
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
@@ -710,7 +710,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
         x_t,
         timestep,
     ):
-        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        """在给定时间步对噪声 `x_t` 应用一步去噪。"""
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
@@ -744,7 +744,7 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
 
 
 class PI0Policy(PreTrainedPolicy):
-    """PI0 OpenPI Policy for LeRobot."""
+    """用于 LeRobot 的 PI0 OpenPI 策略。"""
 
     config_class = PI0Config
     name = "pi0"
@@ -758,19 +758,19 @@ class PI0Policy(PreTrainedPolicy):
         **kwargs,
     ):
         """
-        Args:
-            config: Policy configuration class instance.
+        参数：
+            config: 策略配置类实例。
         """
         require_package("transformers", extra="pi")
         super().__init__(config)
         config.validate_features()
         self.config = config
 
-        # Initialize the core PI0 model
+        # 初始化 PI0 核心模型
         self.init_rtc_processor()
         self.model = PI0Pytorch(config, rtc_processor=self.rtc_processor)
 
-        # Enable gradient checkpointing if requested
+        # 如有需要则启用梯度检查点
         if config.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
 
@@ -794,7 +794,7 @@ class PI0Policy(PreTrainedPolicy):
         strict: bool = True,
         **kwargs,
     ) -> T:
-        """Override the from_pretrained method to handle key remapping and display important disclaimer."""
+        """重写 from_pretrained 方法，以处理键重映射并显示重要声明。"""
         print(
             "The PI0 model is a direct port of the OpenPI implementation. \n"
             "This implementation follows the original OpenPI structure for compatibility. \n"
@@ -803,7 +803,7 @@ class PI0Policy(PreTrainedPolicy):
         if pretrained_name_or_path is None:
             raise ValueError("pretrained_name_or_path is required")
 
-        # Use provided config if available, otherwise create default config
+        # 如果提供了配置则使用，否则创建默认配置
         if config is None:
             config = PreTrainedConfig.from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,
@@ -817,11 +817,11 @@ class PI0Policy(PreTrainedPolicy):
                 **kwargs,
             )
 
-        # Initialize model without loading weights
-        # Check if dataset_stats were provided in kwargs
+        # 初始化模型但不加载权重
+        # 检查 kwargs 中是否提供了 dataset_stats
         model = cls(config, **kwargs)
 
-        # Load state dict (expects keys with "model." prefix)
+        # 加载 state dict（期望键带有 "model." 前缀）
         try:
             print(f"Loading model from: {pretrained_name_or_path}")
             try:
@@ -847,10 +847,10 @@ class PI0Policy(PreTrainedPolicy):
                 print("Returning model without loading pretrained weights")
                 return model
 
-            # First, fix any key differences (see openpi model.py, _fix_pytorch_state_dict_keys)
+            # 首先，修复所有键差异（参见 openpi model.py, _fix_pytorch_state_dict_keys）
             fixed_state_dict = model._fix_pytorch_state_dict_keys(original_state_dict, model.config)
 
-            # Then add "model." prefix for all keys that don't already have it
+            # 然后，为所有尚未带 "model." 前缀的键添加该前缀
             remapped_state_dict = {}
             remap_count = 0
 
@@ -865,7 +865,7 @@ class PI0Policy(PreTrainedPolicy):
             if remap_count > 0:
                 print(f"Remapped {remap_count} state dict keys")
 
-            # Load the remapped state dict into the model
+            # 将重映射后的 state dict 加载到模型中
             missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=strict)
 
             if missing_keys:
@@ -898,8 +898,8 @@ class PI0Policy(PreTrainedPolicy):
 
     def _fix_pytorch_state_dict_keys(
         self, state_dict, model_config
-    ):  # see openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
-        """Fix state dict keys to match current model architecture."""
+    ):  # 参见 openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
+        """修复 state dict 键，使其与当前模型架构匹配。"""
         import re
 
         fixed_state_dict = {}
@@ -907,13 +907,13 @@ class PI0Policy(PreTrainedPolicy):
         for key, value in state_dict.items():
             new_key = key
 
-            # Handle layer norm structure changes: .weight -> .dense.weight + .dense.bias
-            # For gemma expert layers
+            # 处理层归一化结构变化：.weight -> .dense.weight + .dense.bias
+            # 针对 gemma 专家层
             if re.match(
                 r"paligemma_with_expert\.gemma_expert\.model\.layers\.\d+\.(input_layernorm|post_attention_layernorm)\.weight",
                 key,
             ):
-                # Check if the model actually has adaRMS enabled for the expert
+                # 检查模型是否实际为专家启用了 adaRMS
                 expert_uses_adarms = getattr(
                     self.model.paligemma_with_expert.gemma_expert.config, "use_adarms", False
                 )
@@ -922,7 +922,7 @@ class PI0Policy(PreTrainedPolicy):
                     continue
 
             if re.match(r"paligemma_with_expert\.gemma_expert\.model\.norm\.weight", key):
-                # Check if the model actually has adaRMS enabled for the expert
+                # 检查模型是否实际为专家启用了 adaRMS
                 expert_uses_adarms = getattr(
                     self.model.paligemma_with_expert.gemma_expert.config, "use_adarms", False
                 )
@@ -930,16 +930,16 @@ class PI0Policy(PreTrainedPolicy):
                     logging.warning(f"Skipping norm key (adaRMS mismatch): {key}")
                     continue
 
-            # Handle MLP naming changes for pi0
-            # non-pi05 model expects action_time_mlp_*, but checkpoint might have time_mlp_*
+            # 处理 pi0 的 MLP 命名变化
+            # 非 pi05 模型期望 action_time_mlp_*，但检查点中可能是 time_mlp_*
             if key.startswith("time_mlp_in."):
                 new_key = key.replace("time_mlp_in.", "action_time_mlp_in.")
             elif key.startswith("time_mlp_out."):
                 new_key = key.replace("time_mlp_out.", "action_time_mlp_out.")
 
-            # Handle vision tower embedding layer potential differences
+            # 处理视觉塔嵌入层的潜在差异
             if "patch_embedding" in key:
-                # Some checkpoints might have this, but current model expects different structure
+                # 某些检查点可能包含此项，但当前模型期望不同的结构
                 logging.warning(f"Vision embedding key might need handling: {key}")
 
             if (
@@ -958,18 +958,18 @@ class PI0Policy(PreTrainedPolicy):
         return self.parameters()
 
     def reset(self):
-        """Reset internal state - called when environment resets."""
+        """重置内部状态——在环境重置时调用。"""
         self._action_queue = deque(maxlen=self.config.n_action_steps)
         self._queues = {
             ACTION: deque(maxlen=self.config.n_action_steps),
         }
 
     def init_rtc_processor(self):
-        """Initialize RTC processor if RTC is enabled in config."""
+        """如果配置中启用了 RTC，则初始化 RTC 处理器。"""
         self.rtc_processor = None
 
-        # Create processor if config provided
-        # If RTC is not enabled - we can still track the denoising data
+        # 如果提供了配置则创建处理器
+        # 即使未启用 RTC，我们仍然可以跟踪去噪数据
         if self.config.rtc_config is not None:
             self.rtc_processor = RTCProcessor(self.config.rtc_config)
 
@@ -981,15 +981,15 @@ class PI0Policy(PreTrainedPolicy):
         return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def _preprocess_images(self, batch: dict[str, Tensor]) -> tuple[list[Tensor], list[Tensor]]:
-        """Preprocess images for the model.
+        """为模型预处理图像。
 
-        Images from LeRobot are typically in [B, C, H, W] format and normalized to [0, 1].
-        PaliGemma expects images in [B, C, H, W] format and normalized to [-1, 1].
+        来自 LeRobot 的图像通常为 [B, C, H, W] 格式，并归一化到 [0, 1]。
+        PaliGemma 期望图像为 [B, C, H, W] 格式，并归一化到 [-1, 1]。
         """
         images = []
         img_masks = []
 
-        # Get device from model parameters
+        # 从模型参数获取设备
         device = next(self.parameters()).device
 
         present_img_keys = [key for key in self.config.image_features if key in batch]
@@ -1004,103 +1004,103 @@ class PI0Policy(PreTrainedPolicy):
         for key in present_img_keys:
             img = batch[key]
 
-            # Ensure tensor is on the same device as the model
+            # 确保张量与模型在同一设备上
             if img.device != device:
                 img = img.to(device)
 
-            # Ensure float32 dtype for consistency
+            # 为保持一致，确保数据类型为 float32
             if img.dtype != torch.float32:
                 img = img.to(torch.float32)
 
-            # from openpi preprocess_observation_pytorch: Handle both [B, C, H, W] and [B, H, W, C] formats
-            is_channels_first = img.shape[1] == 3  # Check if channels are in dimension 1
+            # 来自 openpi preprocess_observation_pytorch：同时处理 [B, C, H, W] 和 [B, H, W, C] 两种格式
+            is_channels_first = img.shape[1] == 3  # 检查通道是否位于维度 1
 
             if is_channels_first:
-                # Convert [B, C, H, W] to [B, H, W, C] for processing
+                # 将 [B, C, H, W] 转换为 [B, H, W, C] 以便处理
                 img = img.permute(0, 2, 3, 1)
 
-            # from openpi preprocess_observation_pytorch: Resize with padding if needed
+            # 来自 openpi preprocess_observation_pytorch：如有需要则带填充缩放
             if img.shape[1:3] != self.config.image_resolution:
                 img = resize_with_pad_torch(img, *self.config.image_resolution)
 
-            # Normalize from [0,1] to [-1,1] as expected by siglip
+            # 按照 siglip 的预期，从 [0,1] 归一化到 [-1,1]
             img = img * 2.0 - 1.0
 
-            # from openpi preprocess_observation_pytorch: Convert back to [B, C, H, W] format if it was originally channels-first
+            # 来自 openpi preprocess_observation_pytorch：如果原本就是通道优先格式，则转换回 [B, C, H, W] 格式
             if is_channels_first:
                 img = img.permute(0, 3, 1, 2)  # [B, H, W, C] -> [B, C, H, W]
 
             images.append(img)
-            # Create mask (all ones for real images)
+            # 创建掩码（真实图像全为 1）
             bsize = img.shape[0]
             mask = torch.ones(bsize, dtype=torch.bool, device=device)
             img_masks.append(mask)
 
-        # Create image features not present in the batch as fully 0 padded images
+        # 将批次中不存在的图像特征创建为全填充 -1 的图像
         for _num_empty_cameras in range(len(missing_img_keys)):
-            img = torch.ones_like(img) * -1  # padded with -1 for SigLIP
-            mask = torch.zeros_like(mask)  # mask is zero for empty cameras
+            img = torch.ones_like(img) * -1  # 为 SigLIP 填充 -1
+            mask = torch.zeros_like(mask)  # 空相机的掩码为零
             images.append(img)
             img_masks.append(mask)
 
         return images, img_masks
 
     def prepare_state(self, batch):
-        """Pad state"""
+        """填充状态"""
         state = pad_vector(batch[OBS_STATE], self.config.max_state_dim)
         return state
 
     def prepare_action(self, batch):
-        """Pad action"""
+        """填充动作"""
         actions = pad_vector(batch[ACTION], self.config.max_action_dim)
         return actions
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select a single action given environment observations."""
+        """根据环境观测选择单个动作。"""
         assert not self._rtc_enabled(), (
             "RTC is not supported for select_action, use it with predict_action_chunk"
         )
 
         self.eval()
 
-        # Action queue logic for n_action_steps > 1
+        # n_action_steps > 1 时的动作队列逻辑
         if len(self._action_queue) == 0:
             actions = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
-            # Transpose to get shape (n_action_steps, batch_size, action_dim)
+            # 转置以得到形状 (n_action_steps, batch_size, action_dim)
             self._action_queue.extend(actions.transpose(0, 1))
 
         return self._action_queue.popleft()
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs: Unpack[ActionSelectKwargs]) -> Tensor:
-        """Predict a chunk of actions given environment observations."""
+        """根据环境观测预测一个动作块。"""
         self.eval()
 
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
         lang_tokens, lang_masks = batch[f"{OBS_LANGUAGE_TOKENS}"], batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
         state = self.prepare_state(batch)
 
-        # Sample actions using the model (pass through RTC kwargs)
+        # 使用模型采样动作（透传 RTC kwargs）
         actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, **kwargs)
 
-        # Unpad actions to actual action dimension
+        # 将动作去填充到实际动作维度
         original_action_dim = self.config.output_features[ACTION].shape[0]
         actions = actions[:, :, :original_action_dim]
 
         return actions
 
     def forward(self, batch: dict[str, Tensor], reduction: str = "mean") -> tuple[Tensor, dict]:
-        """Run the batch through the model and compute the loss for training.
+        """将批次送入模型并计算训练损失。
 
-        Args:
-            batch: Training batch containing observations and actions.
-            reduction: How to reduce the loss. Options:
-                - "mean": Return scalar mean loss (default, backward compatible)
-                - "none": Return per-sample losses of shape (batch_size,) for RA-BC weighting
+        参数：
+            batch: 包含观测和动作的训练批次。
+            reduction: 损失的归约方式。可选项：
+                - "mean"：返回标量平均损失（默认，向后兼容）
+                - "none"：返回形状为 (batch_size,) 的逐样本损失，用于 RA-BC 加权
         """
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
         lang_tokens, lang_masks = batch[f"{OBS_LANGUAGE_TOKENS}"], batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
         state = self.prepare_state(batch)
@@ -1109,10 +1109,10 @@ class PI0Policy(PreTrainedPolicy):
         noise = self.model.sample_noise(actions.shape, actions.device)
         time = self.model.sample_time(actions.shape[0], actions.device)
 
-        # Compute loss
+        # 计算损失
         losses = self.model.forward(images, img_masks, lang_tokens, lang_masks, state, actions, noise, time)
 
-        # Truncate losses to actual action dimensions
+        # 将损失截断到实际动作维度
         original_action_dim = self.config.output_features[ACTION].shape[0]
         losses = losses[:, :, :original_action_dim]
 
@@ -1121,18 +1121,18 @@ class PI0Policy(PreTrainedPolicy):
         }
 
         if reduction == "none":
-            # Return per-sample losses (B,) by averaging over time and action dims
+            # 通过对时间和动作维度求平均，返回逐样本损失 (B,)
             per_sample_loss = losses.mean(dim=(1, 2))
             loss_dict["loss"] = per_sample_loss.mean().item()
             return per_sample_loss, loss_dict
         else:
-            # Default: return scalar mean loss
+            # 默认：返回标量平均损失
             loss = losses.mean()
             loss_dict["loss"] = loss.item()
             return loss, loss_dict
 
     def _get_default_peft_targets(self) -> dict[str, any]:
-        """Return default PEFT target modules for PI0 fine-tuning."""
+        """返回用于 PI0 微调的默认 PEFT 目标模块。"""
         common_projections = (
             "state_proj|action_in_proj|action_out_proj|action_time_mlp_in|action_time_mlp_out"
         )

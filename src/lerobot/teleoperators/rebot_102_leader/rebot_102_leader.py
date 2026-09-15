@@ -38,11 +38,11 @@ _SETTLE_SEC = 0.01
 
 
 class RebotArm102Leader(Teleoperator):
-    """Seeed Studio StarArm102 / reBot Arm 102 leader arm.
+    """Seeed Studio StarArm102 / reBot Arm 102 主臂。
 
-    A 7-joint (incl. gripper) leader built on FashionStar UART smart servos. Servo
-    communication is handled by the ``motorbridge-smart-servo`` package; this class
-    only reads joint angles, so it produces actions but accepts no feedback.
+    一条基于 FashionStar UART 智能舵机的 7 关节（含夹爪）主臂。舵机通信由
+    ``motorbridge-smart-servo`` 包处理；该类只读取关节角度，因此它产生动作
+    但不接受反馈。
     """
 
     config_class = RebotArm102LeaderTeleopConfig
@@ -135,7 +135,7 @@ class RebotArm102Leader(Teleoperator):
         for motor_id in self.config.joint_ids.values():
             self.bus.unlock(motor_id)
             time.sleep(_SETTLE_SEC)
-        # Reset the multi-turn counter of each servo individually.
+        # 逐个重置每个舵机的多圈计数器。
         for motor_id in self.config.joint_ids.values():
             self.bus.reset_multi_turn(motor_id)
 
@@ -152,12 +152,11 @@ class RebotArm102Leader(Teleoperator):
 
     @staticmethod
     def _round_to_valid_range(value: float, min_value: float, max_value: float) -> tuple[float, int]:
-        """Unwrap a multi-turn angle into the ±180° window centred on (min+max)/2.
+        """将多圈角度展开到以 (min+max)/2 为中心的 ±180° 窗口内。
 
-        The servo may report an angle that has accumulated extra full rotations
-        (value = true_angle + N*360). Subtract the nearest whole number of turns
-        to bring it back into [center-180, center+180]. Returns the unwrapped
-        angle and the number of turns removed.
+        舵机可能会报告累积了额外整圈的角度（value = true_angle + N*360）。
+        减去最接近的整数圈数，将其带回 [center-180, center+180]。
+        返回展开后的角度和被移除的圈数。
         """
         center = (min_value + max_value) / 2.0
         turns = round((value - center) / 360.0)

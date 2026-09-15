@@ -67,38 +67,38 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class RobotController(Protocol):
-    """Interface for the controllers driving ``UnitreeG1``'s background control thread.
+    """驱动 ``UnitreeG1`` 后台控制线程的控制器接口。
 
-    Covers both locomotion controllers (GR00T, Holosoma) and whole-body ones (SONIC).
+    涵盖运动控制器（GR00T、Holosoma）和全身控制器（SONIC）。
 
-    Each tick the robot hands the controller the latest lowstate plus a snapshot of the
-    incoming action, and publishes the absolute joint targets it returns, keyed
-    ``<joint>.q``. It lives here rather than in ``controllers/`` so that importing the
-    robot does not pull in the controller implementations and their onnxruntime dependency.
+    每个周期，机器人将最新的 lowstate 以及传入动作的快照交给控制器，
+    并发布其返回的绝对关节目标，键名为 ``<joint>.q``。该接口定义在此处
+    而非 ``controllers/`` 中，这样导入机器人时不会引入控制器实现及其
+    onnxruntime 依赖。
 
-    Controllers may also expose any of the following, which the robot picks up when present:
+    控制器还可以暴露以下任意属性，机器人在存在时会拾取它们：
 
-    - ``kp`` / ``kd``: ``(29,)`` PD gains published with the targets, overriding the config.
-    - ``default_angles``: ``(29,)`` home pose that residual actions are applied onto.
-    - ``action_ft`` / ``observation_ft``: feature dicts that take over the robot's default
-      29-DoF action space and proprioceptive state (SONIC's 64-D latent token).
-    - ``observation_state()``: current values for the keys advertised in ``observation_ft``.
+    - ``kp`` / ``kd``: ``(29,)`` 形状的 PD 增益，随目标一起发布，覆盖配置。
+    - ``default_angles``: ``(29,)`` 形状的初始姿态，残差动作施加于其上。
+    - ``action_ft`` / ``observation_ft``: 特征字典，接管机器人默认的
+      29 自由度动作空间和本体感知状态（SONIC 的 64 维潜在 token）。
+    - ``observation_state()``: ``observation_ft`` 中声明的键的当前值。
     """
 
     control_dt: float
-    """Control period in seconds; sets the rate of the robot's controller thread."""
+    """以秒为单位的控制周期；设置机器人控制器线程的运行速率。"""
 
     def run_step(self, action: dict, lowstate) -> dict:
-        """Map one lowstate plus action into absolute joint targets keyed ``<joint>.q``."""
+        """将一个 lowstate 加动作映射为以 ``<joint>.q`` 为键的绝对关节目标。"""
         ...
 
     def reset(self) -> None:
-        """Drop per-episode state, e.g. history buffers and held commands."""
+        """丢弃每个回合的状态，例如历史缓冲区和保持的指令。"""
         ...
 
 
 def make_robot_controller(name: str | None) -> RobotController | None:
-    """Instantiate a robot controller by class name. Returns None if name is None."""
+    """按类名实例化机器人控制器。如果 name 为 None 则返回 None。"""
     if name is None:
         return None
     controllers = {
@@ -113,7 +113,7 @@ def make_robot_controller(name: str | None) -> RobotController | None:
     return getattr(module, name)()
 
 
-# DDS topic names follow Unitree SDK naming conventions
+# DDS 主题名称遵循 Unitree SDK 命名规范
 # ruff: noqa: N816
 kTopicLowCommand_Debug = "rt/lowcmd"
 kTopicLowState = "rt/lowstate"
@@ -121,28 +121,28 @@ kTopicLowState = "rt/lowstate"
 
 @dataclass
 class MotorState:
-    q: float | None = None  # position
-    dq: float | None = None  # velocity
-    tau_est: float | None = None  # estimated torque
-    temperature: float | None = None  # motor temperature
+    q: float | None = None  # 位置
+    dq: float | None = None  # 速度
+    tau_est: float | None = None  # 估计力矩
+    temperature: float | None = None  # 电机温度
 
 
 @dataclass
 class IMUState:
     quaternion: np.ndarray | None = None  # [w, x, y, z]
-    gyroscope: np.ndarray | None = None  # [x, y, z] angular velocity (rad/s)
-    accelerometer: np.ndarray | None = None  # [x, y, z] linear acceleration (m/s²)
-    rpy: np.ndarray | None = None  # [roll, pitch, yaw] (rad)
-    temperature: float | None = None  # IMU temperature
+    gyroscope: np.ndarray | None = None  # [x, y, z] 角速度（rad/s）
+    accelerometer: np.ndarray | None = None  # [x, y, z] 线加速度（m/s²）
+    rpy: np.ndarray | None = None  # [roll, pitch, yaw]（rad）
+    temperature: float | None = None  # IMU 温度
 
 
-# g1 observation class
+# g1 观测类
 @dataclass
 class G1_29_LowState:  # noqa: N801
     motor_state: list[MotorState] = field(default_factory=lambda: [MotorState() for _ in G1_29_JointIndex])
     imu_state: IMUState = field(default_factory=IMUState)
-    wireless_remote: bytes | None = None  # Raw wireless remote data
-    mode_machine: int = 0  # Robot mode
+    wireless_remote: bytes | None = None  # 原始无线遥控器数据
+    mode_machine: int = 0  # 机器人模式
 
 
 class UnitreeG1(Robot):
@@ -158,10 +158,10 @@ class UnitreeG1(Robot):
         self.config = config
         self.control_dt = config.control_dt
 
-        # Initialize cameras config (ZMQ-based) - actual connection in connect()
+        # 初始化相机配置（基于 ZMQ）— 实际连接在 connect() 中
         self._cameras = make_cameras_from_configs(config.cameras)
 
-        # Import channel classes based on mode
+        # 根据模式导入通道类
         if config.is_simulation:
             self._ChannelFactoryInitialize = _SDKChannelFactoryInitialize
             self._ChannelPublisher = _SDKChannelPublisher
@@ -177,35 +177,35 @@ class UnitreeG1(Robot):
             self._ChannelPublisher = ChannelPublisher
             self._ChannelSubscriber = ChannelSubscriber
 
-        # Initialize state variables
+        # 初始化状态变量
         self.sim_env = None
         self._env_wrapper = None
         self._lowstate = None
         self._lowstate_lock = threading.Lock()
-        # Guards the shared lowcmd message: the controller thread, send_action(), reset() and
-        # the shutdown path all publish through it, and a torn update still carries a valid CRC.
+        # 保护共享的 lowcmd 消息：控制器线程、send_action()、reset() 和关闭路径
+        # 都通过它发布，即使更新被中断也能携带有效的 CRC。
         self._lowcmd_lock = threading.Lock()
-        # Decides who may drive the joints over a span of time: one controller tick, or a whole
-        # reset sweep. Coarser than _lowcmd_lock, which only makes a single command atomic.
+        # 决定谁可以在一段时间内驱动关节：一个控制器周期，或整个重置扫描。
+        # 粒度比 _lowcmd_lock 更粗，后者只保证单条指令的原子性。
         self._control_lock = threading.Lock()
         self._shutdown_event = threading.Event()
         self.subscribe_thread = None
 
         self.arm_ik = G1_29_ArmIK() if config.gravity_compensation else None
 
-        # Controller loaded dynamically
+        # 动态加载的控制器
         self.controller: RobotController | None = make_robot_controller(config.controller)
-        # Controller thread state
+        # 控制器线程状态
         self._controller_thread = None
         self._controller_action_lock = threading.Lock()
         self.controller_input = default_remote_input()
         self.controller_output = {}
 
-    def _subscribe_lowstate(self):  # polls robot state @ 250Hz
+    def _subscribe_lowstate(self):  # 以 250Hz 轮询机器人状态
         while not self._shutdown_event.is_set():
             start_time = time.time()
 
-            # Step simulation if in simulation mode
+            # 如果处于仿真模式则步进仿真
             if self.config.is_simulation and self.sim_env is not None:
                 self.sim_env.step()
 
@@ -213,24 +213,24 @@ class UnitreeG1(Robot):
             if msg is not None:
                 lowstate = G1_29_LowState()
 
-                # Capture motor states using jointindex
+                # 使用 jointindex 捕获电机状态
                 for joint in G1_29_JointIndex:
                     lowstate.motor_state[joint].q = msg.motor_state[joint].q
                     lowstate.motor_state[joint].dq = msg.motor_state[joint].dq
                     lowstate.motor_state[joint].tau_est = msg.motor_state[joint].tau_est
                     lowstate.motor_state[joint].temperature = msg.motor_state[joint].temperature
 
-                # Capture IMU state
+                # 捕获 IMU 状态
                 lowstate.imu_state.quaternion = list(msg.imu_state.quaternion)
                 lowstate.imu_state.gyroscope = list(msg.imu_state.gyroscope)
                 lowstate.imu_state.accelerometer = list(msg.imu_state.accelerometer)
                 lowstate.imu_state.rpy = list(msg.imu_state.rpy)
                 lowstate.imu_state.temperature = msg.imu_state.temperature
 
-                # Capture wireless remote data
+                # 捕获无线遥控器数据
                 lowstate.wireless_remote = msg.wireless_remote
 
-                # Capture mode_machine
+                # 捕获 mode_machine
                 lowstate.mode_machine = msg.mode_machine
 
                 with self._lowstate_lock:
@@ -238,7 +238,7 @@ class UnitreeG1(Robot):
 
             current_time = time.time()
             all_t_elapsed = current_time - start_time
-            sleep_time = max(0, (self.control_dt - all_t_elapsed))  # maintain constant control dt
+            sleep_time = max(0, (self.control_dt - all_t_elapsed))  # 维持恒定的控制周期
             time.sleep(sleep_time)
 
     def publish_lowcmd(

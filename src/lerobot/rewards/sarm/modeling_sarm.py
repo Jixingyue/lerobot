@@ -14,12 +14,12 @@
 # limitations under the License.
 
 """
-SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation.
+SARM: 面向长时域机器人操作的阶段感知奖励建模（Stage-Aware Reward Modeling）。
 
-Paper: https://arxiv.org/abs/2509.25358
+论文：https://arxiv.org/abs/2509.25358
 
-- StageTransformer: Predicts stage classification (sparse/dense)
-- SubtaskTransformer: Predicts within-stage progress (tau) conditioned on stage
+- StageTransformer：预测阶段分类（sparse/dense）
+- SubtaskTransformer：在给定阶段的条件下，预测阶段内的 progress（tau）
 """
 
 import json
@@ -44,13 +44,13 @@ from .sarm_utils import (
 
 class StageTransformer(nn.Module):
     """
-    Stage classification transformer for SARM.
+    用于 SARM 的阶段分类 Transformer。
 
-    Predicts which stage/subtask the current frame belongs to.
-    Supports both sparse (high-level) and dense (fine-grained) annotation schemes.
+    预测当前帧属于哪个阶段/子任务。
+    同时支持稀疏（高层级）和稠密（细粒度）两种标注方案。
 
-    Input streams: [vis_proj, lang_proj, state_proj] concatenated -> (B, N+2, T, D)
-    Output: stage logits (B, T, num_classes)
+    输入流：[vis_proj, lang_proj, state_proj] 拼接 -> (B, N+2, T, D)
+    输出：阶段 logits (B, T, num_classes)
     """
 
     def __init__(
@@ -70,20 +70,20 @@ class StageTransformer(nn.Module):
         self.d_model = d_model
         self.num_cameras = num_cameras
 
-        # Projections
+        # 投影层
         self.lang_proj = nn.Linear(text_emb_dim, d_model)
         self.visual_proj = nn.Linear(vis_emb_dim, d_model)
         self.state_proj = nn.Linear(state_dim, d_model)
 
-        # Encoder
+        # 编码器
         enc_layer = nn.TransformerEncoderLayer(d_model, n_heads, 4 * d_model, dropout, batch_first=True)
         self.transformer = nn.TransformerEncoder(enc_layer, n_layers)
 
-        # Positional bias on first visual frame
+        # 第一帧视觉 token 上的位置偏置
         self.first_pos = nn.Parameter(torch.zeros(1, d_model))
 
-        # Shared fusion MLP
-        # Fuses (num_cameras + 2) streams: cameras + lang + state
+        # 共享融合 MLP
+        # 融合 (num_cameras + 2) 个流：摄像头 + 语言 + 状态
         fused_in = d_model * (num_cameras + 2)
         self.fusion_backbone = nn.Sequential(
             nn.LayerNorm(fused_in),
@@ -91,7 +91,7 @@ class StageTransformer(nn.Module):
             nn.ReLU(),
         )
 
-        # Scheme-specific heads
+        # 各方案对应的 head
         self.heads = nn.ModuleDict(
             {
                 "sparse": nn.Linear(d_model, num_classes_sparse),
@@ -101,19 +101,19 @@ class StageTransformer(nn.Module):
 
     def _prep_lang(self, lang_emb: torch.Tensor, B: int, T: int, D: int) -> torch.Tensor:  # noqa: N803
         """
-        Prepare language embeddings for fusion.
+        准备语言嵌入以供融合。
 
-        Accepts lang_emb of shape:
-          - (B, text_emb_dim) -> broadcast across time
-          - (B, T, text_emb_dim) -> per-timestep (dense annotation mode)
+        接受以下形状的 lang_emb：
+          - (B, text_emb_dim) -> 在时间维度上广播
+          - (B, T, text_emb_dim) -> 每个时间步一个（稠密标注模式）
 
-        Returns: (B, 1, T, D)
+        返回：(B, 1, T, D)
         """
         if lang_emb.dim() == 3:
             # (B, T, E) -> (B, T, D) -> (B, 1, T, D)
             lang_proj = self.lang_proj(lang_emb).unsqueeze(1)
         else:
-            # (B, E) -> (B, 1, 1, D) -> expand to (B, 1, T, D)
+            # (B, E) -> (B, 1, 1, D) -> 扩展为 (B, 1, T, D)
             lang_proj = self.lang_proj(lang_emb).unsqueeze(1).unsqueeze(2).expand(B, 1, T, D)
         return lang_proj
 
@@ -126,17 +126,17 @@ class StageTransformer(nn.Module):
         scheme: str = "sparse",  # "sparse" or "dense"
     ) -> torch.Tensor:
         """
-        Forward pass for stage classification.
+        阶段分类的前向传播。
 
         Args:
-            img_seq: Image embeddings (B, N, T, vis_emb_dim) where N=num_cameras
-            lang_emb: Language embeddings (B, E) or (B, T, E) for dense
-            state: State features (B, T, state_dim)
-            lengths: Valid sequence lengths (B,) for masking
-            scheme: "sparse" or "dense" for head selection
+            img_seq: 图像嵌入 (B, N, T, vis_emb_dim)，其中 N=num_cameras
+            lang_emb: 语言嵌入 (B, E) 或 (B, T, E)（稠密模式下）
+            state: 状态特征 (B, T, state_dim)
+            lengths: 有效序列长度 (B,)，用于掩码
+            scheme: "sparse" 或 "dense"，用于选择 head
 
         Returns:
-            Stage logits (B, T, num_classes)
+            阶段 logits (B, T, num_classes)
         """
         assert scheme in self.heads, f"Unknown scheme '{scheme}'. Use one of {list(self.heads.keys())}."
 
@@ -144,50 +144,50 @@ class StageTransformer(nn.Module):
         D = self.d_model  # noqa: N806
         device = img_seq.device
 
-        # Project inputs
+        # 对输入进行投影
         vis_proj = self.visual_proj(img_seq)  # (B, N, T, D)
         state_proj = self.state_proj(state).unsqueeze(1)  # (B, 1, T, D)
         lang_proj = self._prep_lang(lang_emb, B, T, D)  # (B, 1, T, D)
 
-        # Concatenate streams
-        # cameras + lang + state -> (B, N+2, T, D)
+        # 拼接各流
+        # 摄像头 + 语言 + 状态 -> (B, N+2, T, D)
         x = torch.cat([vis_proj, lang_proj, state_proj], dim=1)
 
-        # Add positional bias to first visual frame
+        # 向第一帧视觉 token 添加位置偏置
         x[:, :N, 0, :] = x[:, :N, 0, :] + self.first_pos
 
-        # Flatten to tokens for Transformer
+        # 展平为 token 以供 Transformer 处理
         x_tokens = x.view(B, (N + 2) * T, D)
         L = x_tokens.size(1)  # noqa: N806
 
-        # Create padding mask
+        # 创建填充掩码
         base_mask = torch.arange(T, device=device).expand(B, T) >= lengths.unsqueeze(1)  # (B, T)
         mask = base_mask.unsqueeze(1).expand(B, N + 2, T).reshape(B, (N + 2) * T)
 
-        # Create causal mask
+        # 创建因果掩码
         causal_mask = torch.triu(torch.ones(L, L, device=device, dtype=torch.bool), diagonal=1)
 
-        # Encode
+        # 编码
         h = self.transformer(x_tokens, mask=causal_mask, src_key_padding_mask=mask, is_causal=True)
 
-        # Reshape and fuse
+        # 重塑并融合
         h = h.view(B, N + 2, T, D).permute(0, 2, 1, 3).reshape(B, T, (N + 2) * D)
         fused = self.fusion_backbone(h)  # (B, T, D)
 
-        # Scheme-specific logits
+        # 各方案对应的 logits
         logits = self.heads[scheme](fused)  # (B, T, num_classes)
         return logits
 
 
 class SubtaskTransformer(nn.Module):
     """
-    Subtask progress regression transformer for SARM.
+    用于 SARM 的子任务 progress 回归 Transformer。
 
-    Predicts within-stage normalized progress (tau) conditioned on stage prior.
-    The stage prior is a one-hot encoding passed from StageTransformer predictions.
+    在给定阶段先验的条件下，预测阶段内的归一化 progress（tau）。
+    阶段先验是由 StageTransformer 预测生成的独热编码。
 
-    Input streams: [vis_proj, lang_proj, state_proj, stage_emb] -> (B, N+3, T, D)
-    Output: tau predictions (B, T) in [0, 1]
+    输入流：[vis_proj, lang_proj, state_proj, stage_emb] -> (B, N+3, T, D)
+    输出：tau 预测 (B, T)，取值范围 [0, 1]
     """
 
     def __init__(
@@ -205,20 +205,20 @@ class SubtaskTransformer(nn.Module):
         self.d_model = d_model
         self.num_cameras = num_cameras
 
-        # Projections
+        # 投影层
         self.lang_proj = nn.Linear(text_emb_dim, d_model)
         self.visual_proj = nn.Linear(vis_emb_dim, d_model)
         self.state_proj = nn.Linear(state_dim, d_model)
 
-        # Encoder
+        # 编码器
         enc = nn.TransformerEncoderLayer(d_model, n_heads, 4 * d_model, dropout, batch_first=True)
         self.transformer = nn.TransformerEncoder(enc, n_layers)
 
-        # Learned bias on first visual frame
+        # 第一帧视觉 token 上的可学习偏置
         self.first_pos = nn.Parameter(torch.zeros(1, d_model))
 
-        # Shared fusion backbone
-        # Fuses (num_cameras + 3) streams: cameras + lang + state + stage_emb
+        # 共享融合骨干网络
+        # 融合 (num_cameras + 3) 个流：摄像头 + 语言 + 状态 + stage_emb
         fused_in = d_model * (num_cameras + 3)
         self.fusion_backbone = nn.Sequential(
             nn.LayerNorm(fused_in),
@@ -226,7 +226,7 @@ class SubtaskTransformer(nn.Module):
             nn.ReLU(),
         )
 
-        # Scheme-specific regression heads
+        # 各方案对应的回归 head
         self.heads = nn.ModuleDict(
             {
                 "sparse": nn.Linear(d_model, 1),
@@ -236,13 +236,13 @@ class SubtaskTransformer(nn.Module):
 
     def _prep_lang(self, lang_emb: torch.Tensor, B: int, T: int, D: int) -> torch.Tensor:  # noqa: N803
         """
-        Prepare language embeddings for fusion.
+        准备语言嵌入以供融合。
         """
         if lang_emb.dim() == 3:
             # (B, T, E) -> (B, T, D) -> (B, 1, T, D)
             return self.lang_proj(lang_emb).unsqueeze(1)
         else:
-            # (B, E) -> (B, 1, 1, D) -> (B, 1, T, D)
+            # (B, E) -> (B, 1, 1, D) -> 扩展为 (B, 1, T, D)
             return self.lang_proj(lang_emb).unsqueeze(1).unsqueeze(2).expand(B, 1, T, D)
 
     def _stage_to_dmodel(self, stage_prior: torch.Tensor) -> torch.Tensor:
@@ -318,7 +318,7 @@ class SubtaskTransformer(nn.Module):
         # Create causal mask
         causal_mask = torch.triu(torch.ones(L, L, device=device, dtype=torch.bool), diagonal=1)
 
-        # Encode
+        # 编码
         h = self.transformer(x_tokens, mask=causal_mask, src_key_padding_mask=mask, is_causal=True)
 
         # Reshape and fuse

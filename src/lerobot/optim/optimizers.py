@@ -30,15 +30,15 @@ from lerobot.utils.constants import (
 from lerobot.utils.io_utils import deserialize_json_into_object, write_json
 from lerobot.utils.utils import flatten_dict, unflatten_dict
 
-# Type alias for parameters accepted by optimizer build() methods.
-# This matches PyTorch's optimizer signature while also supporting:
-# - dict[str, Parameter]: Named parameters for differential LR by name (e.g., XVLA)
-# - dict[str, Iterable]: Multiple parameter groups for multi-optimizer configs (e.g., SAC)
+# 优化器 build() 方法接受的参数的类型别名。
+# 这与 PyTorch 优化器的签名一致，同时还支持：
+# - dict[str, Parameter]: 用于按名称差异化学习率的命名参数（例如 XVLA）
+# - dict[str, Iterable]: 用于多优化器配置的多个参数组（例如 SAC）
 OptimizerParams = (
-    Iterable[torch.nn.Parameter]  # From model.parameters()
-    | Iterable[dict[str, Any]]  # List of param groups with lr/weight_decay overrides
-    | dict[str, torch.nn.Parameter]  # From dict(model.named_parameters()) for name-based LR
-    | dict[str, Any]  # For multi-optimizer configs (SAC) with multiple param groups
+    Iterable[torch.nn.Parameter]  # 来自 model.parameters()
+    | Iterable[dict[str, Any]]  # 带有 lr/weight_decay 覆盖的参数组列表
+    | dict[str, torch.nn.Parameter]  # 来自 dict(model.named_parameters())，用于基于名称的学习率
+    | dict[str, Any]  # 用于带多个参数组的多优化器配置（SAC）
 )
 
 
@@ -54,7 +54,7 @@ class OptimizerConfig(draccus.ChoiceRegistry, abc.ABC):
 
     @property
     def builds_multiple_optimizers(self) -> bool:
-        """True when build() returns a dict of optimizers (unsupported under sharded training)."""
+        """当 build() 返回优化器字典时为 True（分片训练下不支持）。"""
         return False
 
     @classmethod
@@ -64,24 +64,23 @@ class OptimizerConfig(draccus.ChoiceRegistry, abc.ABC):
     @abc.abstractmethod
     def build(self, params: OptimizerParams) -> torch.optim.Optimizer | dict[str, torch.optim.Optimizer]:
         """
-        Build the optimizer. It can be a single optimizer or a dictionary of optimizers.
+        构建优化器。可以是单个优化器，也可以是优化器字典。
 
-        NOTE: Multiple optimizers are useful when you have different models to optimize.
-        For example, you can have one optimizer for the policy and another one for the value function
-        in reinforcement learning settings.
+        注意：当需要优化不同的模型时，多优化器很有用。
+        例如，在强化学习场景中，可以有一个优化器用于策略，另一个用于价值函数。
 
         Args:
-            params: Parameters to optimize. Accepts multiple formats depending on the optimizer:
-                - Iterable[Parameter]: From model.parameters() - standard PyTorch usage
-                - Iterable[dict]: List of param groups with 'params' key and optional
-                  'lr', 'weight_decay' overrides (e.g., ACT, VQBeT policies)
-                - dict[str, Parameter]: From dict(model.named_parameters()) for optimizers
-                  that apply differential learning rates by parameter name (e.g., XVLA)
-                - dict[str, Iterable]: For multi-optimizer configs where each key maps to
-                  a separate optimizer's parameters (e.g., SAC with actor/critic/temperature)
+            params: 待优化的参数。根据优化器不同，接受多种格式：
+                - Iterable[Parameter]: 来自 model.parameters() —— 标准 PyTorch 用法
+                - Iterable[dict]: 带有 'params' 键以及可选的
+                  'lr'、'weight_decay' 覆盖的参数组列表（例如 ACT、VQBeT 策略）
+                - dict[str, Parameter]: 来自 dict(model.named_parameters())，用于
+                  按参数名称应用差异化学习率的优化器（例如 XVLA）
+                - dict[str, Iterable]: 用于多优化器配置，其中每个键映射到
+                  一个独立优化器的参数（例如带 actor/critic/temperature 的 SAC）
 
         Returns:
-            The optimizer or a dictionary of optimizers.
+            优化器，或优化器字典。
         """
         raise NotImplementedError
 
@@ -135,27 +134,27 @@ class SGDConfig(OptimizerConfig):
 @OptimizerConfig.register_subclass("xvla-adamw")
 @dataclass
 class XVLAAdamWConfig(OptimizerConfig):
-    """Custom AdamW optimizer for XVLA with differential learning rates.
+    """XVLA 专用的带差异化学习率的自定义 AdamW 优化器。
 
-    The Vision-Language Model (VLM) is trained with 1/10 of the base learning rate
-    for stable optimization, while all other components use the full LR.
+    视觉语言模型（VLM）使用基础学习率的 1/10 进行训练，
+    以实现稳定的优化，而所有其他组件使用完整的学习率。
 
-    This LR ratio is crucial for achieving strong and stable finetuning performance.
+    这个学习率比例对于实现强大且稳定的微调性能至关重要。
 
-    Soft-prompts can optionally use a separate learning rate with warm-up support.
-    Set `soft_prompt_lr_scale` to a value < 1.0 (e.g., 0.1) to start soft-prompts
-    at a lower LR. Combine with a warmup scheduler for optimal results.
+    Soft-prompts 可以选择性地使用独立的学习率并支持预热。
+    将 `soft_prompt_lr_scale` 设置为小于 1.0 的值（例如 0.1），
+    可以让 soft-prompts 以较低的学习率开始。结合预热调度器可获得最佳效果。
 
     Note:
-        Completely matching official reported performance may require an additional
-        warm-up LR schedule for soft-prompts, which can bring minor improvements.
-        When `soft_prompt_warmup_lr_scale` is set, soft-prompts start at
-        `lr * soft_prompt_warmup_lr_scale` and should be warmed up via the scheduler.
+        要完全匹配官方报告的性能，可能需要为 soft-prompts 额外使用
+        预热学习率调度，这可以带来微小的提升。
+        当设置了 `soft_prompt_warmup_lr_scale` 时，soft-prompts 从
+        `lr * soft_prompt_warmup_lr_scale` 开始，并应通过调度器进行预热。
 
     Parameter Groups:
-        - Group 0 (vlm): VLM parameters at lr * 0.1, weight_decay * 0.1
-        - Group 1 (soft_prompts): Soft-prompt parameters at lr * soft_prompt_lr_scale
-        - Group 2 (other): All other parameters at full lr
+        - Group 0 (vlm): VLM 参数，学习率为 lr * 0.1，weight_decay * 0.1
+        - Group 1 (soft_prompts): Soft-prompt 参数，学习率为 lr * soft_prompt_lr_scale
+        - Group 2 (other): 所有其他参数，使用完整学习率
     """
 
     lr: float = 1e-4
@@ -163,23 +162,23 @@ class XVLAAdamWConfig(OptimizerConfig):
     eps: float = 1e-8
     weight_decay: float = 0.0
     grad_clip_norm: float = 10.0
-    # Soft-prompt specific settings
-    soft_prompt_lr_scale: float = 1.0  # Scale factor for soft-prompt LR (1.0 = same as base LR)
-    soft_prompt_warmup_lr_scale: float | None = None  # If set, start soft-prompts at this scale (e.g., 0.01)
+    # Soft-prompt 专用设置
+    soft_prompt_lr_scale: float = 1.0  # soft-prompt 学习率的缩放因子（1.0 = 与基础学习率相同）
+    soft_prompt_warmup_lr_scale: float | None = None  # 如果设置，soft-prompts 以此比例开始（例如 0.01）
 
     def build(self, params: OptimizerParams) -> torch.optim.Optimizer:
         """
-        Build AdamW optimizer with differential learning rates.
+        构建带差异化学习率的 AdamW 优化器。
 
         Args:
-            params: Must be a dict[str, Parameter] from dict(model.named_parameters())
-                or equivalent.
+            params: 必须是来自 dict(model.named_parameters())
+                或等价形式的 dict[str, Parameter]。
 
         Returns:
-            AdamW optimizer with parameter groups for VLM, soft-prompts, and other components
+            带有针对 VLM、soft-prompts 和其他组件的参数组的 AdamW 优化器
 
         Raises:
-            AssertionError: If params is not a dict (e.g., from model.parameters())
+            AssertionError: 如果 params 不是字典（例如来自 model.parameters()）
         """
         assert isinstance(params, dict), "Custom LR optimizer requires `named_parameters()` as inputs."
 
@@ -194,10 +193,10 @@ class XVLAAdamWConfig(OptimizerConfig):
             else:
                 other_group.append(p)
 
-        # Determine soft-prompt LR
+        # 确定 soft-prompt 的学习率
         soft_prompt_lr = self.lr * self.soft_prompt_lr_scale
         if self.soft_prompt_warmup_lr_scale is not None:
-            # Start at warmup scale, scheduler will warm up to soft_prompt_lr
+            # 从预热比例开始，调度器会将其预热到 soft_prompt_lr
             soft_prompt_lr = self.lr * self.soft_prompt_warmup_lr_scale
 
         param_groups: list[dict[str, Any]] = [
@@ -221,7 +220,7 @@ class XVLAAdamWConfig(OptimizerConfig):
             },
         ]
 
-        # Filter out empty groups
+        # 过滤掉空的参数组
         param_groups = [g for g in param_groups if len(g["params"]) > 0]
 
         return torch.optim.AdamW(
@@ -234,15 +233,15 @@ class XVLAAdamWConfig(OptimizerConfig):
 @OptimizerConfig.register_subclass("multi_adam")
 @dataclass
 class MultiAdamConfig(OptimizerConfig):
-    """Configuration for multiple Adam optimizers with different parameter groups.
+    """带有不同参数组的多个 Adam 优化器的配置。
 
-    This creates a dictionary of Adam optimizers, each with its own hyperparameters.
+    这会创建一个 Adam 优化器字典，每个优化器有自己的超参数。
 
     Args:
-        lr: Default learning rate (used if not specified for a group)
-        weight_decay: Default weight decay (used if not specified for a group)
-        optimizer_groups: Dictionary mapping parameter group names to their hyperparameters
-        grad_clip_norm: Gradient clipping norm
+        lr: 默认学习率（当某个组未指定时使用）
+        weight_decay: 默认权重衰减（当某个组未指定时使用）
+        optimizer_groups: 将参数组名称映射到其超参数的字典
+        grad_clip_norm: 梯度裁剪范数
     """
 
     lr: float = 1e-3
@@ -255,28 +254,28 @@ class MultiAdamConfig(OptimizerConfig):
         return True
 
     def build(self, params: OptimizerParams) -> dict[str, torch.optim.Optimizer]:
-        """Build multiple Adam optimizers.
+        """构建多个 Adam 优化器。
 
         Args:
-            params: Must be a dict[str, Iterable[Parameter]] mapping parameter group names
-                to iterables of parameters. The keys should match the keys in optimizer_groups.
-                Typically from policies that need separate optimizers (e.g., SAC with
-                actor/critic/temperature).
+            params: 必须是 dict[str, Iterable[Parameter]]，将参数组名称
+                映射到参数的可迭代对象。键应与 optimizer_groups 中的键匹配。
+                通常来自需要独立优化器的策略（例如带
+                actor/critic/temperature 的 SAC）。
 
         Returns:
-            Dictionary mapping parameter group names to their optimizers
+            将参数组名称映射到其优化器的字典
 
         Raises:
-            AssertionError: If params is not a dict
+            AssertionError: 如果 params 不是字典
         """
         assert isinstance(params, dict), "MultiAdamConfig requires a dict of parameter groups as inputs."
         optimizers = {}
 
         for name, group_params in params.items():
-            # Get group-specific hyperparameters or use defaults
+            # 获取组特定的超参数，或使用默认值
             group_config = self.optimizer_groups.get(name, {})
 
-            # Create optimizer with merged parameters (defaults + group-specific)
+            # 使用合并后的参数创建优化器（默认值 + 组特定值）
             optimizer_kwargs = {
                 "lr": group_config.get("lr", self.lr),
                 "betas": group_config.get("betas", (0.9, 0.999)),
@@ -293,25 +292,25 @@ def save_optimizer_state(
     optimizer: torch.optim.Optimizer | dict[str, torch.optim.Optimizer],
     save_dir: Path,
 ) -> None:
-    """Save optimizer state to disk (non-sharded runs; sharded runs use the DCP channel).
+    """将优化器状态保存到磁盘（非分片运行；分片运行使用 DCP 通道）。
 
     Args:
-        optimizer: Either a single optimizer or a dictionary of optimizers.
-        save_dir: Directory to save the optimizer state.
+        optimizer: 单个优化器或优化器字典。
+        save_dir: 保存优化器状态的目录。
     """
     if isinstance(optimizer, dict):
-        # Handle dictionary of optimizers
+        # 处理优化器字典
         for name, opt in optimizer.items():
             optimizer_dir = save_dir / name
             optimizer_dir.mkdir(exist_ok=True, parents=True)
             _save_single_optimizer_state(opt, optimizer_dir)
     else:
-        # Handle single optimizer
+        # 处理单个优化器
         _save_single_optimizer_state(optimizer, save_dir)
 
 
 def _save_single_optimizer_state(optimizer: torch.optim.Optimizer, save_dir: Path) -> None:
-    """Save a single optimizer's state to disk."""
+    """将单个优化器的状态保存到磁盘。"""
     state = optimizer.state_dict()
     param_groups = state.pop("param_groups")
     flat_state = flatten_dict(state)
@@ -322,17 +321,17 @@ def _save_single_optimizer_state(optimizer: torch.optim.Optimizer, save_dir: Pat
 def load_optimizer_state(
     optimizer: torch.optim.Optimizer | dict[str, torch.optim.Optimizer], save_dir: Path
 ) -> torch.optim.Optimizer | dict[str, torch.optim.Optimizer]:
-    """Load optimizer state from disk.
+    """从磁盘加载优化器状态。
 
     Args:
-        optimizer: Either a single optimizer or a dictionary of optimizers.
-        save_dir: Directory to load the optimizer state from.
+        optimizer: 单个优化器或优化器字典。
+        save_dir: 用于加载优化器状态的目录。
 
     Returns:
-        The updated optimizer(s) with loaded state.
+        加载了状态的更新后的优化器。
     """
     if isinstance(optimizer, dict):
-        # Handle dictionary of optimizers
+        # 处理优化器字典
         loaded_optimizers = {}
         for name, opt in optimizer.items():
             optimizer_dir = save_dir / name
@@ -342,17 +341,17 @@ def load_optimizer_state(
                 loaded_optimizers[name] = opt
         return loaded_optimizers
     else:
-        # Handle single optimizer
+        # 处理单个优化器
         return _load_single_optimizer_state(optimizer, save_dir)
 
 
 def _load_single_optimizer_state(optimizer: torch.optim.Optimizer, save_dir: Path) -> torch.optim.Optimizer:
-    """Load a single optimizer's state from disk."""
+    """从磁盘加载单个优化器的状态。"""
     current_state_dict = optimizer.state_dict()
     flat_state = load_file(save_dir / OPTIMIZER_STATE)
     state = unflatten_dict(flat_state)
 
-    # Handle case where 'state' key might not exist (for newly created optimizers)
+    # 处理 'state' 键可能不存在的情况（针对新创建的优化器）
     if "state" in state:
         loaded_state_dict = {"state": {int(k): v for k, v in state["state"].items()}}
     else:

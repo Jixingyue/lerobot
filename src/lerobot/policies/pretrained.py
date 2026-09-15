@@ -49,8 +49,8 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", bound="PreTrainedPolicy")
 
-# Pinned far above any policy's total size so save_torch_state_dict always emits exactly one
-# `model.safetensors` (no shards, no index) — a constant, not a computed byte count.
+# 固定为远大于任何策略总大小的值，使 save_torch_state_dict 始终恰好输出一个
+# `model.safetensors`（无分片、无索引）——这是一个常量，而不是计算出的字节数。
 _SINGLE_FILE_SHARD_SIZE = "1TB"
 
 
@@ -60,30 +60,31 @@ class ActionSelectKwargs(TypedDict, total=False):
 
 class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
     """
-    Base class for policy models.
+    策略模型的基类。
     """
 
     config_class: None
     name: None
 
-    # --- declarative parallelism/acceleration surface ----------------------------------------
-    # Module CLASS names forming the FSDP2 wrap units (and, once wired, the activation-
-    # checkpointing units). Resolved onto the accelerate plugin right before
-    # `accelerator.prepare()` by `lerobot.distributed.set_fsdp_wrap_modules`; sharded training
-    # with no wrap source anywhere fails loudly instead of silently wrapping only the root.
+    # --- 声明式并行/加速接口 ----------------------------------------
+    # 构成 FSDP2 包装单元（以及接线完成后的激活检查点单元）的模块类名。
+    # 在 `accelerator.prepare()` 之前由 `lerobot.distributed.set_fsdp_wrap_modules`
+    # 解析到 accelerate 插件上；任何地方都没有包装来源的分片训练会响亮地失败，
+    # 而不是静默地只包装根模块。
     _fsdp_wrap_modules: ClassVar[list[str] | None] = None
-    # Non-`forward` entry points that must trigger FSDP2 unshard/reshard hooks when called on a
-    # sharded policy (registered post-prepare via `torch.distributed.fsdp
-    # .register_fsdp_forward_method`); calling them unregistered crashes on mixed Tensor/DTensor.
+    # 在分片策略上被调用时，必须触发 FSDP2 unshard/reshard 钩子的
+    # 非 `forward` 入口点（在 prepare 之后通过 `torch.distributed.fsdp
+    # .register_fsdp_forward_method` 注册）；未注册就调用它们会在
+    # Tensor/DTensor 混合时崩溃。
     _fsdp_forward_methods: ClassVar[tuple[str, ...]] = ("select_action", "predict_action_chunk")
-    # Capability gate for the (future) activation-checkpointing wiring.
+    # （未来）激活检查点接线的能力门控。
     supports_gradient_checkpointing: ClassVar[bool] = False
-    # Declarative context-parallel plan (diffusers `ContextParallelModelPlan` semantics:
-    # module FQN -> sequence split/gather spec). Reserved for the CP engine round.
+    # 声明式上下文并行计划（diffusers `ContextParallelModelPlan` 语义：
+    # 模块 FQN -> 序列拆分/聚合规范）。预留给 CP 引擎轮次。
     _cp_plan: ClassVar[dict[str, Any] | None] = None
-    # Attribute names `drop_queued_actions` clears: a `populate_queues`-style `_queues` dict
-    # and a bare `_action_queue` deque. A chunking policy using another name must extend this
-    # ClassVar (or override the method), otherwise dropping the queue silently does nothing.
+    # `drop_queued_actions` 要清除的属性名：`populate_queues` 风格的 `_queues` 字典
+    # 和裸的 `_action_queue` deque。使用其他名称的分块策略必须扩展这个
+    # ClassVar（或重写该方法），否则丢弃队列会静默地什么都不做。
     _action_queue_attrs: ClassVar[tuple[str, ...]] = ("_queues", "_action_queue")
 
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
@@ -102,9 +103,9 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
             raise TypeError(f"Class {cls.__name__} must define 'config_class'")
         if not getattr(cls, "name", None):
             raise TypeError(f"Class {cls.__name__} must define 'name'")
-        # The rollout stack gates text queries on supports_text_generation(), so a
-        # generate_text() override without it is unreachable. Compared through the MRO, so an
-        # override inherited from a conforming parent counts.
+        # rollout 栈通过 supports_text_generation() 来控制文本查询，因此没有它
+        # 的 generate_text() 重写是不可达的。通过 MRO 比较，所以从符合要求的
+        # 父类继承的重写也算数。
         if (
             cls.generate_text is not PreTrainedPolicy.generate_text
             and cls.supports_text_generation is PreTrainedPolicy.supports_text_generation
@@ -116,29 +117,29 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
             )
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Serialize this policy's parameters (and config) into `save_directory`.
+        """将该策略的参数（和配置）序列化到 `save_directory`。
 
-        Sharding is handled internally: under FSDP2 the full state dict is gathered through a
-        COLLECTIVE, so when the policy is sharded this method (via `save_pretrained`) must be
-        called on EVERY rank — a rank-0-gated call deadlocks. File writes happen on the main
-        process only, in all layouts (single, DDP, sharded).
+        分片在内部处理：在 FSDP2 下，完整的 state dict 通过 COLLECTIVE 收集，
+        因此当策略是分片状态时，此方法（通过 `save_pretrained`）必须在
+        每个 rank 上调用——只在 rank 0 上调用会死锁。在所有布局
+        （单机、DDP、分片）下，文件写入仅发生在主进程上。
 
         Args:
-            save_directory (Path): Target directory for the policy config (`config.json`) and the
-                safetensors weight file(s).
+            save_directory (Path): 策略配置（`config.json`）和
+                safetensors 权重文件的目标目录。
         """
-        # Lazy imports: the persistence layer pulls in lerobot.distributed only when saving.
+        # 延迟导入：持久化层仅在保存时才引入 lerobot.distributed。
         from lerobot.distributed.checkpoint import full_model_state_dict, is_sharded_module
         from lerobot.distributed.utils import is_main_process
 
         model_to_save = self.module if hasattr(self, "module") else self
         if is_sharded_module(model_to_save):
             logging.info("Gathering the full state dict from all ranks (sharded policy).")
-        state_dict = full_model_state_dict(model_to_save)  # collective when sharded; {} off-main
+        state_dict = full_model_state_dict(model_to_save)  # 分片时为集合操作；非主进程上为 {}
         if not state_dict or not is_main_process():
-            # Sharded: the gather materializes on the main rank only (emptiness check).
-            # Non-sharded multi-rank (DDP): every rank holds a full dict — the explicit rank
-            # gate prevents N ranks racing on the same files. Single process: never taken.
+            # 分片：收集结果只在主 rank 上具象化（空检查）。
+            # 非分片多 rank（DDP）：每个 rank 都持有完整字典——显式的 rank
+            # 门控防止 N 个 rank 争抢同一批文件。单进程：不会走到这里。
             return
         self.config._save_pretrained(save_directory)
         save_torch_state_dict(state_dict, str(save_directory), max_shard_size=_SINGLE_FILE_SHARD_SIZE)
@@ -160,8 +161,8 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         **kwargs,
     ) -> T:
         """
-        The policy is set in evaluation mode by default using `policy.eval()` (dropout modules are
-        deactivated). To train it, you should first set it back in training mode with `policy.train()`.
+        默认情况下，策略使用 `policy.eval()` 被设置为评估模式（dropout 模块被
+        停用）。要训练它，你应该先用 `policy.train()` 将其设回训练模式。
         """
         if config is None:
             config = PreTrainedConfig.from_pretrained(
@@ -215,57 +216,57 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
     @abc.abstractmethod
     def get_optim_params(self) -> dict:
         """
-        Returns the policy-specific parameters dict to be passed on to the optimizer.
+        返回要传递给优化器的策略特定参数字典。
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     def reset(self):
-        """To be called whenever the environment is reset.
+        """每当环境被重置时调用。
 
-        Does things like clearing caches.
+        执行诸如清除缓存之类的操作。
         """
         raise NotImplementedError
 
     def drop_queued_actions(self) -> None:
-        """Discard actions precomputed by earlier ``select_action`` calls.
+        """丢弃由先前 ``select_action`` 调用预计算的动作。
 
-        Forces a fresh forward pass on the next ``select_action`` so a mid-episode conditioning
-        change (e.g. a new instruction) takes effect at once instead of after the queue drains.
-        Unlike :meth:`reset`, the rest of the episode state is kept.  Call it from the thread
-        that calls ``select_action``.  Clears the queues named in :attr:`_action_queue_attrs`;
-        a policy that keeps no action queue inherits a no-op.
+        强制下一次 ``select_action`` 执行全新的前向传播，使回合中途的条件
+        变化（例如新指令）立即生效，而不是等队列排空后才生效。
+        与 :meth:`reset` 不同，回合的其余状态会被保留。请在调用
+        ``select_action`` 的线程中调用它。清除 :attr:`_action_queue_attrs` 中
+        命名的队列；不维护动作队列的策略继承到的是空操作。
         """
         for attr in self._action_queue_attrs:
             queue = getattr(self, attr, None)
             if isinstance(queue, dict):
-                # populate_queues-style dict: clear only ACTION, not the observation history.
+                # populate_queues 风格的字典：只清除 ACTION，不清除观测历史。
                 if ACTION in queue:
                     queue[ACTION].clear()
             elif queue is not None:
                 queue.clear()
 
     def supports_rtc(self) -> bool:
-        """Whether this policy implements Real-Time Chunking inference semantics."""
+        """该策略是否实现了实时分块（Real-Time Chunking）推理语义。"""
         return False
 
     def supports_text_generation(self) -> bool:
-        """Whether this policy implements :meth:`generate_text` (override both together)."""
+        """该策略是否实现了 :meth:`generate_text`（两者需一起重写）。"""
         return False
 
     def generate_text(self, batch: dict[str, Any]) -> str:
-        """Run the policy's text head on a preprocessed observation batch.
+        """在预处理后的观测批次上运行策略的文本头。
 
-        The request rides on ``batch`` as complementary data (:data:`~lerobot.utils.constants.QUERY_KIND`
-        / ``QUERY_TEXT``); a ``next_subtask`` reply is fed straight into ``set_task``, so it must be
-        exactly one subtask, not a plan or a numbered list.  Returns the generated text, and must not
-        mutate action-producing state (queues, observation history).
+        请求作为补充数据附带在 ``batch`` 上（:data:`~lerobot.utils.constants.QUERY_KIND`
+        / ``QUERY_TEXT``）；``next_subtask`` 回复会直接送入 ``set_task``，因此它必须
+        恰好是一个子任务，而不是计划或编号列表。返回生成的文本，且不得
+        修改产生动作的状态（队列、观测历史）。
         """
         raise NotImplementedError(
             f"{type(self).__name__} has no text head — it cannot answer questions or plan subtasks."
         )
 
-    # TODO(aliberts, rcadene): split into 'forward' and 'compute_loss'?
+    # TODO(aliberts, rcadene): 拆分为 'forward' 和 'compute_loss'？
     @abc.abstractmethod
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict | None]:
         """_summary_
@@ -274,26 +275,25 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
             batch (dict[str, Tensor]): _description_
 
         Returns:
-            tuple[Tensor, dict | None]: The loss and potentially other information. Apart from the loss which
-                is a Tensor, all other items should be logging-friendly, native Python types.
+            tuple[Tensor, dict | None]: 损失以及可能的其他信息。除了作为
+                Tensor 的损失之外，所有其他项都应该是便于日志记录的原生 Python 类型。
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs: Unpack[ActionSelectKwargs]) -> Tensor:
-        """Returns the action chunk (for action chunking policies) for a given observation, potentially in batch mode.
+        """针对给定观测返回动作块（用于动作分块策略），可能以批处理模式。
 
-        Child classes using action chunking should use this method within `select_action` to form the action chunk
-        cached for selection.
+        使用动作分块的子类应在 `select_action` 中使用此方法来构建
+        缓存起来供选择使用的动作块。
         """
         raise NotImplementedError
 
     @abc.abstractmethod
     def select_action(self, batch: dict[str, Tensor], **kwargs: Unpack[ActionSelectKwargs]) -> Tensor:
-        """Return one action to run in the environment (potentially in batch mode).
+        """返回一个要在环境中执行的动作（可能以批处理模式）。
 
-        When the model uses a history of observations, or outputs a sequence of actions, this method deals
-        with caching.
+        当模型使用观测历史或输出动作序列时，此方法负责处理缓存。
         """
         raise NotImplementedError
 
@@ -304,20 +304,20 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         state_dict: dict[str, Tensor] | None = None,
         dataset_meta: LeRobotDatasetMetadata | None = None,
     ) -> None:
-        """Publish this policy to the Hub.
+        """将该策略发布到 Hub。
 
-        Deprecated: use :func:`lerobot.common.train_utils.publish_trained_model` instead, which
-        also publishes the pre/post-processors alongside the model.
+        已弃用：请改用 :func:`lerobot.common.train_utils.publish_trained_model`，
+        它会在发布模型的同时发布预/后处理器。
 
         Args:
-            cfg (TrainPipelineConfig): The training config; saved as `train_config.json` and
-                used to render the model card.
-            peft_model: The PEFT wrapper when training adapters, whose weights replace the full
-                model weights in the published repo. Defaults to None.
-            state_dict (dict[str, Tensor] | None): Ignored; weights are now gathered internally
-                when the policy is sharded. Defaults to None.
-            dataset_meta (LeRobotDatasetMetadata | None): Dataset metadata for the model card,
-                if available. Defaults to None.
+            cfg (TrainPipelineConfig): 训练配置；保存为 `train_config.json`
+                并用于渲染模型卡片。
+            peft_model: 训练适配器时的 PEFT 包装器，其权重会在发布的仓库中
+                取代完整模型权重。默认为 None。
+            state_dict (dict[str, Tensor] | None): 被忽略；当策略为分片状态时，
+                权重现在在内部收集。默认为 None。
+            dataset_meta (LeRobotDatasetMetadata | None): 模型卡片用的数据集元数据
+                （如果可用）。默认为 None。
         """
         from lerobot.common.train_utils import publish_trained_model
 
@@ -343,44 +343,44 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         peft_cli_overrides: dict | None = None,
     ) -> PreTrainedPolicy:
         """
-        Wrap this policy with PEFT adapters for parameter-efficient fine-tuning.
+        用 PEFT 适配器包装该策略以进行参数高效微调。
 
-        This method is the single entry point for PEFT integration. Subclasses should
-        override `_get_default_peft_targets()` to provide default target modules, and
-        `_validate_peft_config()` for policy-specific validation.
+        该方法是 PEFT 集成的唯一入口。子类应重写
+        `_get_default_peft_targets()` 以提供默认目标模块，并重写
+        `_validate_peft_config()` 进行策略特定的验证。
 
         Args:
-            peft_config: Optional PEFT adapter configuration (e.g., LoraConfig).
-                If provided, used directly (with CLI overrides applied).
-            peft_cli_overrides: Optional dict of CLI overrides (method_type, target_modules, r, etc.)
-                These are merged with policy defaults to build the final config.
+            peft_config: 可选的 PEFT 适配器配置（例如 LoraConfig）。
+                如果提供，则直接使用（并应用 CLI 覆盖）。
+            peft_cli_overrides: 可选的 CLI 覆盖字典（method_type、target_modules、r 等）。
+                这些会与策略默认值合并以构建最终配置。
         """
         require_package("peft", extra="peft")
 
-        # If user provided a complete config, use it directly (with overrides)
+        # 如果用户提供了完整配置，直接使用（并应用覆盖）
         if peft_config is not None:
             final_config = peft_config
             if peft_cli_overrides:
                 final_config = self._apply_peft_cli_overrides(final_config, peft_cli_overrides)
         else:
-            # Build config from defaults + CLI overrides
+            # 根据默认值 + CLI 覆盖构建配置
             final_config = self._build_peft_config(peft_cli_overrides or {})
 
-        # Validate the configuration
+        # 验证配置
         self._validate_peft_config(final_config)
 
-        # Freeze base parameters, only adapter params will be trained
+        # 冻结基础参数，只训练适配器参数
         for p in self.parameters():
             p.requires_grad_(False)
 
-        # Store pretrained path for PEFT's base_model_name_or_path
+        # 存储预训练路径以作为 PEFT 的 base_model_name_or_path
         if self.config.pretrained_path:
             self.name_or_path = str(self.config.pretrained_path)
 
-        # Wrap with PEFT
+        # 用 PEFT 包装
         peft_model = get_peft_model(self, final_config)
 
-        # Mark config as using PEFT for proper loading later
+        # 将配置标记为使用 PEFT，以便后续正确加载
         peft_model.config.use_peft = True
 
         logging.info(f"Wrapped {self.name} with PEFT ({type(final_config).__name__})")
@@ -388,26 +388,26 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
 
     def _get_default_peft_targets(self) -> dict[str, any] | None:
         """
-        Return default PEFT target modules for this policy.
+        返回该策略的默认 PEFT 目标模块。
 
-        Override this in subclasses to provide policy-specific defaults. These defaults
-        are PEFT-method agnostic - they only specify which modules to target.
+        在子类中重写以提供策略特定的默认值。这些默认值
+        与 PEFT 方法无关——它们只指定要作用于哪些模块。
 
         """
         return None
 
     def _validate_peft_config(self, peft_config) -> None:
         """
-        Validate the PEFT configuration for this policy.
+        验证该策略的 PEFT 配置。
 
-        Override this in subclasses to add policy-specific validation or warnings.
-        The default implementation checks that a pretrained_path exists.
+        在子类中重写以添加策略特定的验证或警告。
+        默认实现检查 pretrained_path 是否存在。
 
         Args:
-            peft_config: The PEFT configuration to validate.
+            peft_config: 要验证的 PEFT 配置。
 
         Raises:
-            ValueError: If the configuration is invalid.
+            ValueError: 如果配置无效。
         """
         if not self.config.pretrained_path:
             raise ValueError(
@@ -417,27 +417,27 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
 
     def _preprocess_peft_cli_overrides(self, cli_overrides: dict, peft_method_type) -> dict:
         """
-        Preprocess CLI overrides: rename keys and handle method-specific init_type.
+        预处理 CLI 覆盖：重命名键并处理方法特定的 init_type。
 
         Args:
-            cli_overrides: Dict of CLI options (will be copied, not mutated).
-            peft_method_type: The PeftType enum value for the PEFT method.
+            cli_overrides: CLI 选项字典（会被复制，不会被修改）。
+            peft_method_type: PEFT 方法的 PeftType 枚举值。
 
         Returns:
-            Preprocessed dict with renamed keys and init_type mapped to method-specific key.
+            预处理后的字典，键已重命名，init_type 已映射到方法特定的键。
         """
         require_package("peft", extra="peft")
 
         cli_overrides = cli_overrides.copy()
 
-        # Handle the full_training_modules -> modules_to_save rename
+        # 处理 full_training_modules -> modules_to_save 的重命名
         if "full_training_modules" in cli_overrides:
             cli_overrides["modules_to_save"] = cli_overrides.pop("full_training_modules")
 
-        # Remove method_type as it's handled separately
+        # 移除 method_type，因为它在别处处理
         cli_overrides.pop("method_type", None)
 
-        # Handle init_type specially based on PEFT method
+        # 根据 PEFT 方法特殊处理 init_type
         init_type = cli_overrides.pop("init_type", None)
         if init_type is not None:
             if peft_method_type == PeftType.LORA:
@@ -450,24 +450,24 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         return cli_overrides
 
     def _build_peft_config(self, cli_overrides: dict):
-        """Build a PEFT config from policy defaults and CLI overrides."""
+        """根据策略默认值和 CLI 覆盖构建 PEFT 配置。"""
         require_package("peft", extra="peft")
 
-        # Determine PEFT method type (default to LORA)
+        # 确定 PEFT 方法类型（默认为 LORA）
         method_type_str = cli_overrides.get("method_type") or "lora"
         peft_method_type = PeftType[method_type_str.upper()]
         peft_config_cls = PEFT_TYPE_TO_CONFIG_MAPPING[peft_method_type]
 
-        # Preprocess CLI overrides
+        # 预处理 CLI 覆盖
         cli_overrides = self._preprocess_peft_cli_overrides(cli_overrides, peft_method_type)
 
-        # Start with policy defaults, apply CLI overrides
+        # 从策略默认值开始，应用 CLI 覆盖
         config_dict = dict(self._get_default_peft_targets() or {})
         for key, value in cli_overrides.items():
             if value is not None:
                 config_dict[key] = value
 
-        # Ensure we have target_modules
+        # 确保有 target_modules
         if not config_dict.get("target_modules"):
             raise ValueError(
                 f"Policy '{self.name}' does not define default target_modules. "
@@ -477,10 +477,10 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
         return peft_config_cls(**config_dict)
 
     def _apply_peft_cli_overrides(self, peft_config, cli_overrides: dict):
-        """Apply CLI overrides to an existing PEFT config."""
+        """将 CLI 覆盖应用到现有的 PEFT 配置。"""
         require_package("peft", extra="peft")
 
-        # Get method type from existing config or CLI override
+        # 从现有配置或 CLI 覆盖获取方法类型
         method_type_str = cli_overrides.get("method_type")
         if method_type_str:
             peft_method_type = PeftType[method_type_str.upper()]
@@ -489,10 +489,10 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
             peft_method_type = PeftType(peft_config.peft_type)
             peft_config_cls = type(peft_config)
 
-        # Preprocess CLI overrides
+        # 预处理 CLI 覆盖
         cli_overrides = self._preprocess_peft_cli_overrides(cli_overrides, peft_method_type)
 
-        # Start with existing config, apply CLI overrides
+        # 从现有配置开始，应用 CLI 覆盖
         config_dict = {k: v for k, v in dataclasses.asdict(peft_config).items() if not k.startswith("_")}
         for key, value in cli_overrides.items():
             if value is not None:

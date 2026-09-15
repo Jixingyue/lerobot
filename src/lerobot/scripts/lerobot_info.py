@@ -15,10 +15,10 @@
 # limitations under the License.
 
 """
-Use this script to get a quick summary of your system config.
-It should be able to run without any of LeRobot's dependencies or LeRobot itself installed.
+使用本脚本可以快速查看你的系统配置摘要。
+即使没有安装 LeRobot 的任何依赖或 LeRobot 本身，它也应该能够运行。
 
-Example:
+示例：
 
 ```shell
 lerobot-info
@@ -35,7 +35,7 @@ PACKAGE_NAME = "lerobot"
 
 
 def get_ffmpeg_version() -> str:
-    """Get the ffmpeg version if installed, otherwise return 'N/A'."""
+    """如果已安装则获取 ffmpeg 版本，否则返回 'N/A'。"""
     command_path = shutil.which("ffmpeg")
     if command_path is None:
         return "N/A"
@@ -49,7 +49,7 @@ def get_ffmpeg_version() -> str:
 
 
 def get_package_version(package_name: str) -> str:
-    """Get the version of a package if it exists, otherwise return 'N/A'."""
+    """如果包存在则获取其版本，否则返回 'N/A'。"""
     try:
         module = importlib.import_module(package_name)
         return getattr(module, "__version__", "Installed (version not found)")
@@ -58,8 +58,8 @@ def get_package_version(package_name: str) -> str:
 
 
 def get_sys_info() -> dict[str, str]:
-    """Run this to get basic system info to help for tracking issues & bugs."""
-    # General package versions
+    """运行此函数以获取基本系统信息，便于追踪问题与 bug。"""
+    # 常规包版本
     info = {
         "LeRobot version": get_package_version(PACKAGE_NAME),
         "Platform": platform.platform(),
@@ -71,7 +71,7 @@ def get_sys_info() -> dict[str, str]:
         "FFmpeg version": get_ffmpeg_version(),
     }
 
-    # PyTorch and GPU specific information
+    # PyTorch 和 GPU 相关信息
     torch_version = "N/A"
     torch_cuda_available = "N/A"
     cuda_version = "N/A"
@@ -83,10 +83,10 @@ def get_sys_info() -> dict[str, str]:
         torch_cuda_available = torch.cuda.is_available()
         if torch_cuda_available:
             cuda_version = str(torch.version.cuda)
-            # Gets the name of the first available GPU
+            # 获取第一个可用 GPU 的名称
             gpu_model = torch.cuda.get_device_name(0)
     except ImportError:
-        # If torch is not installed, the default "N/A" values will be used.
+        # 如果未安装 torch，将使用默认的 "N/A" 值。
         pass
 
     info.update(
@@ -112,13 +112,13 @@ def get_sys_info() -> dict[str, str]:
 
 
 def format_dict_for_markdown(d: dict[str, str]) -> str:
-    """Formats a dictionary into a markdown-friendly bulleted list."""
+    """将字典格式化为适用于 markdown 的项目符号列表。"""
     return "\n".join([f"- {prop}: {val}" for prop, val in d.items()])
 
 
 def main():
     """
-    Main function to print system info in markdown format.
+    以 markdown 格式打印系统信息的主函数。
     """
     system_info = get_sys_info()
     print(format_dict_for_markdown(system_info))

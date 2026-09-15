@@ -42,9 +42,9 @@ def safe_stop_image_writer(func):
 
 
 def squeeze_single_channel(array: np.ndarray) -> np.ndarray:
-    """Drop a leading or trailing singleton channel dim: ``(1, H, W)`` / ``(H, W, 1)`` -> ``(H, W)``.
+    """去除首尾的单元素通道维度：``(1, H, W)`` / ``(H, W, 1)`` -> ``(H, W)``。
 
-    Unlike ``array.squeeze()``, this only removes the channel axis, never an ``H`` or ``W`` of size 1.
+    与 ``array.squeeze()`` 不同，此函数只移除通道轴，绝不会移除大小为 1 的 ``H`` 或 ``W``。
     """
     if array.ndim == 3:
         if array.shape[0] == 1:
@@ -55,26 +55,26 @@ def squeeze_single_channel(array: np.ndarray) -> np.ndarray:
 
 
 def image_array_to_pil_image(image_array: np.ndarray, range_check: bool = True) -> PIL.Image.Image:
-    """Convert a NumPy array to a PIL Image, preserving precision for grayscale.
+    """将 NumPy 数组转换为 PIL 图像，并保留灰度图的精度。
 
-    Behaviour by shape:
+    按形状划分的行为：
 
-    - ``(H, W)`` or ``(1, H, W)`` / ``(H, W, 1)``: single-channel grayscale.
-      The native dtype is preserved using the matching PIL mode
-      (``I;16`` / ``F``). This is the path used for raw depth maps (no rescaling, clamping, or downcasting)
-    - ``(3, H, W)`` / ``(H, W, 3)``: RGB. Channels-first inputs are transposed
-      to channels-last. Float inputs in ``[0, 1]`` are scaled to ``uint8``
-      (existing behaviour, gated by ``range_check``).
+    - ``(H, W)`` 或 ``(1, H, W)`` / ``(H, W, 1)``：单通道灰度图。
+      使用匹配的 PIL 模式（``I;16`` / ``F``）保留原生 dtype。
+      这是原始深度图所走的路径（不做缩放、裁剪或降精度转换）。
+    - ``(3, H, W)`` / ``(H, W, 3)``：RGB。通道在前的输入会被转置为
+      通道在后。``[0, 1]`` 范围内的浮点输入会被缩放到 ``uint8``
+      （既有行为，由 ``range_check`` 控制）。
 
-    Other shapes / channel counts raise ``NotImplementedError`` or
-    ``ValueError``.
+    其他形状/通道数会抛出 ``NotImplementedError`` 或
+    ``ValueError``。
     """
-    # TODO(CarolinePascal): 4 dimensions RGB-D images
+    # TODO(CarolinePascal): 4 维 RGB-D 图像
     if image_array.ndim not in (2, 3):
         raise ValueError(f"The array has {image_array.ndim} dimensions, but 2 or 3 is expected for an image.")
 
-    # Squeeze 3D single-channel inputs to 2D so depth maps work whether the
-    # caller emits (H, W), (1, H, W), or (H, W, 1).
+    # 将 3D 单通道输入压缩为 2D，这样无论调用方输出的是
+    # (H, W)、(1, H, W) 还是 (H, W, 1)，深度图都能正常工作。
     image_array = squeeze_single_channel(image_array)
 
     if image_array.ndim == 2:
@@ -85,9 +85,9 @@ def image_array_to_pil_image(image_array: np.ndarray, range_check: bool = True) 
             )
         return PIL.Image.fromarray(np.ascontiguousarray(image_array))
 
-    # 3D path: must be RGB (3 channels), channels-first or channels-last.
+    # 3D 路径：必须是 RGB（3 通道），通道在前或通道在后均可。
     if image_array.shape[0] == 3:
-        # Transpose from pytorch convention (C, H, W) to (H, W, C)
+        # 从 pytorch 约定 (C, H, W) 转置为 (H, W, C)
         image_array = image_array.transpose(1, 2, 0)
 
     elif image_array.shape[-1] != 3:
@@ -112,9 +112,9 @@ def image_array_to_pil_image(image_array: np.ndarray, range_check: bool = True) 
 
 
 def save_kwargs_for_path(fpath: Path, compress_level: int) -> dict:
-    """Pick the right format-specific kwargs for :meth:`PIL.Image.Image.save`.
+    """为 :meth:`PIL.Image.Image.save` 选择合适的格式特定 kwargs。
 
-    PNG uses ``compress_level`` (0-9, zlib). TIFF uses ``compression`` (raw) for lossless raw depth maps.
+    PNG 使用 ``compress_level``（0-9，zlib）。TIFF 使用 ``compression``（raw）保存无损原始深度图。
     """
     suffix = Path(fpath).suffix.lower()
     if suffix == ".png":
@@ -127,28 +127,27 @@ def save_kwargs_for_path(fpath: Path, compress_level: int) -> dict:
 
 def write_image(image: np.ndarray | PIL.Image.Image, fpath: Path, compress_level: int = 1):
     """
-    Saves a NumPy array or PIL Image to a file.
+    将 NumPy 数组或 PIL 图像保存到文件。
 
-    This function handles both NumPy arrays and PIL Image objects, converting
-    the former to a PIL Image before saving. It includes error handling for
-    the save operation. The output format is inferred from the *fpath*
-    extension: ``.png`` → PNG with ``compress_level``, ``.tiff`` / ``.tif``
-    → lossless raw depth maps (TIFF).
+    此函数同时处理 NumPy 数组和 PIL 图像对象，会在保存前将
+    前者转换为 PIL 图像。它包含对保存操作的错误处理。
+    输出格式根据 *fpath* 扩展名推断：``.png`` → 带 ``compress_level``
+    的 PNG，``.tiff`` / ``.tif`` → 无损原始深度图（TIFF）。
 
     Args:
-        image (np.ndarray | PIL.Image.Image): The image data to save.
-        fpath (Path): The destination file path for the image.
-        compress_level (int, optional): The compression level for the saved
-            image, as used by PIL.Image.save(). Defaults to 1.
-            Refer to: https://github.com/huggingface/lerobot/pull/2135
-            for more details on the default value rationale.
+        image (np.ndarray | PIL.Image.Image): 要保存的图像数据。
+        fpath (Path): 图像的目标文件路径。
+        compress_level (int, optional): 保存图像的压缩级别，
+            与 PIL.Image.save() 所用的一致。默认为 1。
+            有关默认值选择依据的更多细节，
+            请参考：https://github.com/huggingface/lerobot/pull/2135。
 
     Raises:
-        TypeError: If the input 'image' is not a NumPy array or a
-            PIL.Image.Image object.
+        TypeError: 如果输入的 'image' 不是 NumPy 数组或
+            PIL.Image.Image 对象。
 
     Side Effects:
-        Logs an error message if the image writing process fails for any reason.
+        如果图像写入过程因任何原因失败，则记录错误消息。
     """
     try:
         if isinstance(image, np.ndarray):
@@ -186,17 +185,16 @@ def worker_process(queue: queue.Queue, num_threads: int):
 
 class AsyncImageWriter:
     """
-    This class abstract away the initialisation of processes or/and threads to
-    save images on disk asynchronously, which is critical to control a robot and record data
-    at a high frame rate.
+    此类抽象了进程或/和线程的初始化，用于异步将图像保存到磁盘，
+    这对于以高帧率控制机器人和记录数据至关重要。
 
-    When `num_processes=0`, it creates a threads pool of size `num_threads`.
-    When `num_processes>0`, it creates processes pool of size `num_processes`, where each subprocess starts
-    their own threads pool of size `num_threads`.
+    当 `num_processes=0` 时，它会创建大小为 `num_threads` 的线程池。
+    当 `num_processes>0` 时，它会创建大小为 `num_processes` 的进程池，
+    其中每个子进程都会启动自己大小为 `num_threads` 的线程池。
 
-    The optimal number of processes and threads depends on your computer capabilities.
-    We advise to use 4 threads per camera with 0 processes. If the fps is not stable, try to increase or lower
-    the number of threads. If it is still not stable, try to use 1 subprocess, or more.
+    最优的进程数和线程数取决于你的计算机性能。
+    我们建议每个相机使用 4 个线程且进程数为 0。如果 fps 不稳定，
+    可以尝试增加或减少线程数。如果仍不稳定，可以尝试使用 1 个子进程或更多。
     """
 
     def __init__(self, num_processes: int = 0, num_threads: int = 1):
@@ -211,7 +209,7 @@ class AsyncImageWriter:
             raise ValueError("Number of threads and processes must be greater than zero.")
 
         if self.num_processes == 0:
-            # Use threading
+            # 使用多线程
             self.queue = queue.Queue()
             for _ in range(self.num_threads):
                 t = threading.Thread(target=worker_thread_loop, args=(self.queue,))
@@ -219,7 +217,7 @@ class AsyncImageWriter:
                 t.start()
                 self.threads.append(t)
         else:
-            # Use multiprocessing
+            # 使用多进程
             self.queue = multiprocessing.JoinableQueue()
             for _ in range(self.num_processes):
                 p = multiprocessing.Process(target=worker_process, args=(self.queue, self.num_threads))
@@ -231,7 +229,7 @@ class AsyncImageWriter:
         self, image: torch.Tensor | np.ndarray | PIL.Image.Image, fpath: Path, compress_level: int = 1
     ):
         if isinstance(image, torch.Tensor):
-            # Convert tensor to numpy array to minimize main process time
+            # 将张量转换为 numpy 数组，以减少主进程耗时
             image = image.cpu().numpy()
         self.queue.put((image, fpath, compress_level))
 

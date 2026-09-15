@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 class KochLeader(Teleoperator):
     """
-    - [Koch v1.0](https://github.com/AlexanderKoch-Koch/low_cost_robot), with and without the wrist-to-elbow
-        expansion, developed by Alexander Koch from [Tau Robotics](https://tau-robotics.com)
-    - [Koch v1.1](https://github.com/jess-moss/koch-v1-1) developed by Jess Moss
+    - [Koch v1.0](https://github.com/AlexanderKoch-Koch/low_cost_robot)，包含和不包含腕部到肘部的
+        扩展版本，由 [Tau Robotics](https://tau-robotics.com) 的 Alexander Koch 开发
+    - [Koch v1.1](https://github.com/jess-moss/koch-v1-1)，由 Jess Moss 开发
     """
 
     config_class = KochLeaderConfig
@@ -88,7 +88,7 @@ class KochLeader(Teleoperator):
     def calibrate(self) -> None:
         self.bus.disable_torque()
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用它还是重新运行校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )
@@ -136,19 +136,18 @@ class KochLeader(Teleoperator):
         self.bus.configure_motors()
         for motor in self.bus.motors:
             if motor != "gripper":
-                # Use 'extended position mode' for all motors except gripper, because in joint mode the servos
-                # can't rotate more than 360 degrees (from 0 to 4095) And some mistake can happen while
-                # assembling the arm, you could end up with a servo with a position 0 or 4095 at a crucial
-                # point
+                # 除夹爪外，所有电机都使用“扩展位置模式”，因为在关节模式下舵机无法旋转超过
+                # 360 度（从 0 到 4095），而且组装机械臂时可能会出现一些错误，导致舵机在关键
+                # 点位上处于 0 或 4095 的位置
                 self.bus.write("Operating_Mode", motor, OperatingMode.EXTENDED_POSITION.value)
 
-        # Use 'position control current based' for gripper to be limited by the limit of the current.
-        # For the follower gripper, it means it can grasp an object without forcing too much even tho,
-        # its goal position is a complete grasp (both gripper fingers are ordered to join and reach a touch).
-        # For the leader gripper, it means we can use it as a physical trigger, since we can force with our finger
-        # to make it move, and it will move back to its original target position when we release the force.
+        # 夹爪使用基于电流的“位置控制”，使其受电流限制约束。
+        # 对于从动臂夹爪，这意味着即使其目标位置是完全抓取（两个夹爪手指被命令合拢并接触），
+        # 它在抓取物体时也不会过度用力。
+        # 对于主臂夹爪，这意味着我们可以将其用作物理触发器，因为我们可以用手指施力让它移动，
+        # 并在松开力时它会回到原来的目标位置。
         self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value)
-        # Set gripper's goal pos in current position mode so that we can use it as a trigger.
+        # 在当前位置模式下设置夹爪的目标位置，以便将其用作触发器。
         self.bus.enable_torque("gripper")
         if self.is_calibrated:
             self.bus.write("Goal_Position", "gripper", self.config.gripper_open_pos)
@@ -169,7 +168,7 @@ class KochLeader(Teleoperator):
         return action
 
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        # TODO(rcadene, aliberts): Implement force feedback
+        # TODO(rcadene, aliberts): 实现力反馈
         raise NotImplementedError
 
     @check_if_not_connected

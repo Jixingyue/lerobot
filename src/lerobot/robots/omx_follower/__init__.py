@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# OMX is a fully open-source robot from ROBOTIS.
-# More information at: https://ai.robotis.com/omx/introduction_omx.html
+# OMX 是 ROBOTIS 推出的完全开源机器人。
+# 更多信息请访问：https://ai.robotis.com/omx/introduction_omx.html
 
 from .config_omx_follower import OmxFollowerConfig
 from .omx_follower import OmxFollower

@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Real-Time Chunking inference engine.
+"""Real-Time Chunking 推理引擎。
 
-A background thread produces action chunks asynchronously via
-:meth:`policy.predict_action_chunk`.  The main control loop polls
-``get_action`` for the next ready action; observations flow the other
-way via ``notify_observation``.
+后台线程通过 :meth:`policy.predict_action_chunk` 异步生成动作块（action
+chunks）。主控制循环通过 ``get_action`` 轮询获取下一个就绪的动作；
+观测则沿相反方向通过 ``notify_observation`` 传入。
 """
 
 from __future__ import annotations
@@ -48,33 +47,33 @@ from .base import InferenceEngine, PolicyQuery
 
 logger = logging.getLogger(__name__)
 
-# How long the RTC loop sleeps when paused, idle, or backpressured by a full queue.
+# RTC 循环在暂停、空闲或因队列已满而受到反压时的休眠时长。
 _RTC_IDLE_SLEEP_S: float = 0.01
-# Backoff between transient inference errors (per consecutive failure).
+# 瞬时推理错误之间的退避时间（按每次连续失败计）。
 _RTC_ERROR_RETRY_DELAY_S: float = 0.5
-# Consecutive transient errors tolerated before giving up and propagating shutdown.
+# 在放弃并传播关闭信号之前，所能容忍的连续瞬时错误次数。
 _RTC_MAX_CONSECUTIVE_ERRORS: int = 10
-# Consecutive unusable trained-RTC chunks tolerated before declaring the delay unsupportable.
+# 在判定该延迟无法支持之前，所能容忍的连续不可用 trained-RTC 动作块数量。
 _RTC_MAX_CONSECUTIVE_DISCARDS: int = 5
-# Hard timeout for joining the RTC thread on stop().
+# stop() 时 join RTC 线程的硬性超时时间。
 _RTC_JOIN_TIMEOUT_S: float = 3.0
 
 
 class _FatalRTCInferenceError(RuntimeError):
-    """Base class for RTC errors that cannot become valid after a retry."""
+    """即使重试也无法恢复正常的 RTC 错误的基类。"""
 
 
 class _TrainedRTCDelayExceededError(_FatalRTCInferenceError):
-    """Raised when measured latency persistently exceeds a trained RTC checkpoint's support."""
+    """当测得的延迟持续超出 trained RTC 检查点所支持的范围时抛出。"""
 
 
 # ---------------------------------------------------------------------------
-# RTC helpers
+# RTC 辅助函数
 # ---------------------------------------------------------------------------
 
 
 def supports_rtc_inference(policy: PreTrainedPolicy) -> bool:
-    """Whether a policy declares RTC support and accepts the RTC call shape."""
+    """策略是否声明支持 RTC 且接受 RTC 的调用形式。"""
     supports_rtc = getattr(policy, "supports_rtc", None)
     if not callable(supports_rtc) or not supports_rtc():
         return False
@@ -91,7 +90,7 @@ def supports_rtc_inference(policy: PreTrainedPolicy) -> bool:
 
 
 def _normalize_prev_actions_length(prev_actions: torch.Tensor, target_steps: int) -> torch.Tensor:
-    """Pad or truncate RTC prefix actions to a fixed length for stable compiled inference."""
+    """将 RTC 前缀动作填充或截断到固定长度，以保证编译后推理的稳定性。"""
     if prev_actions.ndim != 2:
         raise ValueError(f"Expected 2D [T, A] tensor, got shape={tuple(prev_actions.shape)}")
     steps, action_dim = prev_actions.shape
@@ -111,12 +110,12 @@ def _trained_rtc_chunk_can_merge(
     training_max_delay: int,
     has_previous_actions: bool,
 ) -> bool:
-    """Whether a trained RTC chunk still covers the overlap that actually elapsed.
+    """一个 trained RTC 动作块是否仍然覆盖实际经过的重叠区间。
 
-    A chunk is unusable either because inference outran the prefix it was conditioned on, or
-    because the elapsed delay left the range the checkpoint was trained for. Both are transient
-    by nature (a latency spike), so this reports them the same way and lets the caller retry;
-    only a persistent run of unusable chunks is fatal.
+    动作块不可用有两种情形：要么推理耗时超过了它作为条件的前缀长度，要么实际
+    经过的延迟超出了检查点训练时所覆盖的范围。两者本质上都是瞬时的
+    （一次延迟尖峰），因此本函数以相同方式上报，让调用方重试；
+    只有持续出现一连串不可用的动作块时才是致命的。
     """
     if not has_previous_actions:
         return True
@@ -133,7 +132,7 @@ def _estimate_rtc_delay(
     training_max_delay: int,
     has_previous_actions: bool,
 ) -> int:
-    """Estimate overlap, using the trained capacity to bootstrap the first transition."""
+    """估计重叠区间，并利用训练时的容量来引导（bootstrap）首次转换。"""
     if latency:
         return math.ceil(latency / time_per_step)
     if mode == "trained" and has_previous_actions:
@@ -142,13 +141,13 @@ def _estimate_rtc_delay(
 
 
 def _clamp_trained_rtc_delay(*, conditioned_delay: int, available_steps: int, training_max_delay: int) -> int:
-    """Clamp the hard prefix to what both the checkpoint and the queue can back.
+    """将硬性前缀截断（clamp）到检查点和队列都能支撑的范围内。
 
-    Past ``training_max_delay`` the model has never seen a prefix that long, and past
-    ``available_steps`` ``_normalize_prev_actions_length`` zero-pads the tail, so the extra
-    steps would be inpainted as if zeros were committed actions. Clamping keeps the chunk
-    usable; ``_trained_rtc_chunk_can_merge`` still discards it if the delay that actually
-    elapsed outran this prefix.
+    超过 ``training_max_delay`` 后，模型从未见过那么长的前缀；而超过
+    ``available_steps`` 后，``_normalize_prev_actions_length`` 会对尾部补零，
+    于是多出来的那些步会被当作"已提交的动作是零"一样补全。截断可以保证
+    动作块仍然可用；如果实际经过的延迟超过了此前缀，
+    ``_trained_rtc_chunk_can_merge`` 仍会将其丢弃。
     """
     clamped = min(conditioned_delay, training_max_delay, available_steps)
     if clamped < conditioned_delay:
@@ -171,12 +170,11 @@ def _clamp_trained_rtc_delay(*, conditioned_delay: int, available_steps: int, tr
 
 
 class RTCInferenceEngine(InferenceEngine):
-    """Async RTC inference: a background thread produces action chunks.
+    """异步 RTC 推理：由后台线程生成动作块。
 
-    ``get_action`` pops the next action from the shared queue (or
-    returns ``None`` if the queue is empty).  The main loop should call
-    ``notify_observation`` every tick and ``pause``/``resume`` around
-    human-intervention phases.
+    ``get_action`` 从共享队列中弹出下一个动作（如果队列为空则
+    返回 ``None``）。主循环应当在每个节拍调用 ``notify_observation``，
+    并在人工干预阶段前后调用 ``pause``/``resume``。
     """
 
     def __init__(
@@ -211,8 +209,8 @@ class RTCInferenceEngine(InferenceEngine):
         self._action_queue: ActionQueue | None = None
         self._obs_holder: dict[str, Any] = {}
         self._obs_lock = Lock()
-        # Bumped by reset() under _obs_lock, so a chunk whose inference started before a
-        # reset is discarded instead of merged into the fresh queue.
+        # 由 reset() 在 _obs_lock 保护下递增，这样在 reset 之前就已开始推理的
+        # 动作块会被丢弃，而不会被合并到全新的队列中。
         self._reset_epoch = 0
         self._policy_active = Event()
         self._compile_warmup_done = Event()
@@ -231,7 +229,7 @@ class RTCInferenceEngine(InferenceEngine):
                 compile_warmup_inferences,
             )
 
-        # Processor introspection for relative-action re-anchoring.
+        # 对处理器进行内省，用于相对动作的重新锚定（re-anchoring）。
         self._relative_step = next(
             (s for s in preprocessor.steps if isinstance(s, RelativeActionsProcessorStep) and s.enabled),
             None,
@@ -252,34 +250,34 @@ class RTCInferenceEngine(InferenceEngine):
             logger.info("Relative actions enabled: RTC prefix will be re-anchored")
 
     # ------------------------------------------------------------------
-    # Lifecycle
+    # 生命周期
     # ------------------------------------------------------------------
 
     @property
     def ready(self) -> bool:
-        """True once torch.compile warmup is complete (or immediately if compile is disabled)."""
+        """torch.compile 预热完成后为 True（若禁用了编译则立即为 True）。"""
         return self._compile_warmup_done.is_set()
 
     @property
     def failed(self) -> bool:
-        """True if the RTC background thread exited due to an unrecoverable error."""
+        """当 RTC 后台线程因不可恢复的错误而退出时为 True。"""
         return self._rtc_error.is_set()
 
     @property
     def failure_traceback(self) -> str | None:
-        """Traceback captured when the RTC thread died (see ``failed``).
+        """RTC 线程死亡时捕获的回溯信息（参见 ``failed``）。
 
-        Kept as data, not just logged, so consumers can re-surface it when someone looks.
+        将其作为数据保留而不仅仅是写入日志，以便使用者在有人查看时能够再次呈现它。
         """
         return self._failure_traceback
 
     @property
     def action_queue(self) -> ActionQueue | None:
-        """The shared action queue between the RTC thread and the main loop."""
+        """RTC 线程与主循环之间共享的动作队列。"""
         return self._action_queue
 
     def start(self) -> None:
-        """Launch the RTC background thread."""
+        """启动 RTC 后台线程。"""
         self._action_queue = ActionQueue(self._rtc_config)
         self._obs_holder = {
             "obs": None,
@@ -295,7 +293,7 @@ class RTCInferenceEngine(InferenceEngine):
         logger.info("RTC inference thread started")
 
     def stop(self) -> None:
-        """Signal the RTC thread to stop and wait for it."""
+        """通知 RTC 线程停止并等待其结束。"""
         logger.info("Stopping RTC inference thread...")
         self._shutdown_event.set()
         self._policy_active.clear()
@@ -308,83 +306,82 @@ class RTCInferenceEngine(InferenceEngine):
             self._rtc_thread = None
 
     def pause(self) -> None:
-        """Pause the RTC background thread."""
+        """暂停 RTC 后台线程。"""
         logger.info("Pausing RTC inference thread")
         self._policy_active.clear()
 
     def resume(self) -> None:
-        """Resume the RTC background thread."""
+        """恢复 RTC 后台线程。"""
         logger.info("Resuming RTC inference thread")
         self._policy_active.set()
 
     def reset(self) -> None:
-        """Reset the policy, processors, and action queue.
+        """重置策略、处理器和动作队列。
 
-        Safe to call with the RTC thread paused or running.  Also drops the last published
-        observation — a chunk computed from a stale one would jerk the robot toward an old
-        pose — and bumps the reset epoch so an in-flight chunk is discarded instead of
-        merged into the cleared queue.
+        在 RTC 线程暂停或运行时调用都是安全的。此外还会丢弃最近一次发布的
+        观测——基于陈旧观测计算出的动作块会让机器人猛地移向旧位姿——
+        并递增 reset 纪元（epoch），使正在处理中的动作块被丢弃，而不是
+        被合并到已清空的队列中。
         """
         logger.info("Resetting RTC inference state (policy + processors + queue)")
         self._policy.reset()
         self._preprocessor.reset()
         self._postprocessor.reset()
         with self._obs_lock:
-            # Clear and bump in one critical section, mirroring _rtc_loop's epoch
-            # check-and-merge, so a reset cannot leak a pre-reset chunk into the fresh
-            # queue.  Lock order is _obs_lock -> queue.lock on both sides.
+            # 在同一个临界区中完成清空与递增，与 _rtc_loop 的"纪元检查 + 合并"
+            # 相对应，从而保证 reset 不可能把 reset 之前的动作块泄漏到全新的
+            # 队列中。两侧的加锁顺序均为 _obs_lock -> queue.lock。
             if self._action_queue is not None:
                 self._action_queue.clear()
             self._obs_holder["obs"] = None
             self._reset_epoch += 1
-        # The queue is empty, so a pending task change has nothing stale to blend against.
+        # 队列已为空，因此待处理的任务变更不会与任何陈旧内容混合。
         self._discard_task_change()
 
     # ------------------------------------------------------------------
-    # Action production (called from main thread)
+    # 动作生产（从主线程调用）
     # ------------------------------------------------------------------
 
     def get_action(self, obs_frame: dict | None) -> torch.Tensor | None:
-        """Pop the next action from the RTC queue (ignores ``obs_frame``)."""
+        """从 RTC 队列中弹出下一个动作（忽略 ``obs_frame``）。"""
         if self._action_queue is None:
             return None
         queued = self._action_queue.get_with_task()
         if queued is None:
             return None
-        # The queue pairs each action with its chunk's task under the queue lock, so a
-        # concurrent merge cannot cross labels between chunks.
+        # 队列在队列锁的保护下将每个动作与其所属动作块的任务配对，因此并发的
+        # 合并不会在不同动作块之间错配标签。
         action, task = queued
         if task is None:
-            # Every merge here labels its chunk, so a missing label means a foreign
-            # writer: fail loudly rather than corrupt dispatched_task and frame labels.
+            # 这里的每次合并都会为其动作块打上标签，因此缺失标签意味着存在外来
+            # 写入方：直接显式报错，而不是破坏 dispatched_task 和帧标签。
             raise RuntimeError("RTC action queue returned an action without task provenance")
         self._set_dispatched_task(task)
         return action
 
     def notify_observation(self, obs: dict) -> None:
-        """Publish the latest observation for the RTC thread to consume."""
+        """发布最新观测，供 RTC 线程消费。"""
         with self._obs_lock:
             self._obs_holder["obs"] = obs
 
     # ------------------------------------------------------------------
-    # Text queries
+    # 文本查询
     # ------------------------------------------------------------------
 
     @property
     def supports_text_queries(self) -> bool:
-        """True when the policy has a text head."""
+        """当策略具有文本头（text head）时为 True。"""
         return self._policy.supports_text_generation()
 
     @property
     def control_thread_owns_policy(self) -> bool:
-        """The RTC background thread owns the policy; it services queries in ``_rtc_loop``."""
+        """策略由 RTC 后台线程拥有；查询在 ``_rtc_loop`` 中被处理。"""
         return False
 
     def _generate_text(self, obs_processed: dict, query: PolicyQuery) -> str:
-        """Run the policy's text head.  Called on the RTC thread (see ``_rtc_loop``)."""
+        """运行策略的文本头。在 RTC 线程上调用（参见 ``_rtc_loop``）。"""
         obs_batch = build_dataset_frame(self._hw_features, obs_processed, prefix="observation")
-        # Live task, read without consuming the task-changed edge: that belongs to the
-        # chunk path.
+        # 当前任务，读取时不消费"任务已变更"这一边沿信号：它属于动作块路径。
         task = self.task
         obs_batch = prepare_observation_for_inference(
             obs_batch, torch.device(self._device), task, self._robot.robot_type
@@ -392,15 +389,15 @@ class RTCInferenceEngine(InferenceEngine):
         obs_batch = self._mark_query(obs_batch, query)
         preprocessed = self._preprocessor(obs_batch)
         with torch.inference_mode():
-            # No str() coercion: _service_query validates the return value.
+            # 不做 str() 强制转换：_service_query 会校验返回值。
             return self._policy.generate_text(preprocessed)
 
     # ------------------------------------------------------------------
-    # RTC: background inference thread
+    # RTC：后台推理线程
     # ------------------------------------------------------------------
 
     def _rtc_loop(self) -> None:
-        """Background thread that generates action chunks via RTC."""
+        """通过 RTC 生成动作块的后台线程。"""
         try:
             latency_tracker = LatencyTracker()
             time_per_chunk = 1.0 / self._fps
@@ -424,19 +421,18 @@ class RTCInferenceEngine(InferenceEngine):
                     time.sleep(_RTC_IDLE_SLEEP_S)
                     continue
 
-                # Serve a queued text query here — this is the thread that owns the policy.  Above the
-                # refill branch on purpose: a query issued while the queue is full would otherwise wait
-                # for it to drain.  A next-subtask answer is applied via ``set_task``, so the chunk path
-                # below uses it, and that path re-runs the preprocessor on its own observation, so
-                # stateful steps (relative-action anchoring) are not left holding this query's.
+                # 在此处理排队中的文本查询——本线程才是拥有策略的线程。特意放在
+                # 队列补充分支之前：否则在队列已满时发出的查询将不得不等待队列
+                # 被排空。next-subtask 的回答通过 ``set_task`` 应用，因此下面的
+                # 动作块路径会使用它，而该路径会基于自己的观测重新运行预处理器，
+                # 于是有状态的步骤（相对动作锚定）不会残留本次查询的状态。
                 if self._service_query(obs):
-                    # The generation took seconds, so the snapshot above is stale: re-read
-                    # the observation, and the epoch so the discard guard below also covers
-                    # a reset that landed during the query.
+                    # 生成过程耗时数秒，因此上面的快照已经陈旧：重新读取观测以及
+                    # 纪元，使下面的丢弃保护也能覆盖查询期间发生的 reset。
                     with self._obs_lock:
                         obs = self._obs_holder.get("obs")
                         epoch_before = self._reset_epoch
-                    if obs is None:  # a reset mid-query dropped the observation
+                    if obs is None:  # 查询中途发生的 reset 丢弃了观测
                         continue
 
                 if queue.qsize() <= self._rtc_queue_threshold:
@@ -465,11 +461,10 @@ class RTCInferenceEngine(InferenceEngine):
 
                         task, task_changed = self._take_task()
                         if task_changed:
-                            # No queue flush on purpose: dropping queued actions would
-                            # leave the robot uncommanded for a full inference latency.
-                            # With RTC blending on this chunk is merged over the previous
-                            # chunk's leftover prefix, so the switch lands within one
-                            # inference; with blending off the queue drains first.
+                            # 故意不清空队列：丢弃已排队的动作会让机器人在整整一个
+                            # 推理延迟内收不到指令。启用 RTC 混合时，该动作块会基于
+                            # 上一个动作块的剩余前缀进行合并，因此切换会在一次推理
+                            # 之内生效；关闭混合时则先排空队列。
                             logger.info("Task changed to '%s' — applied from the next merged chunk", task)
 
                         obs_batch = build_dataset_frame(self._hw_features, obs, prefix="observation")
@@ -481,8 +476,8 @@ class RTCInferenceEngine(InferenceEngine):
                         preprocessed = self._preprocessor(obs_batch)
 
                         if prev_actions is not None and self._relative_step is not None:
-                            # Rebase against the raw cached state so the leftover tail stays in
-                            # the training-time coordinate frame.
+                            # 基于缓存的原始状态重新定基（rebase），使剩余的尾部保持在
+                            # 训练时的坐标系中。
                             raw_state = self._relative_step.get_cached_state()
                             if raw_state is not None:
                                 prev_abs = queue.get_processed_left_over()
@@ -553,9 +548,9 @@ class RTCInferenceEngine(InferenceEngine):
 
                         consecutive_discards = 0
                         with self._obs_lock:
-                            # Check and merge in one critical section, mirroring reset()'s
-                            # clear-and-bump, so a reset cannot land between them and leak
-                            # a pre-reset chunk.  Lock order: _obs_lock -> queue.lock.
+                            # 在同一个临界区中完成检查与合并，与 reset() 的"清空 + 递增"
+                            # 相对应，从而保证 reset 不可能落在两者之间并泄漏 reset
+                            # 之前的动作块。加锁顺序：_obs_lock -> queue.lock。
                             epoch_unchanged = epoch_before == self._reset_epoch
                             if epoch_unchanged:
                                 queue.merge(original, processed, new_delay, idx_before, task=task)
@@ -584,7 +579,7 @@ class RTCInferenceEngine(InferenceEngine):
                         )
                         logger.debug(traceback.format_exc())
                         if consecutive_errors >= _RTC_MAX_CONSECUTIVE_ERRORS:
-                            # Persistent failure: stop retrying and propagate shutdown.
+                            # 持续性故障：停止重试并传播关闭信号。
                             raise
                         time.sleep(_RTC_ERROR_RETRY_DELAY_S)
                 else:
@@ -595,8 +590,8 @@ class RTCInferenceEngine(InferenceEngine):
             logger.error("Fatal error in RTC thread: %s", e)
             logger.error(self._failure_traceback)
             self._rtc_error.set()
-            # Unblock any warmup waiters so the main loop doesn't spin forever
+            # 解除所有预热等待者的阻塞，以免主循环无限空转
             self._compile_warmup_done.set()
-            # Signal the top-level shutdown so strategies exit their control loops
+            # 通知顶层关闭，使各个策略（strategies）退出其控制循环
             if self._global_shutdown_event is not None:
                 self._global_shutdown_event.set()

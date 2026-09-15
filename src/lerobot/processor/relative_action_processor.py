@@ -26,7 +26,7 @@ from lerobot.utils.constants import OBS_STATE
 from .delta_action_processor import MapDeltaActionToRobotActionStep, MapTensorToDeltaActionDictStep
 from .pipeline import ProcessorStep, ProcessorStepRegistry
 
-# Re-export for backward compatibility
+# 为向后兼容而重新导出
 __all__ = [
     "MapDeltaActionToRobotActionStep",
     "MapTensorToDeltaActionDictStep",
@@ -38,17 +38,17 @@ __all__ = [
 
 
 def to_relative_actions(actions: Tensor, state: Tensor, mask: Sequence[bool]) -> Tensor:
-    """Convert absolute actions to relative: relative = action - state (for masked dims).
+    """将绝对动作转换为相对动作：relative = action - state（针对被掩码选中的维度）。
 
     Args:
-        actions: (B, T, action_dim) or (B, action_dim).
-        state: (B, state_dim). Broadcast across time dimension.
-        mask: Which dims to convert. Can be shorter than action_dim.
+        actions: (B, T, action_dim) 或 (B, action_dim)。
+        state: (B, state_dim)。在时间维度上广播。
+        mask: 要转换的维度。可以比 action_dim 短。
     """
     mask_t = torch.tensor(mask, dtype=actions.dtype, device=actions.device)
     dims = mask_t.shape[0]
-    # Align state to the same device/dtype as actions. _last_state is cached before
-    # DeviceProcessorStep moves the transition, so it can be on CPU while actions are on CUDA.
+    # 将 state 对齐到与 actions 相同的设备/dtype。_last_state 是在
+    # DeviceProcessorStep 移动转移之前缓存的，因此它可能在 CPU 上而 actions 在 CUDA 上。
     if state.device != actions.device or state.dtype != actions.dtype:
         state = state.to(device=actions.device, dtype=actions.dtype)
     state_offset = state[..., :dims] * mask_t
@@ -60,17 +60,17 @@ def to_relative_actions(actions: Tensor, state: Tensor, mask: Sequence[bool]) ->
 
 
 def to_absolute_actions(actions: Tensor, state: Tensor, mask: Sequence[bool]) -> Tensor:
-    """Convert relative actions back to absolute: absolute = relative + state (for masked dims).
+    """将相对动作转换回绝对动作：absolute = relative + state（针对被掩码选中的维度）。
 
     Args:
-        actions: (B, T, action_dim) or (B, action_dim).
-        state: (B, state_dim). Broadcast across time dimension.
-        mask: Which dims to convert. Can be shorter than action_dim.
+        actions: (B, T, action_dim) 或 (B, action_dim)。
+        state: (B, state_dim)。在时间维度上广播。
+        mask: 要转换的维度。可以比 action_dim 短。
     """
     mask_t = torch.tensor(mask, dtype=actions.dtype, device=actions.device)
     dims = mask_t.shape[0]
-    # Align state to the same device/dtype as actions. _last_state is cached before
-    # DeviceProcessorStep moves the transition, so it can be on CPU while actions are on CUDA.
+    # 将 state 对齐到与 actions 相同的设备/dtype。_last_state 是在
+    # DeviceProcessorStep 移动转移之前缓存的，因此它可能在 CPU 上而 actions 在 CUDA 上。
     if state.device != actions.device or state.dtype != actions.dtype:
         state = state.to(device=actions.device, dtype=actions.dtype)
     state_offset = state[..., :dims] * mask_t
@@ -84,18 +84,18 @@ def to_absolute_actions(actions: Tensor, state: Tensor, mask: Sequence[bool]) ->
 @ProcessorStepRegistry.register("relative_actions_processor")
 @dataclass
 class RelativeActionsProcessorStep(ProcessorStep):
-    """Converts absolute actions to relative actions (action -= state) for masked dimensions.
+    """对被掩码选中的维度，将绝对动作转换为相对动作（action -= state）。
 
-    Mirrors OpenPI's DeltaActions transform. Applied during preprocessing so the model
-    trains on relative offsets instead of absolute positions.
-    Caches the last seen state so a paired AbsoluteActionsProcessorStep can reverse
-    the conversion during postprocessing.
+    对应 OpenPI 的 DeltaActions 变换。在预处理阶段应用，使模型
+    基于相对偏移量而非绝对位置进行训练。
+    缓存最近一次的 state，以便配对的 AbsoluteActionsProcessorStep 在
+    后处理阶段可以逆转该转换。
 
     Attributes:
-        enabled: Whether to apply the relative conversion.
-        exclude_joints: Joint names to keep absolute (not converted to relative).
-        action_names: Action dimension names from dataset metadata, used to build
-            the mask from exclude_joints. If None, all dims are converted.
+        enabled: 是否应用相对转换。
+        exclude_joints: 保持为绝对值的关节名称（不转换为相对值）。
+        action_names: 来自数据集元数据的动作维度名称，用于根据
+            exclude_joints 构建掩码。如果为 None，则转换所有维度。
     """
 
     enabled: bool = False
@@ -126,7 +126,7 @@ class RelativeActionsProcessorStep(ProcessorStep):
         observation = transition.get(TransitionKey.OBSERVATION, {})
         state = observation.get(OBS_STATE) if observation else None
 
-        # Always cache state for the paired AbsoluteActionsProcessorStep
+        # 始终缓存 state，供配对的 AbsoluteActionsProcessorStep 使用
         if state is not None:
             self._last_state = state
 
@@ -143,7 +143,7 @@ class RelativeActionsProcessorStep(ProcessorStep):
         return new_transition
 
     def get_cached_state(self) -> torch.Tensor | None:
-        """Return the cached ``observation.state`` used as the reference point for relative/absolute action conversions."""
+        """返回缓存的 ``observation.state``，它被用作相对/绝对动作转换的参考点。"""
         return self._last_state
 
     def get_config(self) -> dict[str, Any]:
@@ -162,15 +162,15 @@ class RelativeActionsProcessorStep(ProcessorStep):
 @ProcessorStepRegistry.register("absolute_actions_processor")
 @dataclass
 class AbsoluteActionsProcessorStep(ProcessorStep):
-    """Converts relative actions back to absolute actions (action += state) for all dimensions.
+    """对所有维度将相对动作转换回绝对动作（action += state）。
 
-    Mirrors OpenPI's AbsoluteActions transform. Applied during postprocessing so
-    predicted relative offsets are converted back to absolute positions for execution.
-    Reads the cached state from its paired RelativeActionsProcessorStep.
+    对应 OpenPI 的 AbsoluteActions 变换。在后处理阶段应用，使
+    预测的相对偏移量被转换回绝对位置以供执行。
+    从其配对的 RelativeActionsProcessorStep 读取缓存的 state。
 
     Attributes:
-        enabled: Whether to apply the absolute conversion.
-        relative_step: Reference to the paired RelativeActionsProcessorStep that caches state.
+        enabled: 是否应用绝对转换。
+        relative_step: 对缓存 state 的配对 RelativeActionsProcessorStep 的引用。
     """
 
     enabled: bool = False

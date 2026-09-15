@@ -14,24 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Custom rotation utilities to replace scipy.spatial.transform.Rotation."""
+"""自定义旋转工具，用于替代 scipy.spatial.transform.Rotation。"""
 
 import numpy as np
 
 
 class Rotation:
     """
-    Custom rotation class that provides a subset of scipy.spatial.transform.Rotation functionality.
+    自定义旋转类，提供 scipy.spatial.transform.Rotation 的一部分功能。
 
-    Supports conversions between rotation vectors, rotation matrices, and quaternions.
+    支持旋转向量、旋转矩阵和四元数之间的相互转换。
     """
 
     def __init__(self, quat: np.ndarray) -> None:
-        """Initialize rotation from quaternion [x, y, z, w]."""
+        """根据四元数 [x, y, z, w] 初始化旋转。"""
         self._quat = np.asarray(quat, dtype=float)
         if self._quat.shape != (4,):
             raise ValueError(f"Quaternion must have shape (4,), got {self._quat.shape}")
-        # Normalize quaternion. Reject the zero vector — it has no orientation.
+        # 归一化四元数。拒绝零向量——它不表示任何方向。
         norm = np.linalg.norm(self._quat)
         if norm <= 0.0 or not np.isfinite(norm):
             raise ValueError(f"Quaternion must be a non-zero finite vector; got {self._quat} (norm={norm})")
@@ -40,19 +40,19 @@ class Rotation:
     @classmethod
     def from_rotvec(cls, rotvec: np.ndarray) -> "Rotation":
         """
-        Create rotation from rotation vector using Rodrigues' formula.
+        使用罗德里格斯公式根据旋转向量创建旋转。
 
-        Args:
-            rotvec: Rotation vector [x, y, z] where magnitude is angle in radians
+        参数:
+            rotvec: 旋转向量 [x, y, z]，其模长为以弧度表示的角度
 
-        Returns:
-            Rotation instance
+        返回:
+            Rotation 实例
         """
         rotvec = np.asarray(rotvec, dtype=float)
         angle = np.linalg.norm(rotvec)
 
         if angle < 1e-8:
-            # For very small angles, use identity quaternion
+            # 对于非常小的角度，使用单位四元数
             quat = np.array([0.0, 0.0, 0.0, 1.0])
         else:
             axis = rotvec / angle
@@ -60,7 +60,7 @@ class Rotation:
             sin_half = np.sin(half_angle)
             cos_half = np.cos(half_angle)
 
-            # Quaternion [x, y, z, w]
+            # 四元数 [x, y, z, w]
             quat = np.array([axis[0] * sin_half, axis[1] * sin_half, axis[2] * sin_half, cos_half])
 
         return cls(quat)
@@ -68,17 +68,17 @@ class Rotation:
     @classmethod
     def from_matrix(cls, matrix: np.ndarray) -> "Rotation":
         """
-        Create rotation from 3x3 rotation matrix.
+        根据 3x3 旋转矩阵创建旋转。
 
-        Args:
-            matrix: 3x3 rotation matrix
+        参数:
+            matrix: 3x3 旋转矩阵
 
-        Returns:
-            Rotation instance
+        返回:
+            Rotation 实例
         """
         matrix = np.asarray(matrix, dtype=float)
 
-        # Shepherd's method for converting rotation matrix to quaternion
+        # 将旋转矩阵转换为四元数的 Shepherd 方法
         trace = np.trace(matrix)
 
         if trace > 0:
@@ -112,27 +112,27 @@ class Rotation:
     @classmethod
     def from_quat(cls, quat: np.ndarray) -> "Rotation":
         """
-        Create rotation from quaternion.
+        根据四元数创建旋转。
 
-        Args:
-            quat: Quaternion [x, y, z, w] or [w, x, y, z] (specify convention in docstring)
-                  This implementation expects [x, y, z, w] format
+        参数:
+            quat: 四元数 [x, y, z, w] 或 [w, x, y, z]（约定需在 docstring 中说明）
+                  本实现期望 [x, y, z, w] 格式
 
-        Returns:
-            Rotation instance
+        返回:
+            Rotation 实例
         """
         return cls(quat)
 
     def as_matrix(self) -> np.ndarray:
         """
-        Convert rotation to 3x3 rotation matrix.
+        将旋转转换为 3x3 旋转矩阵。
 
-        Returns:
-            3x3 rotation matrix
+        返回:
+            3x3 旋转矩阵
         """
         qx, qy, qz, qw = self._quat
 
-        # Compute rotation matrix from quaternion
+        # 根据四元数计算旋转矩阵
         return np.array(
             [
                 [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
@@ -144,58 +144,58 @@ class Rotation:
 
     def as_rotvec(self) -> np.ndarray:
         """
-        Convert rotation to rotation vector.
+        将旋转转换为旋转向量。
 
-        Returns:
-            Rotation vector [x, y, z] where magnitude is angle in radians
+        返回:
+            旋转向量 [x, y, z]，其模长为以弧度表示的角度
         """
         qx, qy, qz, qw = self._quat
 
-        # Ensure qw is positive for unique representation
+        # 确保 qw 为正，以获得唯一表示
         if qw < 0:
             qx, qy, qz, qw = -qx, -qy, -qz, -qw
 
-        # Compute angle and axis
+        # 计算角度和转轴
         angle = 2.0 * np.arccos(np.clip(abs(qw), 0.0, 1.0))
         sin_half_angle = np.sqrt(1.0 - qw * qw)
 
         if sin_half_angle < 1e-8:
-            # For very small angles, use linearization: rotvec ≈ 2 * [qx, qy, qz]
+            # 对于非常小的角度，使用线性化：rotvec ≈ 2 * [qx, qy, qz]
             return 2.0 * np.array([qx, qy, qz])
 
-        # Extract axis and scale by angle
+        # 提取转轴并按角度缩放
         axis = np.array([qx, qy, qz]) / sin_half_angle
         return angle * axis
 
     def as_quat(self) -> np.ndarray:
         """
-        Get quaternion representation.
+        获取四元数表示。
 
-        Returns:
-            Quaternion [x, y, z, w]
+        返回:
+            四元数 [x, y, z, w]
         """
         return self._quat.copy()
 
     def apply(self, vectors: np.ndarray, inverse: bool = False) -> np.ndarray:
         """
-        Apply this rotation to a set of vectors.
+        将此旋转应用到一组向量上。
 
-        This is equivalent to applying the rotation matrix to the vectors:
-        self.as_matrix() @ vectors (or self.as_matrix().T @ vectors if inverse=True).
+        这等价于将旋转矩阵应用于这些向量：
+        self.as_matrix() @ vectors（当 inverse=True 时为 self.as_matrix().T @ vectors）。
 
-        Args:
-            vectors: Array of shape (3,) or (N, 3) representing vectors in 3D space
-            inverse: If True, apply the inverse of the rotation. Default is False.
+        参数:
+            vectors: 形状为 (3,) 或 (N, 3) 的数组，表示三维空间中的向量
+            inverse: 为 True 时应用该旋转的逆。默认为 False。
 
-        Returns:
-            Rotated vectors with shape:
-            - (3,) if input was single vector with shape (3,)
-            - (N, 3) in all other cases
+        返回:
+            旋转后的向量，形状为：
+            - 当输入是形状为 (3,) 的单个向量时为 (3,)
+            - 其他所有情况下为 (N, 3)
         """
         vectors = np.asarray(vectors, dtype=float)
         original_shape = vectors.shape
 
-        # Handle single vector case - ensure it's 2D for matrix multiplication
+        # 处理单个向量的情况——确保它是二维的以便矩阵乘法
         if vectors.ndim == 1:
             if len(vectors) != 3:
                 raise ValueError("Single vector must have length 3")
@@ -208,17 +208,17 @@ class Rotation:
         else:
             raise ValueError("Vectors must be 1D or 2D array")
 
-        # Get rotation matrix
+        # 获取旋转矩阵
         rotation_matrix = self.as_matrix()
 
-        # Apply inverse if requested (transpose for orthogonal rotation matrices)
+        # 如有要求则应用逆（对正交旋转矩阵即转置）
         if inverse:
             rotation_matrix = rotation_matrix.T
 
-        # Apply rotation: (N, 3) @ (3, 3).T -> (N, 3)
+        # 应用旋转：(N, 3) @ (3, 3).T -> (N, 3)
         rotated_vectors = vectors @ rotation_matrix.T
 
-        # Return original shape for single vector case
+        # 单向量情况下恢复原始形状
         if single_vector and original_shape == (3,):
             return rotated_vectors.flatten()
 
@@ -226,47 +226,47 @@ class Rotation:
 
     def inv(self) -> "Rotation":
         """
-        Invert this rotation.
+        求此旋转的逆。
 
-        Composition of a rotation with its inverse results in an identity transformation.
+        一个旋转与其逆组合得到恒等变换。
 
-        Returns:
-            Rotation instance containing the inverse of this rotation
+        返回:
+            包含此旋转之逆的 Rotation 实例
         """
         qx, qy, qz, qw = self._quat
 
-        # For a unit quaternion, the inverse is the conjugate: [-x, -y, -z, w]
+        # 对于单位四元数，其逆就是共轭：[-x, -y, -z, w]
         inverse_quat = np.array([-qx, -qy, -qz, qw])
 
         return Rotation(inverse_quat)
 
     def __mul__(self, other: "Rotation") -> "Rotation":
         """
-        Compose this rotation with another rotation using the * operator.
+        使用 * 运算符将此旋转与另一个旋转组合。
 
-        The composition `r2 * r1` means "apply r1 first, then r2".
-        This is equivalent to applying rotation matrices: r2.as_matrix() @ r1.as_matrix()
+        组合 `r2 * r1` 表示“先应用 r1，再应用 r2”。
+        这等价于应用旋转矩阵：r2.as_matrix() @ r1.as_matrix()
 
-        Args:
-            other: Another Rotation instance to compose with
+        参数:
+            other: 要与之组合的另一个 Rotation 实例
 
-        Returns:
-            Rotation instance representing the composition of rotations
+        返回:
+            表示旋转组合的 Rotation 实例
         """
         if not isinstance(other, Rotation):
             return NotImplemented
 
-        # Get quaternions [x, y, z, w]
-        x1, y1, z1, w1 = other._quat  # Apply first
-        x2, y2, z2, w2 = self._quat  # Apply second
+        # 获取四元数 [x, y, z, w]
+        x1, y1, z1, w1 = other._quat  # 先应用
+        x2, y2, z2, w2 = self._quat  # 后应用
 
-        # Quaternion multiplication: q2 * q1 (apply q1 first, then q2)
+        # 四元数乘法：q2 * q1（先应用 q1，再应用 q2）
         composed_quat = np.array(
             [
-                w2 * x1 + x2 * w1 + y2 * z1 - z2 * y1,  # x component
-                w2 * y1 - x2 * z1 + y2 * w1 + z2 * x1,  # y component
-                w2 * z1 + x2 * y1 - y2 * x1 + z2 * w1,  # z component
-                w2 * w1 - x2 * x1 - y2 * y1 - z2 * z1,  # w component
+                w2 * x1 + x2 * w1 + y2 * z1 - z2 * y1,  # x 分量
+                w2 * y1 - x2 * z1 + y2 * w1 + z2 * x1,  # y 分量
+                w2 * z1 + x2 * y1 - y2 * x1 + z2 * w1,  # z 分量
+                w2 * w1 - x2 * x1 - y2 * y1 - z2 * z1,  # w 分量
             ]
         )
 

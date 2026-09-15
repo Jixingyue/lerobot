@@ -20,50 +20,50 @@ from ..configs import CameraConfig, ColorMode, Cv2Rotation
 @CameraConfig.register_subclass("intelrealsense")
 @dataclass
 class RealSenseCameraConfig(CameraConfig):
-    """Configuration class for Intel RealSense cameras.
+    """Intel RealSense 相机的配置类。
 
-    This class provides specialized configuration options for Intel RealSense cameras,
-    including support for depth sensing and device identification via serial number or name.
+    该类为 Intel RealSense 相机提供专门的配置选项，
+    包括深度感知支持以及通过序列号或名称进行设备标识。
 
-    Example configurations for Intel RealSense D405:
+    Intel RealSense D405 的配置示例：
     ```python
-    # Basic configurations
+    # 基本配置
     RealSenseCameraConfig("0123456789", 30, 1280, 720)  # 1280x720 @ 30FPS
     RealSenseCameraConfig("0123456789", 60, 640, 480)  # 640x480 @ 60FPS
 
-    # Advanced configurations
-    RealSenseCameraConfig("0123456789", 30, 640, 480, use_depth=True)  # With depth sensing
-    RealSenseCameraConfig("0123456789", 30, 640, 480, rotation=Cv2Rotation.ROTATE_90)  # With 90° rotation
+    # 高级配置
+    RealSenseCameraConfig("0123456789", 30, 640, 480, use_depth=True)  # 带深度感知
+    RealSenseCameraConfig("0123456789", 30, 640, 480, rotation=Cv2Rotation.ROTATE_90)  # 带 90° 旋转
     ```
 
-    Attributes:
-        fps: Requested frames per second for the color stream.
-        width: Requested frame width in pixels for the color stream.
-        height: Requested frame height in pixels for the color stream.
-        serial_number_or_name: Unique serial number or human-readable name to identify the camera.
-        color_mode: Color mode for image output (RGB or BGR). Defaults to RGB.
-        use_rgb: Whether to enable the color stream. Defaults to True.
-        use_depth: Whether to enable depth stream. Defaults to False.
-        rotation: Image rotation setting (0°, 90°, 180°, or 270°). Defaults to no rotation.
-        warmup_s: Time reading frames before returning from connect (in seconds)
-        exposure: Manual exposure value for the color sensor. When set, auto-exposure is
-            disabled and this fixed value is used. Valid ranges are camera-model specific
-            and reported if the value is rejected. Defaults to None (leave unchanged).
-        gain: Manual gain value for the color sensor. When set, auto-exposure is disabled
-            and this fixed gain is used, which also freezes exposure at its current value
-            when no exposure is configured. Valid ranges are camera-model specific and
-            reported if the value is rejected. Defaults to None (leave unchanged).
-        white_balance: Manual white balance value for the color sensor. When set, auto
-            white balance is disabled and this fixed value is used. Valid ranges are
-            camera-model specific and reported if the value is rejected. Defaults to None
-            (leave unchanged).
+    属性：
+        fps: 请求的彩色流每秒帧数。
+        width: 请求的彩色流帧宽度（像素）。
+        height: 请求的彩色流帧高度（像素）。
+        serial_number_or_name: 用于标识相机的唯一序列号或人类可读名称。
+        color_mode: 图像输出的颜色模式（RGB 或 BGR）。默认为 RGB。
+        use_rgb: 是否启用彩色流。默认为 True。
+        use_depth: 是否启用深度流。默认为 False。
+        rotation: 图像旋转设置（0°、90°、180° 或 270°）。默认不旋转。
+        warmup_s: connect 返回前读取帧的时间（秒）
+        exposure: 彩色传感器的手动曝光值。设置后会禁用自动曝光，
+            并使用此固定值。有效范围因相机型号而异，
+            如果值被拒绝会报告范围。默认为 None（保持不变）。
+        gain: 彩色传感器的手动增益值。设置后会禁用自动曝光，
+            并使用此固定增益；当未配置 exposure 时，曝光也会
+            冻结在当前值。有效范围因相机型号而异，
+            如果值被拒绝会报告范围。默认为 None（保持不变）。
+        white_balance: 彩色传感器的手动白平衡值。设置后会禁用
+            自动白平衡，并使用此固定值。有效范围
+            因相机型号而异，如果值被拒绝会报告范围。默认为 None
+            （保持不变）。
 
-    Note:
-        - Either name or serial_number must be specified.
-        - At least one of `use_rgb` or `use_depth` must be enabled.
-        - Depth stream configuration (if enabled) will use the same FPS as the color stream.
-        - The actual resolution and FPS may be adjusted by the camera to the nearest supported mode.
-        - For `fps`, `width` and `height`, either all of them need to be set, or none of them.
+    注意：
+        - 必须指定名称或序列号之一。
+        - `use_rgb` 或 `use_depth` 至少需要启用一个。
+        - 深度流配置（如果启用）将使用与彩色流相同的 FPS。
+        - 实际分辨率和 FPS 可能被相机调整为最接近的支持模式。
+        - 对于 `fps`、`width` 和 `height`，要么全部设置，要么全都不设置。
     """
 
     serial_number_or_name: str

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(Steven): Consider doing the following:
+# TODO(Steven): 考虑采用以下做法：
 # from enum import Enum
 # class MyControlTableKey(Enum):
 #   ID = "ID"
@@ -24,13 +24,13 @@
 #   MyControlTableKey.GOAL_SPEED.value: (46, 2)
 #   ...
 # }
-# This allows me do to:
+# 这样就可以这样写：
 # bus.write(MyControlTableKey.GOAL_SPEED, ...)
-# Instead of:
+# 而不是：
 # bus.write("Goal_Speed", ...)
-# This is important for two reasons:
-# 1. The linter will tell me if I'm trying to use an invalid key, instead of me realizing when I get the RunTimeError
-# 2. We can change the value of the MyControlTableKey enums without impacting the client code
+# 这样做有两个重要原因：
+# 1. 如果试图使用无效的键，linter 会提示我，而不是等到抛出 RunTimeError 时才发现
+# 2. 我们可以修改 MyControlTableKey 枚举的值而不影响客户端代码
 
 
 # {data_name: (address, size_byte)}

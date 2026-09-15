@@ -5,13 +5,13 @@ import numpy as np
 
 def mat2quat(rmat):
     """
-    Converts given rotation matrix to quaternion.
+    将给定的旋转矩阵转换为四元数。
 
     Args:
-        rmat (np.array): 3x3 rotation matrix
+        rmat (np.array): 3x3 旋转矩阵
 
     Returns:
-        np.array: (x,y,z,w) float quaternion angles
+        np.array: (x,y,z,w) float 类型的四元数
     """
     mat = np.asarray(rmat).astype(np.float32)[:3, :3]
 
@@ -24,7 +24,7 @@ def mat2quat(rmat):
     m20 = mat[2, 0]
     m21 = mat[2, 1]
     m22 = mat[2, 2]
-    # symmetric matrix k
+    # 对称矩阵 k
     k = np.array(
         [
             [m00 - m11 - m22, np.float32(0.0), np.float32(0.0), np.float32(0.0)],
@@ -34,7 +34,7 @@ def mat2quat(rmat):
         ]
     )
     k /= 3.0
-    # quaternion is Eigen vector of k that corresponds to largest eigenvalue
+    # 四元数是 k 的最大特征值所对应的特征向量
     w, v = np.linalg.eigh(k)
     inds = np.array([3, 0, 1, 2])
     q1 = v[inds, np.argmax(w)]
@@ -46,16 +46,16 @@ def mat2quat(rmat):
 
 def quat2axisangle(quat):
     """
-    Converts quaternion to axis-angle format.
-    Returns a unit vector direction scaled by its angle in radians.
+    将四元数转换为轴角（axis-angle）格式。
+    返回一个按其角度（弧度）缩放的单位向量方向。
 
     Args:
-        quat (np.array): (x,y,z,w) vec4 float angles
+        quat (np.array): (x,y,z,w) vec4 float 类型的四元数
 
     Returns:
-        np.array: (ax,ay,az) axis-angle exponential coordinates
+        np.array: (ax,ay,az) 轴角指数坐标
     """
-    # clip quaternion
+    # 裁剪四元数
     if quat[3] > 1.0:
         quat[3] = 1.0
     elif quat[3] < -1.0:
@@ -63,7 +63,7 @@ def quat2axisangle(quat):
 
     den = np.sqrt(1.0 - quat[3] * quat[3])
     if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
+        # 这是（接近）零度旋转，立即返回
         return np.zeros(3)
 
     return (quat[:3] * 2.0 * math.acos(quat[3])) / den
@@ -71,8 +71,8 @@ def quat2axisangle(quat):
 
 def rotate6d_to_axis_angle(r6d):
     """
-    r6d: np.ndarray, shape (N, 6)
-    return: np.ndarray, shape (N, 3), axis-angle vectors
+    r6d: np.ndarray，形状 (N, 6)
+    return: np.ndarray，形状 (N, 3)，轴角向量
     """
     flag = 0
     if len(r6d.shape) == 1:
@@ -119,19 +119,19 @@ def mat_to_rotate6d(abs_action):
 
 
 def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """逐样本丢弃路径（Stochastic Depth，随机深度）（应用于残差块的主路径时）。
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    这与我为 EfficientNet 等网络创建的 DropConnect 实现相同，但是原来的名字有误导性，
+    因为 'Drop Connect' 是另一篇论文中另一种形式的 dropout……
+    参见讨论：https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ……我选择
+    将层名和参数名改为 'drop path'，而不是把 DropConnect 作为层名、用
+    'survival rate' 作为参数名。
 
     """
     if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # 适用于不同维度的张量，而不仅仅是 2D ConvNet
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)

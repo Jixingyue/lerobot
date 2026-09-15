@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared, side-effect-free utilities for the GR00T N1.7 policy.
+"""GR00T N1.7 策略共用的、无副作用的工具函数。
 
-These helpers are consumed by both the config layer (checkpoint sidecar
-inspection) and the processor layer (stat flattening, action decoding, language
-and image packing). They are pure functions with no GR00T-specific state so they
-can be unit-tested in isolation and reused without importing the heavier
-config/processor modules.
+这些辅助函数同时被配置层（检查点附属文件检查）和处理器层（统计量展平、动作解码、
+语言与图像打包）使用。它们是不包含任何 GR00T 特有状态的纯函数，因此可以单独进行
+单元测试，并且无需导入更重的 config/processor 模块即可复用。
 """
 
 from __future__ import annotations
@@ -34,7 +32,7 @@ import torch
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    """Read a JSON object from ``path``, returning ``{}`` on any read/parse error."""
+    """从 ``path`` 读取一个 JSON 对象，遇到任何读取/解析错误时返回 ``{}``。"""
     try:
         with path.open() as f:
             data = json.load(f)
@@ -132,11 +130,11 @@ def flatten_n1_7_modality_stats(
     use_percentiles: bool,
     use_relative_action: bool,
 ) -> dict[str, list[float]]:
-    """Flatten one N1.7 modality's grouped statistics in checkpoint order.
+    """按照检查点中的顺序展平 N1.7 单个模态的分组统计量。
 
-    When checkpoints request percentile normalization, q01/q99 replace min/max
-    for regular groups. Relative action groups read from ``relative_action``
-    stats and keep min/max, matching Isaac-GR00T's processor override.
+    当检查点要求使用百分位归一化时，对常规分组用 q01/q99 替换 min/max。
+    相对动作分组则从 ``relative_action`` 统计量中读取并保留 min/max，与
+    Isaac-GR00T 的处理器覆写行为保持一致。
     """
 
     source_stats = embodiment_stats.get(modality, {})
@@ -207,7 +205,7 @@ def homogeneous_to_xyz_rot6d(transform: np.ndarray) -> np.ndarray:
 
 
 def relative_eef_to_absolute(action: np.ndarray, reference_state: np.ndarray) -> np.ndarray:
-    """Convert relative EEF deltas in xyz+rot6d format to absolute EEF poses."""
+    """将 xyz+rot6d 格式的相对 EEF 增量转换为绝对 EEF 位姿。"""
 
     out = np.empty_like(action, dtype=np.float64)
     for batch_idx in range(action.shape[0]):

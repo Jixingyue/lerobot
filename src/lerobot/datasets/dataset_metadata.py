@@ -62,11 +62,11 @@ CODEBASE_VERSION = "v3.0"
 
 
 class LeRobotDatasetMetadata:
-    """Metadata container for a LeRobot dataset.
+    """LeRobot 数据集的元数据容器。
 
-    Manages the ``info.json``, ``stats.json``, ``tasks.parquet``, and
-    ``episodes/`` parquet files that describe a dataset's structure, content,
-    and statistics.
+    管理描述数据集结构、内容和统计信息的
+    ``info.json``、``stats.json``、``tasks.parquet`` 以及
+    ``episodes/`` parquet 文件。
     """
 
     def __init__(
@@ -80,32 +80,30 @@ class LeRobotDatasetMetadata:
         repo_type: Literal["dataset", "bucket"] = "dataset",
         token: str | bool | None = None,
     ):
-        """Load or download metadata for an existing LeRobot dataset.
+        """加载或下载现有 LeRobot 数据集的元数据。
 
-        Attempts to load metadata from local disk. If files are missing or
-        ``force_cache_sync`` is ``True``, downloads the ``meta/`` directory from
-        the Hub.
+        尝试从本地磁盘加载元数据。如果文件缺失或
+        ``force_cache_sync`` 为 ``True``，则从 Hub 下载 ``meta/`` 目录。
 
         Args:
-            repo_id: Repository identifier (e.g. ``'lerobot/aloha_sim'``).
-            root: Local directory for the dataset. When provided, Hub downloads
-                are materialized directly into this directory. When omitted,
-                existing local datasets are still looked up under
-                ``$HF_LEROBOT_HOME/{repo_id}``, but Hub downloads use a
-                revision-safe snapshot cache under
-                ``$HF_LEROBOT_HOME/hub``.
-            revision: Git revision (branch, tag, or commit hash). Defaults to
-                the current codebase version.
-            force_cache_sync: If ``True``, re-download metadata from the Hub
-                even when local files exist.
-            metadata_buffer_size: Number of episode metadata records to buffer
-                in memory before flushing to parquet.
-            repo_type: Repository type: "dataset" (default) or "bucket" for an
-                HF Storage Bucket streamed over hf://buckets/.
-            token: Authentication token used for Hub requests. Pass a string
-                token, ``True`` to require the locally stored token, ``False``
-                to disable authentication, or ``None`` to use the Hugging Face
-                Hub default.
+            repo_id: 仓库标识（例如 ``'lerobot/aloha_sim'``）。
+            root: 数据集的本地目录。提供时，Hub 下载的内容
+                会直接写入此目录。省略时，现有的本地数据集
+                仍在 ``$HF_LEROBOT_HOME/{repo_id}`` 下查找，
+                但 Hub 下载使用位于 ``$HF_LEROBOT_HOME/hub``
+                下的版本安全快照缓存。
+            revision: Git 修订（分支、标签或提交哈希）。默认为
+                当前代码库版本。
+            force_cache_sync: 如果为 ``True``，即使本地文件存在
+                也会从 Hub 重新下载元数据。
+            metadata_buffer_size: 刷新到 parquet 之前在内存中缓冲的
+                episode 元数据记录数。
+            repo_type: 仓库类型："dataset"（默认）或 "bucket"，后者表示
+                通过 hf://buckets/ 流式传输的 HF 存储桶。
+            token: 用于 Hub 请求的认证令牌。可传入字符串令牌，
+                传入 ``True`` 表示要求使用本地存储的令牌，``False``
+                表示禁用认证，``None`` 表示使用 Hugging Face Hub
+                的默认行为。
         """
         if repo_type not in ("dataset", "bucket"):
             raise ValueError(f"repo_type must be 'dataset' or 'bucket', got {repo_type!r}")
@@ -149,7 +147,7 @@ class LeRobotDatasetMetadata:
                 self._load_metadata()
 
     def _flush_metadata_buffer(self) -> None:
-        """Write all buffered episode metadata to parquet file."""
+        """将所有缓冲的 episode 元数据写入 parquet 文件。"""
         if not hasattr(self, "_metadata_buffer") or len(self._metadata_buffer) == 0:
             return
 
@@ -158,8 +156,8 @@ class LeRobotDatasetMetadata:
             for key, value in episode_dict.items():
                 if key not in combined_dict:
                     combined_dict[key] = []
-                # Extract value and serialize numpy arrays
-                # because PyArrow's from_pydict function doesn't support numpy arrays
+                # 提取值并序列化 numpy 数组，
+                # 因为 PyArrow 的 from_pydict 函数不支持 numpy 数组
                 val = value[0] if isinstance(value, list) else value
                 combined_dict[key].append(val.tolist() if isinstance(val, np.ndarray) else val)
 
@@ -176,10 +174,10 @@ class LeRobotDatasetMetadata:
                 path, schema=table.schema, compression="snappy", use_dictionary=True
             )
         else:
-            # Column order in `combined_dict` follows the source episode dict's insertion
-            # order, which can differ between batches (e.g. episodes originally stored in
-            # different parquet shards with different column orders). Realign to the
-            # writer's established schema so `write_table` doesn't reject a reordered match.
+            # `combined_dict` 中的列顺序遵循源 episode 字典的插入顺序，
+            # 不同批次之间可能不同（例如原本存储在不同 parquet 分片中、
+            # 列顺序不同的 episode）。重新对齐到写入器已确立的模式，
+            # 以免 `write_table` 因列顺序不同而拒绝写入。
             table = table.select(self._pq_writer.schema.names)
 
         self._pq_writer.write_table(table)
@@ -188,7 +186,7 @@ class LeRobotDatasetMetadata:
         self._metadata_buffer.clear()
 
     def _close_writer(self) -> None:
-        """Close and cleanup the parquet writer if it exists."""
+        """关闭并清理 parquet 写入器（如果存在）。"""
         self._flush_metadata_buffer()
 
         writer = getattr(self, "_pq_writer", None)
@@ -197,9 +195,9 @@ class LeRobotDatasetMetadata:
             self._pq_writer = None
 
     def finalize(self) -> None:
-        """Flush metadata buffer and close the parquet writer.
+        """刷新元数据缓冲区并关闭 parquet 写入器。
 
-        Idempotent — safe to call multiple times.
+        幂等——可以安全地多次调用。
         """
         if getattr(self, "_finalized", False):
             return
@@ -207,8 +205,8 @@ class LeRobotDatasetMetadata:
         self._finalized = True
 
     def __del__(self):
-        """Safety net: flush and close parquet writer on garbage collection."""
-        # During interpreter shutdown, referenced objects may already be collected.
+        """安全网：在垃圾回收时刷新并关闭 parquet 写入器。"""
+        # 在解释器关闭期间，被引用的对象可能已经被回收。
         with contextlib.suppress(Exception):
             self.finalize()
 
@@ -220,11 +218,11 @@ class LeRobotDatasetMetadata:
         self.stats = load_stats(self.root)
 
     def ensure_readable(self) -> None:
-        """Guarantee metadata is fully loaded for read operations.
+        """确保元数据已完全加载以进行读取操作。
 
-        Idempotent — when metadata is already in memory this is a single
-        ``is None`` check.  Call this before transitioning from write to
-        read mode on the same instance.
+        幂等——当元数据已在内存中时，这只是一次
+        ``is None`` 检查。在同一实例从写入模式
+        切换到读取模式之前调用此方法。
         """
         if self.episodes is None:
             self._load_metadata()
@@ -234,14 +232,14 @@ class LeRobotDatasetMetadata:
         predicate: Callable[[dict], bool],
         candidates: list[int] | None = None,
     ) -> list[int]:
-        """Filter episodes whose metadata satisfies a given predicate.
+        """筛选元数据满足给定谓词的 episode。
 
         Args:
-            predicate: Predicate over per-episode metadata rows used to select episodes.
-            candidates: Optional list of episode indices to restrict evaluation to.
+            predicate: 作用于每个 episode 元数据行、用于选择 episode 的谓词。
+            candidates: 可选的 episode 索引列表，用于限制求值范围。
 
         Returns:
-            List of sorted episode indices that satisfy the predicate.
+            满足谓词的已排序 episode 索引列表。
         """
         self.ensure_readable()
         if candidates is not None:
@@ -298,27 +296,27 @@ class LeRobotDatasetMetadata:
 
     @property
     def url_root(self) -> str:
-        """Hugging Face Hub URL root for this dataset."""
+        """此数据集的 Hugging Face Hub URL 根。"""
         if self.repo_type == "bucket":
             return f"hf://buckets/{self.repo_id}"
         return f"hf://datasets/{self.repo_id}"
 
     @property
     def _version(self) -> packaging.version.Version:
-        """Codebase version used to create this dataset."""
+        """创建此数据集所用的代码库版本。"""
         return packaging.version.parse(self.info.codebase_version)
 
     def get_data_file_path(self, ep_index: int) -> Path:
-        """Return the relative parquet file path for the given episode index.
+        """返回给定 episode 索引对应的相对 parquet 文件路径。
 
         Args:
-            ep_index: Zero-based episode index.
+            ep_index: 从零开始的 episode 索引。
 
         Returns:
-            Path to the parquet file containing this episode's data.
+            包含此 episode 数据的 parquet 文件路径。
 
         Raises:
-            IndexError: If ``ep_index`` is out of range.
+            IndexError: 如果 ``ep_index`` 超出范围。
         """
         if self.episodes is None:
             self.episodes = load_episodes(self.root)
@@ -333,18 +331,18 @@ class LeRobotDatasetMetadata:
         return Path(fpath)
 
     def get_video_file_path(self, ep_index: int, vid_key: str) -> Path:
-        """Return the relative video file path for the given episode and video key.
+        """返回给定 episode 和视频键对应的相对视频文件路径。
 
         Args:
-            ep_index: Zero-based episode index.
-            vid_key: Feature key identifying the video stream
-                (e.g. ``'observation.images.laptop'``).
+            ep_index: 从零开始的 episode 索引。
+            vid_key: 标识视频流的特征键
+                （例如 ``'observation.images.laptop'``）。
 
         Returns:
-            Path to the video file containing this episode's frames.
+            包含此 episode 帧的视频文件路径。
 
         Raises:
-            IndexError: If ``ep_index`` is out of range.
+            IndexError: 如果 ``ep_index`` 超出范围。
         """
         if self.episodes is None:
             self.episodes = load_episodes(self.root)
@@ -360,61 +358,61 @@ class LeRobotDatasetMetadata:
 
     @property
     def storage_format(self) -> str:
-        """Format holding the underlying data files (``"lerobot"`` by default)."""
+        """保存底层数据文件的格式（默认为 ``"lerobot"``）。"""
         return self.info.storage_format or DEFAULT_STORAGE_FORMAT
 
     @property
     def data_path(self) -> str:
-        """Formattable string for the parquet files."""
+        """用于 parquet 文件的可格式化字符串。"""
         return self.info.data_path
 
     @property
     def video_path(self) -> str | None:
-        """Formattable string for the video files."""
+        """用于视频文件的可格式化字符串。"""
         return self.info.video_path
 
     @property
     def robot_type(self) -> str | None:
-        """Robot type used in recording this dataset."""
+        """录制此数据集时使用的机器人类型。"""
         return self.info.robot_type
 
     @property
     def fps(self) -> int:
-        """Frames per second used during data collection."""
+        """数据采集期间使用的帧率（每秒帧数）。"""
         return self.info.fps
 
     @property
     def features(self) -> dict[str, dict]:
-        """All features contained in the dataset."""
+        """数据集中包含的所有特征。"""
         return self.info.features
 
     @property
     def image_keys(self) -> list[str]:
-        """Keys to access visual modalities stored as images."""
+        """访问以图像形式存储的视觉模态的键。"""
         return [key for key, ft in self.features.items() if ft["dtype"] == "image"]
 
     @property
     def video_keys(self) -> list[str]:
-        """Keys to access visual modalities stored as videos."""
+        """访问以视频形式存储的视觉模态的键。"""
         return [key for key, ft in self.features.items() if ft["dtype"] == "video"]
 
     @property
     def depth_keys(self) -> list[str]:
-        """Keys to access depth-map modalities stored as videos or images.
+        """访问以视频或图像形式存储的深度图模态的键。
 
-        A depth key is a feature whose ``info`` dict carries ``"is_depth_map": True``
-        (or the legacy ``"video.is_depth_map"`` inside ``info`` or ``video_info``).
+        深度键是其 ``info`` 字典带有 ``"is_depth_map": True`` 的特征
+        （或 ``info`` 或 ``video_info`` 中遗留的 ``"video.is_depth_map"``）。
         """
 
         return [key for key, ft in self.features.items() if is_depth_map(ft)]
 
     def rescale_depth_stats(self, output_unit: str) -> None:
-        """Rescale depth feature stats in place from their recorded unit to ``output_unit``.
+        """就地将深度特征统计量从其记录单位重新缩放到 ``output_unit``。
 
-        Depth stats are stored in the unit the frames were recorded in
-        (``features[key]["info"]["depth_unit"]``), while frames are returned in
-        ``output_unit`` on read. This converts the unit-bearing stat entries so
-        stats match the frames consumers see.
+        深度统计量以帧被记录时的单位存储
+        （``features[key]["info"]["depth_unit"]``），而帧在读取时以
+        ``output_unit`` 返回。本方法会转换带单位的统计条目，
+        使统计量与消费者看到的帧保持一致。
         """
         missing_unit_keys = [
             key for key in self.depth_keys if (self.features[key].get("info") or {}).get("depth_unit") is None
@@ -439,32 +437,31 @@ class LeRobotDatasetMetadata:
 
     @property
     def camera_keys(self) -> list[str]:
-        """Keys to access visual modalities (regardless of their storage method)."""
+        """访问视觉模态的键（无论其存储方式如何）。"""
         return [key for key, ft in self.features.items() if ft["dtype"] in ["video", "image"]]
 
     @property
     def has_language_columns(self) -> bool:
-        """Return ``True`` if the dataset declares any language column.
+        """如果数据集声明了任何语言列则返回 ``True``。
 
-        Used to gate language-aware code paths (collate, render step) so
-        unannotated datasets keep PyTorch's default collate behavior.
+        用于门控语言感知的代码路径（collate、渲染步骤），
+        使未标注的数据集保持 PyTorch 的默认 collate 行为。
         """
         return any(col in self.features for col in LANGUAGE_COLUMNS)
 
     @property
     def tools(self) -> list[dict]:
-        """OpenAI-style tool schemas declared by this dataset.
+        """此数据集声明的 OpenAI 风格工具 schema。
 
-        Read from ``meta/info.json["tools"]``. Returns a copy, so callers
-        can mutate the result safely. Falls back to
-        :data:`lerobot.datasets.language.DEFAULT_TOOLS` (the canonical
-        ``say`` schema) when the dataset doesn't declare any — that way
-        unannotated datasets and chat-template consumers
-        (``apply_chat_template(messages, tools=meta.tools)``) keep
-        working out of the box.
+        从 ``meta/info.json["tools"]`` 读取。返回副本，
+        因此调用者可以安全地修改结果。当数据集未声明任何工具时，
+        回退到 :data:`lerobot.datasets.language.DEFAULT_TOOLS`
+        （规范的 ``say`` schema）——这样未标注的数据集和
+        chat-template 消费者（``apply_chat_template(messages, tools=meta.tools)``）
+        都能开箱即用地正常工作。
 
-        Implementations live under :mod:`lerobot.tools` (one file per
-        tool); see ``docs/source/tools.mdx`` for the authoring guide.
+        实现位于 :mod:`lerobot.tools` 下（每个工具一个文件）；
+        编写指南见 ``docs/source/tools.mdx``。
         """
         declared = self.info.tools
         if declared:
@@ -473,13 +470,13 @@ class LeRobotDatasetMetadata:
 
     @tools.setter
     def tools(self, value: list[dict] | None) -> None:
-        """Persist a tool catalog to ``meta/info.json`` and reload metadata.
+        """将工具目录持久化到 ``meta/info.json`` 并重新加载元数据。
 
-        Writes ``value`` into the on-disk ``info.json`` (or clears the
-        ``tools`` key when ``value`` is ``None`` or empty), then reloads
-        ``self.info`` so the in-memory metadata matches what's on disk.
-        Saves callers from hand-editing ``info.json`` and re-instantiating
-        the metadata object.
+        将 ``value`` 写入磁盘上的 ``info.json``（当 ``value`` 为
+        ``None`` 或为空时清除 ``tools`` 键），然后重新加载
+        ``self.info``，使内存中的元数据与磁盘上的内容保持一致。
+        省去了调用者手动编辑 ``info.json`` 并重新实例化
+        元数据对象的麻烦。
         """
         self.info.tools = [dict(t) for t in value] if value else None
         write_info(self.info, self.root)
@@ -487,48 +484,48 @@ class LeRobotDatasetMetadata:
 
     @property
     def names(self) -> dict[str, list | dict]:
-        """Names of the various dimensions of vector modalities."""
+        """向量模态各维度的名称。"""
         return {key: ft["names"] for key, ft in self.features.items()}
 
     @property
     def shapes(self) -> dict:
-        """Shapes for the different features."""
+        """不同特征的形状。"""
         return {key: tuple(ft["shape"]) for key, ft in self.features.items()}
 
     @property
     def total_episodes(self) -> int:
-        """Total number of episodes available."""
+        """可用的 episode 总数。"""
         return self.info.total_episodes
 
     @property
     def total_frames(self) -> int:
-        """Total number of frames saved in this dataset."""
+        """此数据集中保存的帧总数。"""
         return self.info.total_frames
 
     @property
     def total_tasks(self) -> int:
-        """Total number of different tasks performed in this dataset."""
+        """此数据集中执行的不同任务总数。"""
         return self.info.total_tasks
 
     @property
     def chunks_size(self) -> int:
-        """Max number of files per chunk."""
+        """每个 chunk 目录中的最大文件数。"""
         return self.info.chunks_size
 
     @property
     def data_files_size_in_mb(self) -> int:
-        """Max size of data file in mega bytes."""
+        """数据文件的最大大小（兆字节）。"""
         return self.info.data_files_size_in_mb
 
     @property
     def video_files_size_in_mb(self) -> int:
-        """Max size of video file in mega bytes."""
+        """视频文件的最大大小（兆字节）。"""
         return self.info.video_files_size_in_mb
 
     def get_task_index(self, task: str) -> int | None:
         """
-        Given a task in natural language, returns its task_index if the task already exists in the dataset,
-        otherwise return None.
+        给定一个自然语言任务，如果该任务已存在于数据集中则返回其 task_index，
+        否则返回 None。
         """
         if task in self.tasks.index:
             return int(self.tasks.loc[task].task_index)
@@ -536,16 +533,16 @@ class LeRobotDatasetMetadata:
             return None
 
     def save_episode_tasks(self, tasks: list[str]):
-        """Register tasks for the current episode and persist to disk.
+        """为当前 episode 注册任务并持久化到磁盘。
 
-        New tasks that do not already exist in the dataset are assigned
-        sequential task indices and appended to the tasks parquet file.
+        数据集中尚不存在的新任务会被分配连续的任务索引，
+        并追加到 tasks parquet 文件中。
 
         Args:
-            tasks: List of unique task descriptions in natural language.
+            tasks: 自然语言描述的唯一任务列表。
 
         Raises:
-            ValueError: If ``tasks`` contains duplicates.
+            ValueError: 如果 ``tasks`` 包含重复项。
         """
         if len(set(tasks)) != len(tasks):
             raise ValueError(f"Tasks are not unique: {tasks}")
@@ -561,38 +558,38 @@ class LeRobotDatasetMetadata:
                 self.tasks.loc[task] = task_idx
 
         if len(new_tasks) > 0:
-            # Update on disk
+            # 更新到磁盘
             write_tasks(self.tasks, self.root)
 
     def _save_episode_metadata(self, episode_dict: dict) -> None:
-        """Buffer episode metadata and write to parquet in batches for efficiency.
+        """缓冲 episode 元数据并批量写入 parquet 以提高效率。
 
-        This function accumulates episode metadata in a buffer and flushes it when the buffer
-        reaches the configured size. This reduces I/O overhead by writing multiple episodes
-        at once instead of one row at a time.
+        本函数将 episode 元数据累积在缓冲区中，并在缓冲区达到
+        配置的大小时刷新。这通过一次写入多个 episode 而不是
+        一次只写一行来减少 I/O 开销。
 
-        Notes: We both need to update parquet files and HF dataset:
-        - `pandas` loads parquet file in RAM
-        - `datasets` relies on a memory mapping from pyarrow (no RAM). It either converts parquet files to a pyarrow cache on disk,
-          or loads directly from pyarrow cache.
+        说明：我们既需要更新 parquet 文件，也需要更新 HF 数据集：
+        - ``pandas`` 将 parquet 文件加载到内存中
+        - ``datasets`` 依赖 pyarrow 的内存映射（不占内存）。它要么将 parquet 文件转换为磁盘上的 pyarrow 缓存，
+          要么直接从 pyarrow 缓存加载。
         """
-        # Convert to list format for each value
+        # 将每个值转换为列表格式
         episode_dict = {key: [value] for key, value in episode_dict.items()}
         num_frames = episode_dict["length"][0]
 
         if self.latest_episode is None:
-            # Initialize indices and frame count for a new dataset made of the first episode data
+            # 为由第一个 episode 数据组成的新数据集初始化索引和帧数
             chunk_idx, file_idx = 0, 0
             if self.episodes is not None and len(self.episodes) > 0:
-                # It means we are resuming recording, so we need to load the latest episode
-                # Update the indices to avoid overwriting the latest episode
+                # 这意味着我们正在恢复录制，因此需要加载最新的 episode
+                # 更新索引以避免覆盖最新的 episode
                 chunk_idx = self.episodes[-1]["meta/episodes/chunk_index"]
                 file_idx = self.episodes[-1]["meta/episodes/file_index"]
                 latest_num_frames = self.episodes[-1]["dataset_to_index"]
                 episode_dict["dataset_from_index"] = [latest_num_frames]
                 episode_dict["dataset_to_index"] = [latest_num_frames + num_frames]
 
-                # When resuming, move to the next file
+                # 恢复录制时，移动到下一个文件
                 chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, self.chunks_size)
             else:
                 episode_dict["dataset_from_index"] = [0]
@@ -617,18 +614,18 @@ class LeRobotDatasetMetadata:
                 av_size_per_frame = latest_size_in_mb / latest_num_frames if latest_num_frames > 0 else 0.0
 
                 if latest_size_in_mb + av_size_per_frame * num_frames >= self.data_files_size_in_mb:
-                    # Size limit is reached, flush buffer and prepare new parquet file
+                    # 达到大小限制，刷新缓冲区并准备新的 parquet 文件
                     self._flush_metadata_buffer()
                     chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, self.chunks_size)
                     self._close_writer()
 
-            # Update the existing pandas dataframe with new row
+            # 用新行更新现有的 pandas 数据帧
             episode_dict["meta/episodes/chunk_index"] = [chunk_idx]
             episode_dict["meta/episodes/file_index"] = [file_idx]
             episode_dict["dataset_from_index"] = [self.latest_episode["dataset_to_index"][0]]
             episode_dict["dataset_to_index"] = [self.latest_episode["dataset_to_index"][0] + num_frames]
 
-        # Add to buffer
+        # 加入缓冲区
         self._metadata_buffer.append(episode_dict)
         self.latest_episode = episode_dict
 
@@ -643,19 +640,19 @@ class LeRobotDatasetMetadata:
         episode_stats: dict[str, dict],
         episode_metadata: dict,
     ) -> None:
-        """Persist episode metadata, update dataset info, and aggregate stats.
+        """持久化 episode 元数据，更新数据集信息，并聚合统计量。
 
-        Writes the episode's metadata to the buffered parquet writer, increments
-        the total episode/frame counters in ``info.json``, and merges the
-        episode's statistics into the running dataset statistics.
+        将 episode 的元数据写入缓冲的 parquet 写入器，递增
+        ``info.json`` 中的 episode/帧总数计数器，并将该 episode 的
+        统计量合并到正在运行的数据集统计量中。
 
         Args:
-            episode_index: Zero-based index of the episode being saved.
-            episode_length: Number of frames in this episode.
-            episode_tasks: List of task descriptions for this episode.
-            episode_stats: Per-feature statistics for this episode.
-            episode_metadata: Additional metadata (chunk/file indices, frame
-                ranges, video timestamps, etc.).
+            episode_index: 正在保存的 episode 的从零开始的索引。
+            episode_length: 此 episode 中的帧数。
+            episode_tasks: 此 episode 的任务描述列表。
+            episode_stats: 此 episode 中每个特征的统计量。
+            episode_metadata: 附加元数据（chunk/file 索引、帧
+                范围、视频时间戳等）。
         """
         episode_dict = {
             "episode_index": episode_index,
@@ -666,7 +663,7 @@ class LeRobotDatasetMetadata:
         episode_dict.update(flatten_dict({"stats": episode_stats}))
         self._save_episode_metadata(episode_dict)
 
-        # Update info
+        # 更新 info
         self.info.total_episodes += 1
         self.info.total_frames += episode_length
         self.info.total_tasks = len(self.tasks)
@@ -683,25 +680,24 @@ class LeRobotDatasetMetadata:
         video_encoder: VideoEncoderConfig | None = None,
         preserve_keys: Iterable[str] | None = None,
     ) -> None:
-        """Populate or refresh per-feature video info in ``info.json``.
+        """填充或刷新 ``info.json`` 中每个特征的视频信息。
 
-        Warning: this function writes info from first episode videos, implicitly assuming that all videos have
-        been encoded the same way. Also, this means it assumes the first episode exists.
+        警告：本函数从第一个 episode 的视频写入信息，隐含假设所有视频
+        都以相同方式编码。同时这意味着它假设第一个 episode 存在。
 
-        Always re-probes the videos and overwrites existing info for every recomputed
-        key. ``preserve_keys`` lists keys whose existing values must be kept (e.g.
-        data-intrinsic entries like ``is_depth_map`` and depth quantization params)
-        instead of being recomputed.
+        始终重新探测视频，并覆盖每个重新计算的键的现有信息。
+        ``preserve_keys`` 列出必须保留其现有值的键（例如
+        数据内在的条目如 ``is_depth_map`` 和深度量化参数），
+        而不是重新计算。
 
         Args:
-            video_key: If provided, only update this video key. Otherwise update
-                all video keys in the dataset.
-            video_encoder: Encoder configuration used to produce the
-                videos. When provided, its fields are recorded as
-                ``video.<field>`` entries alongside the stream-derived
-                ``video.*`` entries (see :func:`get_video_info`).
-            preserve_keys: Keys whose existing values are kept instead of being
-                recomputed. ``None`` (default) recomputes every key.
+            video_key: 若提供，则只更新此视频键。否则更新
+                数据集中的所有视频键。
+            video_encoder: 用于生成视频的编码器配置。提供时，
+                其字段会与从流派生的 ``video.*`` 条目一起记录为
+                ``video.<field>`` 条目（参见 :func:`get_video_info`）。
+            preserve_keys: 其现有值被保留而非重新计算的键。
+                ``None``（默认）会重新计算每个键。
         """
         if video_key is not None and video_key not in self.video_keys:
             raise ValueError(f"Video key {video_key} not found in dataset")
@@ -713,11 +709,11 @@ class LeRobotDatasetMetadata:
             existing = feature.get("info") or {}
             video_path = self.root / self.video_path.format(video_key=key, chunk_index=0, file_index=0)
             new_info = get_video_info(video_path, video_encoder=video_encoder)
-            # Drop preserved keys so the existing values win on merge.
+            # 丢弃要保留的键，以便合并时现有值胜出。
             new_info = {k: v for k, v in new_info.items() if k not in preserve_set}
             feature["info"] = {**existing, **new_info}
-            # Migrate any legacy depth marker (in ``info`` or a separate ``video_info`` dict)
-            # to the canonical ``is_depth_map`` key.
+            # 将任何遗留的深度标记（在 ``info`` 或单独的 ``video_info`` 字典中）
+            # 迁移到规范的 ``is_depth_map`` 键。
             video_info = feature.get("video_info")
             had_legacy = "video.is_depth_map" in feature["info"] or (
                 isinstance(video_info, dict) and "video.is_depth_map" in video_info
@@ -732,16 +728,16 @@ class LeRobotDatasetMetadata:
         data_files_size_in_mb: int | None = None,
         video_files_size_in_mb: int | None = None,
     ) -> None:
-        """Update chunk and file size settings after dataset creation.
+        """在数据集创建后更新 chunk 和文件大小设置。
 
-        This allows users to customize storage organization without modifying the constructor.
-        These settings control how episodes are chunked and how large files can grow before
-        creating new ones.
+        这允许用户在不修改构造函数的情况下自定义存储组织。
+        这些设置控制 episode 如何分块，以及文件在创建新文件
+        之前可以增长到多大。
 
         Args:
-            chunks_size: Maximum number of files per chunk directory. If None, keeps current value.
-            data_files_size_in_mb: Maximum size for data parquet files in MB. If None, keeps current value.
-            video_files_size_in_mb: Maximum size for video files in MB. If None, keeps current value.
+            chunks_size: 每个 chunk 目录中的最大文件数。若为 None，则保持当前值。
+            data_files_size_in_mb: 数据 parquet 文件的最大大小（MB）。若为 None，则保持当前值。
+            video_files_size_in_mb: 视频文件的最大大小（MB）。若为 None，则保持当前值。
         """
         if chunks_size is not None:
             if chunks_size <= 0:
@@ -758,14 +754,14 @@ class LeRobotDatasetMetadata:
                 raise ValueError(f"video_files_size_in_mb must be positive, got {video_files_size_in_mb}")
             self.info.video_files_size_in_mb = video_files_size_in_mb
 
-        # Update the info file on disk
+        # 更新磁盘上的 info 文件
         write_info(self.info, self.root)
 
     def get_chunk_settings(self) -> dict[str, int]:
-        """Get current chunk and file size settings.
+        """获取当前的 chunk 和文件大小设置。
 
         Returns:
-            Dict containing chunks_size, data_files_size_in_mb, and video_files_size_in_mb.
+            包含 chunks_size、data_files_size_in_mb 和 video_files_size_in_mb 的字典。
         """
         return {
             "chunks_size": self.chunks_size,
@@ -798,31 +794,30 @@ class LeRobotDatasetMetadata:
         data_files_size_in_mb: int | None = None,
         video_files_size_in_mb: int | None = None,
     ) -> "LeRobotDatasetMetadata":
-        """Create metadata for a new LeRobot dataset from scratch.
+        """从零开始为新的 LeRobot 数据集创建元数据。
 
-        Initializes the ``info.json`` file on disk with the provided feature
-        schema and dataset settings. No episode data is written yet.
+        使用提供的特征 schema 和数据集设置初始化磁盘上的
+        ``info.json`` 文件。尚未写入任何 episode 数据。
 
         Args:
-            repo_id: Repository identifier (e.g. ``'user/my_dataset'``).
-            fps: Frames per second used during data collection.
-            features: Feature specification dict mapping feature names to their
-                type/shape metadata.
-            robot_type: Optional robot type string stored in metadata.
-            root: Local directory for the dataset. Defaults to
-                ``$HF_LEROBOT_HOME/{repo_id}``. Must not already exist.
-            use_videos: If ``True``, visual modalities are encoded as MP4 videos.
-            metadata_buffer_size: Number of episode metadata records to buffer
-                before flushing to parquet.
-            chunks_size: Max number of files per chunk directory. ``None`` uses
-                the default.
-            data_files_size_in_mb: Max parquet file size in MB. ``None`` uses the
-                default.
-            video_files_size_in_mb: Max video file size in MB. ``None`` uses the
-                default.
+            repo_id: 仓库标识（例如 ``'user/my_dataset'``）。
+            fps: 数据采集期间使用的帧率。
+            features: 特征规范字典，将特征名称映射到其类型/形状元数据。
+            robot_type: 可选的存储在元数据中的机器人类型字符串。
+            root: 数据集的本地目录。默认为
+                ``$HF_LEROBOT_HOME/{repo_id}``。必须不存在。
+            use_videos: 若为 ``True``，视觉模态编码为 MP4 视频。
+            metadata_buffer_size: 刷新到 parquet 之前在内存中缓冲的
+                episode 元数据记录数。
+            chunks_size: 每个 chunk 目录中的最大文件数。``None`` 使用
+                默认值。
+            data_files_size_in_mb: parquet 文件的最大大小（MB）。``None`` 使用
+                默认值。
+            video_files_size_in_mb: 视频文件的最大大小（MB）。``None`` 使用
+                默认值。
 
         Returns:
-            A new :class:`LeRobotDatasetMetadata` instance.
+            一个新的 :class:`LeRobotDatasetMetadata` 实例。
         """
         obj = cls.__new__(cls)
         obj.repo_id = repo_id

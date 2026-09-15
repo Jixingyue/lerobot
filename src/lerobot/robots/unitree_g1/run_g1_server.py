@@ -15,13 +15,13 @@
 # limitations under the License.
 
 """
-DDS-to-ZMQ bridge server for Unitree G1 robot.
+Unitree G1 机器人的 DDS 到 ZMQ 桥接服务器。
 
-This server runs on the robot and forwards:
-- Robot state (LowState) from DDS to ZMQ (for remote clients)
-- Robot commands (LowCmd) from ZMQ to DDS (from remote clients)
+该服务器运行在机器人上，负责转发：
+- 机器人状态（LowState）：从 DDS 到 ZMQ（发给远程客户端）
+- 机器人命令（LowCmd）：从 ZMQ 到 DDS（来自远程客户端）
 
-Uses JSON for secure serialization instead of pickle.
+使用 JSON 而非 pickle 进行安全的序列化。
 """
 
 import argparse
@@ -41,10 +41,10 @@ from unitree_sdk2py.utils.crc import CRC
 
 from lerobot.cameras.zmq.image_server import ImageServer
 
-# DDS topic names follow Unitree SDK naming conventions
+# DDS 主题名遵循 Unitree SDK 的命名约定
 # ruff: noqa: N816
-kTopicLowCommand_Debug = "rt/lowcmd"  # action to robot
-kTopicLowState = "rt/lowstate"  # observation from robot
+kTopicLowCommand_Debug = "rt/lowcmd"  # 发往机器人的动作
+kTopicLowState = "rt/lowstate"  # 来自机器人的观测
 
 LOWCMD_PORT = 6000
 LOWSTATE_PORT = 6001
@@ -52,7 +52,7 @@ NUM_MOTORS = 35
 
 
 def lowstate_to_dict(msg: hg_LowState) -> dict[str, Any]:
-    """Convert LowState SDK message to a JSON-serializable dictionary."""
+    """将 LowState SDK 消息转换为可 JSON 序列化的字典。"""
     motor_states = []
     for i in range(NUM_MOTORS):
         temp = msg.motor_state[i].temperature
@@ -75,14 +75,14 @@ def lowstate_to_dict(msg: hg_LowState) -> dict[str, Any]:
             "rpy": [float(x) for x in msg.imu_state.rpy],
             "temperature": float(msg.imu_state.temperature),
         },
-        # Encode bytes as base64 for JSON compatibility
+        # 将字节编码为 base64 以兼容 JSON
         "wireless_remote": base64.b64encode(bytes(msg.wireless_remote)).decode("ascii"),
         "mode_machine": int(msg.mode_machine),
     }
 
 
 def dict_to_lowcmd(data: dict[str, Any]) -> hg_LowCmd:
-    """Convert dictionary back to LowCmd SDK message."""
+    """将字典转换回 LowCmd SDK 消息。"""
     cmd = unitree_hg_msg_dds__LowCmd_()
     cmd.mode_pr = data.get("mode_pr", 0)
     cmd.mode_machine = data.get("mode_machine", 0)
@@ -104,22 +104,22 @@ def state_forward_loop(
     state_period: float,
     shutdown_event: threading.Event,
 ) -> None:
-    """Read observation from DDS and forward to ZMQ clients."""
+    """从 DDS 读取观测并转发给 ZMQ 客户端。"""
     last_state_time = 0.0
 
     while not shutdown_event.is_set():
-        # read from DDS
+        # 从 DDS 读取
         msg = lowstate_sub.Read()
         if msg is None:
             continue
 
         now = time.time()
-        # optional downsampling (if robot dds rate > state_period)
+        # 可选的降采样（当机器人 DDS 频率高于 state_period 时）
         if now - last_state_time >= state_period:
-            # Convert to dict and serialize with JSON
+            # 转换为字典并用 JSON 序列化
             state_dict = lowstate_to_dict(msg)
             payload = json.dumps({"topic": kTopicLowState, "data": state_dict}).encode("utf-8")
-            # if no subscribers / tx buffer full, just drop
+            # 若无订阅者 / 发送缓冲区已满，则直接丢弃
             with contextlib.suppress(zmq.Again):
                 lowstate_sock.send(payload, zmq.NOBLOCK)
             last_state_time = now
@@ -130,7 +130,7 @@ def cmd_forward_loop(
     lowcmd_pub_debug: ChannelPublisher,
     crc: CRC,
 ) -> None:
-    """Receive commands from ZMQ and forward to DDS."""
+    """从 ZMQ 接收命令并转发到 DDS。"""
     while True:
         try:
             payload = lowcmd_sock.recv()
@@ -141,10 +141,10 @@ def cmd_forward_loop(
         topic = msg_dict.get("topic", "")
         cmd_data = msg_dict.get("data", {})
 
-        # Reconstruct LowCmd object from dict
+        # 从字典重建 LowCmd 对象
         cmd = dict_to_lowcmd(cmd_data)
 
-        # recompute crc
+        # 重新计算 crc
         cmd.crc = crc.Crc(cmd)
 
         if topic == kTopicLowCommand_Debug:
@@ -152,7 +152,7 @@ def cmd_forward_loop(
 
 
 def main() -> None:
-    """Main entry point for the robot server bridge."""
+    """机器人服务器桥接的主入口。"""
     parser = argparse.ArgumentParser(description="DDS-to-ZMQ bridge server for Unitree G1")
     parser.add_argument("--camera", action="store_true", help="Also launch camera server")
     parser.add_argument("--camera-device", type=int, default=4, help="Camera device ID (default: 4)")
@@ -162,7 +162,7 @@ def main() -> None:
     parser.add_argument("--camera-port", type=int, default=5555, help="Camera ZMQ port (default: 5555)")
     args = parser.parse_args()
 
-    # Optionally start camera server in background thread
+    # 可选：在后台线程中启动相机服务器
     camera_thread = None
     if args.camera:
         camera_config = {
@@ -179,10 +179,10 @@ def main() -> None:
         camera_thread.start()
         print(f"Camera server started on port {args.camera_port} (device {args.camera_device})")
 
-    # initialize DDS
+    # 初始化 DDS
     ChannelFactoryInitialize(0)
 
-    # stop all active publishers on the robot
+    # 停止机器人上所有活动的发布者
     msc = MotionSwitcherClient()
     msc.SetTimeout(5.0)
     msc.Init()
@@ -195,29 +195,29 @@ def main() -> None:
 
     crc = CRC()
 
-    # initialize DDS publisher
+    # 初始化 DDS 发布者
     lowcmd_pub_debug = ChannelPublisher(kTopicLowCommand_Debug, hg_LowCmd)
     lowcmd_pub_debug.Init()
 
-    # initialize DDS subscriber
+    # 初始化 DDS 订阅者
     lowstate_sub = ChannelSubscriber(kTopicLowState, hg_LowState)
     lowstate_sub.Init()
 
-    # initialize ZMQ
+    # 初始化 ZMQ
     ctx = zmq.Context.instance()
 
-    # receive commands from remote client
+    # 接收来自远程客户端的命令
     lowcmd_sock = ctx.socket(zmq.PULL)
     lowcmd_sock.bind(f"tcp://0.0.0.0:{LOWCMD_PORT}")
 
-    # publish state to remote clients
+    # 向远程客户端发布状态
     lowstate_sock = ctx.socket(zmq.PUB)
     lowstate_sock.bind(f"tcp://0.0.0.0:{LOWSTATE_PORT}")
 
     state_period = 0.002  # ~500 hz
     shutdown_event = threading.Event()
 
-    # start observation forwarding in background thread
+    # 在后台线程中启动观测转发
     t_state = threading.Thread(
         target=state_forward_loop,
         args=(lowstate_sub, lowstate_sock, state_period, shutdown_event),
@@ -226,14 +226,14 @@ def main() -> None:
 
     print("bridge running (lowstate -> zmq, lowcmd -> dds)")
 
-    # run command forwarding in main thread
+    # 在主线程中运行命令转发
     try:
         cmd_forward_loop(lowcmd_sock, lowcmd_pub_debug, crc)
     except KeyboardInterrupt:
         print("shutting down bridge...")
     finally:
         shutdown_event.set()
-        ctx.term()  # terminates blocking zmq.recv() calls
+        ctx.term()  # 终止阻塞中的 zmq.recv() 调用
         t_state.join(timeout=2.0)
         if camera_thread is not None:
             camera_thread.join(timeout=2.0)

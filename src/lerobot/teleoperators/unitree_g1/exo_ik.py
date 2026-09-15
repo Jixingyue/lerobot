@@ -15,8 +15,8 @@
 # limitations under the License.
 
 """
-IK helper for exoskeleton-to-G1 teleoperation. We map Exoskeleton joint angles to end-effector pose in world frame,
-visualizing the result in meshcat after calibration.
+外骨骼到 G1 遥操作的 IK 辅助工具。我们将外骨骼关节角度映射到世界坐标系下的末端执行器位姿，
+并在校准后通过 meshcat 可视化结果。
 """
 
 import logging
@@ -47,12 +47,12 @@ class ArmCfg:
     urdf: str  # exo_left.urdf / exo_right.urdf
     root: str  # "exo_left" / "exo_right"
     g1_ee: str  # "l_ee" / "r_ee"
-    offset: np.ndarray  # world offset for viz + target
+    offset: np.ndarray  # 用于可视化和目标的世界坐标偏移
     marker_prefix: str  # "left" / "right"
 
 
 class Markers:
-    """Creates meshcat visualization primitives, showing end-effector frames of exoskeleton and G1"""
+    """创建 meshcat 可视化图元，显示外骨骼和 G1 的末端执行器坐标系"""
 
     def __init__(self, viewer):
         self.v = viewer
@@ -90,13 +90,13 @@ class Markers:
 
 class ExoskeletonIKHelper:
     """
-    - Loads G1 robot and exoskeleton URDF models via Pinocchio
-    - Computes forward kinematics on exoskeleton to get end-effector poses
-    - Solves inverse kinematics on G1 to match those poses
-    - Provides meshcat visualization showing both robots and targets
+    - 通过 Pinocchio 加载 G1 机器人和外骨骼的 URDF 模型
+    - 对外骨骼计算正运动学以获得末端执行器位姿
+    - 对 G1 求解逆运动学以匹配这些位姿
+    - 提供同时显示两个机器人和目标的 meshcat 可视化
 
     Args:
-        frozen_joints: List of G1 joint names to exclude from IK (kept at neutral).
+        frozen_joints: 要从 IK 中排除的 G1 关节名称列表（保持在中立位）。
     """
 
     def __init__(self, frozen_joints: list[str] | None = None):
@@ -136,11 +136,11 @@ class ExoskeletonIKHelper:
             ),
         ]
 
-        self.exo = {}  # side -> pin.RobotWrapper
-        self.q_exo = {}  # side -> q
-        self.ee_id_exo = {}  # side -> frame id
-        self.qmap = {}  # side -> {joint_name: q_idx}
-        self.ee_id_g1 = {}  # side -> frame id
+        self.exo = {}  # 侧别 -> pin.RobotWrapper
+        self.q_exo = {}  # 侧别 -> q
+        self.ee_id_exo = {}  # 侧别 -> 坐标系 id
+        self.qmap = {}  # 侧别 -> {joint_name: q_idx}
+        self.ee_id_g1 = {}  # 侧别 -> 坐标系 id
 
         self._load_exo_models(assets_dir)
         for a in self.arms:
@@ -149,7 +149,7 @@ class ExoskeletonIKHelper:
         self.viewer = None
         self.markers: Markers | None = None
         self.viz_g1 = None
-        self.viz_exo = {}  # side -> viz
+        self.viz_exo = {}  # 侧别 -> viz
 
     def _frozen_joint_indices(self) -> dict[str, int]:
         out = {}
@@ -189,8 +189,8 @@ class ExoskeletonIKHelper:
 
     def init_visualization(self):
         """
-        Creates a browser-based visualization of exoskeleton and G1 robot,
-        highlighting end-effector frames and target positions.
+        创建基于浏览器的外骨骼和 G1 机器人可视化，
+        突出显示末端执行器坐标系和目标位置。
         """
         try:
             from pinocchio.visualize import MeshcatVisualizer
@@ -209,7 +209,7 @@ class ExoskeletonIKHelper:
         self.viewer = self.viz_g1.viewer
         self.markers = Markers(self.viewer)
 
-        # exos
+        # 外骨骼
         for a in self.arms:
             if a.side not in self.exo:
                 continue
@@ -224,7 +224,7 @@ class ExoskeletonIKHelper:
             v.display(self.q_exo[a.side])
             self.viz_exo[a.side] = v
 
-        # markers
+        # 标记
         for a in self.arms:
             p = a.marker_prefix
             self.markers.sphere(f"markers/{p}_exo_ee", 0.012, (0.2, 1.0, 0.2, 0.9))
@@ -237,7 +237,7 @@ class ExoskeletonIKHelper:
         print(f"\nmeshcat url: {self.viewer.url()}\n")
 
     def _fk_target_world(self, side: str, angles: dict[str, float]) -> np.ndarray | None:
-        """returns wrist frame target to be used for G1 IK in 4x4 homogeneous transform. Takes offset into account."""
+        """返回以 4x4 齐次变换表示的腕部坐标系目标，用于 G1 IK。已考虑偏移。"""
         if side not in self.exo or not angles:
             return None
 
@@ -257,7 +257,7 @@ class ExoskeletonIKHelper:
         ee = r.data.oMf[self.ee_id_exo[side]]
         target = np.eye(4)
         target[:3, :3] = ee.rotation
-        # offset gets applied in world space
+        # 偏移在世界坐标系中应用
         cfg = next(a for a in self.arms if a.side == side)
         target[:3, 3] = cfg.offset + ee.translation
         return target
@@ -283,7 +283,7 @@ class ExoskeletonIKHelper:
                 self.markers.tf(f"markers/{p}_g1_ee", ee_tf)
                 self.markers.tf(f"markers/{p}_g1_axes", ee_tf)
 
-        # exos
+        # 外骨骼
         for a in self.arms:
             side = a.side
             v = self.viz_exo.get(side)
@@ -312,8 +312,8 @@ class ExoskeletonIKHelper:
         right_angles: dict[str, float],
     ) -> dict[str, float]:
         """
-        Performs FK on exoskeleton to get end-effector poses in world frame,
-        after which it solves IK on G1 to return joint angles matching those poses in G1 motor order.
+        对外骨骼执行 FK 以获得世界坐标系下的末端执行器位姿，
+        然后对 G1 求解 IK，返回按 G1 电机顺序排列的、匹配这些位姿的关节角度。
         """
         pin = self.pin
 
@@ -322,7 +322,7 @@ class ExoskeletonIKHelper:
             "right": self._fk_target_world("right", right_angles),
         }
 
-        # fallback to current g1 ee pose if missing target
+        # 如果缺少目标，则回退到当前 g1 末端执行器位姿
         pin.forwardKinematics(self.robot_g1.model, self.robot_g1.data, self.q_g1)
         pin.updateFramePlacements(self.robot_g1.model, self.robot_g1.data)
 

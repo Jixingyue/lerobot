@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Inference engine configs and factory.
+"""推理引擎的配置与工厂。
 
-Selection is explicit via ``--inference.type=sync|rtc``.  Adding a new
-backend requires registering its config subclass and dispatching it in
-:func:`create_inference_engine`.
+通过 ``--inference.type=sync|rtc`` 显式选择。添加新的后端时，
+需要注册其配置子类，并在 :func:`create_inference_engine` 中进行分发。
 """
 
 from __future__ import annotations
@@ -41,15 +40,15 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Configs
+# 配置
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class InferenceEngineConfig(draccus.ChoiceRegistry, abc.ABC):
-    """Abstract base for inference backend configuration.
+    """推理后端配置的抽象基类。
 
-    Use ``--inference.type=<name>`` on the CLI to select a backend.
+    在命令行中使用 ``--inference.type=<name>`` 来选择后端。
     """
 
     @property
@@ -60,22 +59,22 @@ class InferenceEngineConfig(draccus.ChoiceRegistry, abc.ABC):
 @InferenceEngineConfig.register_subclass("sync")
 @dataclass
 class SyncInferenceConfig(InferenceEngineConfig):
-    """Inline synchronous inference (one policy call per control tick)."""
+    """内联同步推理（每个控制节拍调用一次策略）。"""
 
 
 @InferenceEngineConfig.register_subclass("rtc")
 @dataclass
 class RTCInferenceConfig(InferenceEngineConfig):
-    """Real-Time Chunking: async policy inference in a background thread."""
+    """Real-Time Chunking：在后台线程中进行异步策略推理。"""
 
-    # Eagerly constructed so draccus exposes nested fields directly on the CLI
-    # (e.g. ``--inference.rtc.execution_horizon=...``).
+    # 采用预先（eagerly）构造，以便 draccus 在命令行上直接暴露嵌套字段
+    # （例如 ``--inference.rtc.execution_horizon=...``）。
     rtc: RTCConfig = field(default_factory=RTCConfig)
     queue_threshold: int = 30
 
 
 # ---------------------------------------------------------------------------
-# Factory
+# 工厂
 # ---------------------------------------------------------------------------
 
 
@@ -96,7 +95,7 @@ def create_inference_engine(
     compile_warmup_inferences: int = 2,
     shutdown_event: Event | None = None,
 ) -> InferenceEngine:
-    """Instantiate the appropriate inference engine from a config object."""
+    """根据配置对象实例化相应的推理引擎。"""
     logger.info("Creating inference engine: %s", config.type)
     if isinstance(config, SyncInferenceConfig):
         return SyncInferenceEngine(

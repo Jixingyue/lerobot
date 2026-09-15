@@ -85,7 +85,7 @@ logging.basicConfig(level=logging.INFO)
 
 @dataclass
 class DatasetConfig:
-    """Configuration for dataset creation and management."""
+    """数据集创建和管理的配置。"""
 
     repo_id: str
     task: str
@@ -97,23 +97,23 @@ class DatasetConfig:
 
 @dataclass
 class GymManipulatorConfig:
-    """Main configuration for gym manipulator environment."""
+    """gym 机械臂环境的主配置。"""
 
     env: HILSerlRobotEnvConfig
     dataset: DatasetConfig
-    mode: str | None = None  # Either "record", "replay", None
+    mode: str | None = None  # 取 "record"、"replay" 或 None 之一
     device: str = "cpu"
 
 
 def reset_follower_position(robot_arm: Robot, target_position: np.ndarray) -> None:
-    """Reset robot arm to target position using smooth trajectory."""
+    """使用平滑轨迹将机械臂重置到目标位置。"""
     current_position_dict = robot_arm.bus.sync_read("Present_Position")
     current_position = np.array(
         [current_position_dict[name] for name in current_position_dict], dtype=np.float32
     )
     trajectory = torch.from_numpy(
         np.linspace(current_position, target_position, 50)
-    )  # NOTE: 30 is just an arbitrary number
+    )  # 注意：30 只是一个任意选取的数字
     for pose in trajectory:
         action_dict = dict(zip(current_position_dict, pose, strict=False))
         robot_arm.bus.sync_write("Goal_Position", action_dict)
@@ -121,7 +121,7 @@ def reset_follower_position(robot_arm: Robot, target_position: np.ndarray) -> No
 
 
 class RobotEnv(gym.Env):
-    """Gym environment for robotic control with human intervention support."""
+    """支持人工干预的机器人控制 Gym 环境。"""
 
     def __init__(
         self,
@@ -131,25 +131,25 @@ class RobotEnv(gym.Env):
         reset_pose: list[float] | None = None,
         reset_time_s: float = 5.0,
     ) -> None:
-        """Initialize robot environment with configuration options.
+        """使用配置选项初始化机器人环境。
 
         Args:
-            robot: Robot interface for hardware communication.
-            use_gripper: Whether to include gripper in action space.
-            display_cameras: Whether to show camera feeds during execution.
-            reset_pose: Joint positions for environment reset.
-            reset_time_s: Time to wait during reset.
+            robot: 用于硬件通信的机器人接口。
+            use_gripper: 是否在动作空间中包含夹爪。
+            display_cameras: 是否在执行期间显示摄像头画面。
+            reset_pose: 用于环境重置的关节位置。
+            reset_time_s: 重置期间等待的时间。
         """
         super().__init__()
 
         self.robot = robot
         self.display_cameras = display_cameras
 
-        # Connect to the robot if not already connected.
+        # 如果尚未连接，则连接到机器人。
         if not self.robot.is_connected:
             self.robot.connect()
 
-        # Episode tracking.
+        # 回合跟踪。
         self.current_step = 0
         self.episode_data = None
 
@@ -167,7 +167,7 @@ class RobotEnv(gym.Env):
         self._setup_spaces()
 
     def _get_observation(self) -> RobotObservation:
-        """Get current robot observation including joint positions and camera images."""
+        """获取当前机器人观测，包括关节位置和摄像头图像。"""
         obs_dict = self.robot.get_observation()
         raw_joint_joint_position = {f"{name}.pos": obs_dict[f"{name}.pos"] for name in self._joint_names}
         joint_positions = np.array([raw_joint_joint_position[f"{name}.pos"] for name in self._joint_names])
@@ -177,12 +177,12 @@ class RobotEnv(gym.Env):
         return {"agent_pos": joint_positions, "pixels": images, **raw_joint_joint_position}
 
     def _setup_spaces(self) -> None:
-        """Configure observation and action spaces based on robot capabilities."""
+        """根据机器人能力配置观测空间和动作空间。"""
         current_observation = self._get_observation()
 
         observation_spaces = {}
 
-        # Define observation spaces for images and other states.
+        # 定义图像和其他状态的观测空间。
         if current_observation is not None and "pixels" in current_observation:
             prefix = OBS_IMAGES
             observation_spaces = {
@@ -203,7 +203,7 @@ class RobotEnv(gym.Env):
 
         self.observation_space = gym.spaces.Dict(observation_spaces)
 
-        # Define the action space for joint positions along with setting an intervention flag.
+        # 定义关节位置的动作空间，并设置干预标志。
         action_dim = 3
         bounds = {}
         bounds["min"] = -np.ones(action_dim)
@@ -224,16 +224,16 @@ class RobotEnv(gym.Env):
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
     ) -> tuple[RobotObservation, dict[str, Any]]:
-        """Reset environment to initial state.
+        """将环境重置到初始状态。
 
         Args:
-            seed: Random seed for reproducibility.
-            options: Additional reset options.
+            seed: 用于可复现性的随机种子。
+            options: 额外的重置选项。
 
         Returns:
-            Tuple of (observation, info) dictionaries.
+            (observation, info) 字典元组。
         """
-        # Reset the robot
+        # 重置机器人
         # self.robot.reset()
         start_time = time.perf_counter()
         if self.reset_pose is not None:
@@ -245,7 +245,7 @@ class RobotEnv(gym.Env):
 
         super().reset(seed=seed, options=options)
 
-        # Reset episode tracking variables.
+        # 重置回合跟踪变量。
         self.current_step = 0
         self.episode_data = None
         obs = self._get_observation()
@@ -253,7 +253,7 @@ class RobotEnv(gym.Env):
         return obs, {TeleopEvents.IS_INTERVENTION: False}
 
     def step(self, action) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
-        """Execute one environment step with given action."""
+        """使用给定动作执行一次环境步进。"""
         joint_targets_dict = {f"{key}.pos": action[i] for i, key in enumerate(self.robot.bus.motors.keys())}
 
         self.robot.send_action(joint_targets_dict)
@@ -280,7 +280,7 @@ class RobotEnv(gym.Env):
         )
 
     def render(self) -> None:
-        """Display robot camera feeds."""
+        """显示机器人摄像头画面。"""
         import cv2
 
         current_observation = self._get_observation()
@@ -292,31 +292,31 @@ class RobotEnv(gym.Env):
                 cv2.waitKey(1)
 
     def close(self) -> None:
-        """Close environment and disconnect robot."""
+        """关闭环境并断开机器人连接。"""
         if self.robot.is_connected:
             self.robot.disconnect()
 
     def get_raw_joint_positions(self) -> dict[str, float]:
-        """Get raw joint positions."""
+        """获取原始关节位置。"""
         return self._raw_joint_positions
 
 
 def make_robot_env(cfg: HILSerlRobotEnvConfig) -> tuple[gym.Env, Any]:
-    """Create robot environment from configuration.
+    """根据配置创建机器人环境。
 
     Args:
-        cfg: Environment configuration.
+        cfg: 环境配置。
 
     Returns:
-        Tuple of (gym environment, teleoperator device).
+        (gym 环境, 遥操作设备) 元组。
     """
-    # Check if this is a GymHIL simulation environment
+    # 检查这是否是 GymHIL 仿真环境
     if cfg.name == "gym_hil":
         assert cfg.robot is None and cfg.teleop is None, "GymHIL environment does not support robot or teleop"
         require_package("gym-hil", extra="hilserl", import_name="gym_hil")
         import gym_hil  # noqa: F401
 
-        # Extract gripper settings with defaults
+        # 使用默认值提取夹爪设置
         use_gripper = cfg.processor.gripper.use_gripper if cfg.processor.gripper is not None else True
         gripper_penalty = cfg.processor.gripper.gripper_penalty if cfg.processor.gripper is not None else 0.0
 
@@ -330,7 +330,7 @@ def make_robot_env(cfg: HILSerlRobotEnvConfig) -> tuple[gym.Env, Any]:
 
         return env, None
 
-    # Real robot environment
+    # 真实机器人环境
     assert cfg.robot is not None, "Robot config must be provided for real robot environment"
     assert cfg.teleop is not None, "Teleop config must be provided for real robot environment"
 
@@ -338,7 +338,7 @@ def make_robot_env(cfg: HILSerlRobotEnvConfig) -> tuple[gym.Env, Any]:
     teleop_device = make_teleoperator_from_config(cfg.teleop)
     teleop_device.connect()
 
-    # Create base environment with safe defaults
+    # 使用安全的默认值创建基础环境
     use_gripper = cfg.processor.gripper.use_gripper if cfg.processor.gripper is not None else True
     display_cameras = (
         cfg.processor.observation.display_cameras if cfg.processor.observation is not None else False
@@ -360,16 +360,16 @@ def make_processors(
 ) -> tuple[
     DataProcessorPipeline[EnvTransition, EnvTransition], DataProcessorPipeline[EnvTransition, EnvTransition]
 ]:
-    """Create environment and action processors.
+    """创建环境处理器和动作处理器。
 
     Args:
-        env: Robot environment instance.
-        teleop_device: Teleoperator device for intervention.
-        cfg: Processor configuration.
-        device: Target device for computations.
+        env: 机器人环境实例。
+        teleop_device: 用于干预的遥操作设备。
+        cfg: 处理器配置。
+        device: 计算所用的目标设备。
 
     Returns:
-        Tuple of (environment processor, action processor).
+        (环境处理器, 动作处理器) 元组。
     """
     terminate_on_success = (
         cfg.processor.reset.terminate_on_success if cfg.processor.reset is not None else True
@@ -387,7 +387,7 @@ def make_processors(
             VanillaObservationProcessorStep(),
         ]
 
-        # Add time limit processor if reset config exists
+        # 如果存在重置配置，则添加时间限制处理器
         if cfg.processor.reset is not None:
             env_pipeline_steps.append(
                 TimeLimitProcessorStep(max_episode_steps=int(cfg.processor.reset.control_time_s * cfg.fps))
@@ -406,11 +406,11 @@ def make_processors(
             steps=action_pipeline_steps, to_transition=identity_transition, to_output=identity_transition
         )
 
-    # Full processor pipeline for real robot environment
-    # Get robot and motor information for kinematics
+    # 真实机器人环境的完整处理器流水线
+    # 获取用于运动学的机器人和电机信息
     motor_names = list(env.robot.bus.motors.keys())
 
-    # Set up kinematics solver if inverse kinematics is configured
+    # 如果配置了逆运动学，则设置运动学求解器
     kinematics_solver = None
     if cfg.processor.inverse_kinematics is not None:
         kinematics_solver = RobotKinematics(
@@ -446,14 +446,14 @@ def make_processors(
             )
         )
 
-    # Add time limit processor if reset config exists
+    # 如果存在重置配置，则添加时间限制处理器
     if cfg.processor.reset is not None:
         env_pipeline_steps.append(
             TimeLimitProcessorStep(max_episode_steps=int(cfg.processor.reset.control_time_s * cfg.fps))
         )
 
-    # Add gripper penalty processor if gripper config exists and enabled
-    # Only add if max_gripper_pos is explicitly configured (required for normalization)
+    # 如果夹爪配置存在且已启用，则添加夹爪惩罚处理器
+    # 仅在显式配置了 max_gripper_pos 时才添加（归一化所需）
     if (
         cfg.processor.gripper is not None
         and cfg.processor.gripper.use_gripper
@@ -492,9 +492,9 @@ def make_processors(
         ),
     ]
 
-    # Replace InverseKinematicsProcessor with new kinematic processors
+    # 用新的运动学处理器替换 InverseKinematicsProcessor
     if cfg.processor.inverse_kinematics is not None and kinematics_solver is not None:
-        # Add EE bounds and safety processor
+        # 添加末端执行器（EE）边界和安全处理器
         inverse_kinematics_steps = [
             MapTensorToDeltaActionDictStep(
                 use_gripper=cfg.processor.gripper.use_gripper if cfg.processor.gripper is not None else False
@@ -537,20 +537,20 @@ def step_env_and_process_transition(
     action_processor: DataProcessorPipeline[EnvTransition, EnvTransition],
 ) -> EnvTransition:
     """
-    Execute one step with processor pipeline.
+    使用处理器流水线执行一次步进。
 
     Args:
-        env: The robot environment
-        transition: Current transition state
-        action: Action to execute
-        env_processor: Environment processor
-        action_processor: Action processor
+        env: 机器人环境
+        transition: 当前转移状态
+        action: 要执行的动作
+        env_processor: 环境处理器
+        action_processor: 动作处理器
 
     Returns:
-        Processed transition with updated state.
+        状态已更新的处理后转移。
     """
 
-    # Create action transition
+    # 创建动作转移
     transition[TransitionKey.ACTION] = action
     transition[TransitionKey.OBSERVATION] = (
         env.get_raw_joint_positions() if hasattr(env, "get_raw_joint_positions") else {}
@@ -570,8 +570,8 @@ def step_env_and_process_transition(
         if raw_joint_positions is not None:
             complementary_data["raw_joint_positions"] = raw_joint_positions
 
-    # Merge env and action-processor info: env wins for str keys, action-processor
-    # wins for `TeleopEvents` enum keys
+    # 合并环境和动作处理器的 info：对于 str 键，环境优先；
+    # 对于 `TeleopEvents` 枚举键，动作处理器优先
     action_info = processed_action_transition[TransitionKey.INFO]
     new_info = info.copy()
     for key, value in action_info.items():
@@ -597,7 +597,7 @@ def reset_and_build_transition(
     env_processor: DataProcessorPipeline[EnvTransition, EnvTransition],
     action_processor: DataProcessorPipeline[EnvTransition, EnvTransition],
 ) -> EnvTransition:
-    """Reset env + processors and return the first env-processed transition."""
+    """重置环境和处理器，并返回第一个经环境处理后的转移。"""
     obs, info = env.reset()
     env_processor.reset()
     action_processor.reset()
@@ -617,15 +617,15 @@ def control_loop(
     teleop_device: Teleoperator,
     cfg: GymManipulatorConfig,
 ) -> None:
-    """Main control loop for robot environment interaction.
-    if cfg.mode == "record": then a dataset will be created and recorded
+    """机器人环境交互的主控制循环。
+    如果 cfg.mode == "record"：将创建并记录一个数据集
 
     Args:
-     env: The robot environment
-     env_processor: Environment processor
-     action_processor: Action processor
-     teleop_device: Teleoperator device
-     cfg: gym_manipulator configuration
+     env: 机器人环境
+     env_processor: 环境处理器
+     action_processor: 动作处理器
+     teleop_device: 遥操作设备
+     cfg: gym_manipulator 配置
     """
     dt = 1.0 / cfg.env.fps
 
@@ -637,7 +637,7 @@ def control_loop(
 
     transition = reset_and_build_transition(env, env_processor, action_processor)
 
-    # Determine if gripper is used
+    # 确定是否使用夹爪
     use_gripper = cfg.env.processor.gripper.use_gripper if cfg.env.processor.gripper is not None else True
 
     dataset = None
@@ -676,7 +676,7 @@ def control_loop(
                     "names": ["channels", "height", "width"],
                 }
 
-        # Create dataset
+        # 创建数据集
         dataset = LeRobotDataset.create(
             cfg.dataset.repo_id,
             cfg.env.fps,
@@ -695,10 +695,10 @@ def control_loop(
         while episode_idx < cfg.dataset.num_episodes_to_record:
             step_start_time = time.perf_counter()
 
-            # Create a neutral action (no movement)
+            # 创建一个中性动作（无移动）
             neutral_action = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
             if use_gripper:
-                neutral_action = torch.cat([neutral_action, torch.tensor([1.0])])  # Gripper stay
+                neutral_action = torch.cat([neutral_action, torch.tensor([1.0])])  # 夹爪保持
 
             observation = {
                 k: v.squeeze(0).cpu()
@@ -740,7 +740,7 @@ def control_loop(
 
             episode_step += 1
 
-            # Handle episode termination
+            # 处理回合终止
             if terminated or truncated:
                 episode_time = time.perf_counter() - episode_start_time
                 logging.info(
@@ -758,10 +758,10 @@ def control_loop(
                         logging.info(f"Saving episode {episode_idx}")
                         dataset.save_episode()
 
-                # Reset for new episode
+                # 为新回合进行重置
                 transition = reset_and_build_transition(env, env_processor, action_processor)
 
-            # Maintain fps timing
+            # 维持 fps 计时
             precise_sleep(max(dt - (time.perf_counter() - step_start_time), 0.0))
     finally:
         if dataset is not None and dataset.writer is not None and dataset.writer.image_writer is not None:
@@ -778,7 +778,7 @@ def control_loop(
 def replay_trajectory(
     env: gym.Env, action_processor: DataProcessorPipeline, cfg: GymManipulatorConfig
 ) -> None:
-    """Replay recorded trajectory on robot environment."""
+    """在机器人环境上回放已记录的轨迹。"""
     assert cfg.dataset.replay_episode is not None, "Replay episode must be provided for replay"
 
     dataset = LeRobotDataset(
@@ -804,7 +804,7 @@ def replay_trajectory(
 
 @parser.wrap()
 def main(cfg: GymManipulatorConfig) -> None:
-    """Main entry point for gym manipulator script."""
+    """gym 机械臂脚本的主入口。"""
     env, teleop_device = make_robot_env(cfg.env)
     env_processor, action_processor = make_processors(env, teleop_device, cfg.env, cfg.device)
 

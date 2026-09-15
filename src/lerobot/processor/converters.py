@@ -45,28 +45,28 @@ def to_tensor(
     device: torch.device | str | None = None,
 ) -> torch.Tensor:
     """
-    Convert various data types to PyTorch tensors with configurable options.
+    将各种数据类型转换为 PyTorch 张量，并提供可配置的选项。
 
-    This is a unified tensor conversion function using single dispatch to handle
-    different input types appropriately.
+    这是一个统一的张量转换函数，使用单分派（single dispatch）来
+    恰当地处理不同的输入类型。
 
     Args:
-        value: Input value to convert (tensor, array, scalar, sequence, etc.).
-        dtype: Target tensor dtype. If None, preserves original dtype.
-        device: Target device for the tensor.
+        value: 要转换的输入值（张量、数组、标量、序列等）。
+        dtype: 目标张量 dtype。如果为 None，则保留原始 dtype。
+        device: 张量的目标设备。
 
     Returns:
-        A PyTorch tensor.
+        一个 PyTorch 张量。
 
     Raises:
-        TypeError: If the input type is not supported.
+        TypeError: 如果输入类型不受支持。
     """
     raise TypeError(f"Unsupported type for tensor conversion: {type(value)}")
 
 
 @to_tensor.register(torch.Tensor)
 def _(value: torch.Tensor, *, dtype=torch.float32, device=None, **kwargs) -> torch.Tensor:
-    """Handle conversion for existing PyTorch tensors."""
+    """处理已有 PyTorch 张量的转换。"""
     if dtype is not None:
         value = value.to(dtype=dtype)
     if device is not None:
@@ -82,17 +82,17 @@ def _(
     device=None,
     **kwargs,
 ) -> torch.Tensor:
-    """Handle conversion for numpy arrays."""
-    # Check for numpy scalars (0-dimensional arrays) and treat them as scalars.
+    """处理 numpy 数组的转换。"""
+    # 检查 numpy 标量（0 维数组），并将其视为标量。
     if value.ndim == 0:
-        # Numpy scalars should be converted to 0-dimensional tensors.
+        # numpy 标量应转换为 0 维张量。
         scalar_value = value.item()
         return torch.tensor(scalar_value, dtype=dtype, device=device)
 
-    # Create tensor from numpy array.
+    # 从 numpy 数组创建张量。
     tensor = torch.from_numpy(value)
 
-    # Apply dtype and device conversion if specified.
+    # 如果有指定，则应用 dtype 和 device 转换。
     if dtype is not None:
         tensor = tensor.to(dtype=dtype)
     if device is not None:
@@ -106,20 +106,20 @@ def _(
 @to_tensor.register(np.integer)
 @to_tensor.register(np.floating)
 def _(value, *, dtype=torch.float32, device=None, **kwargs) -> torch.Tensor:
-    """Handle conversion for scalar values including numpy scalars."""
+    """处理标量值（包括 numpy 标量）的转换。"""
     return torch.tensor(value, dtype=dtype, device=device)
 
 
 @to_tensor.register(list)
 @to_tensor.register(tuple)
 def _(value: Sequence, *, dtype=torch.float32, device=None, **kwargs) -> torch.Tensor:
-    """Handle conversion for sequences (lists, tuples)."""
+    """处理序列（列表、元组）的转换。"""
     return torch.tensor(value, dtype=dtype, device=device)
 
 
 @to_tensor.register(dict)
 def _(value: dict, *, device=None, **kwargs) -> dict:
-    """Handle conversion for dictionaries by recursively converting their values to tensors."""
+    """通过递归地将字典中的值转换为张量来处理字典的转换。"""
     if not value:
         return {}
 
@@ -129,7 +129,7 @@ def _(value: dict, *, device=None, **kwargs) -> dict:
             continue
 
         if isinstance(sub_value, dict):
-            # Recursively process nested dictionaries.
+            # 递归处理嵌套字典。
             result[key] = to_tensor(
                 sub_value,
                 device=device,
@@ -137,7 +137,7 @@ def _(value: dict, *, device=None, **kwargs) -> dict:
             )
             continue
 
-        # Convert individual values to tensors.
+        # 将单个值转换为张量。
         result[key] = to_tensor(
             sub_value,
             device=device,
@@ -148,15 +148,15 @@ def _(value: dict, *, device=None, **kwargs) -> dict:
 
 def from_tensor_to_numpy(x: torch.Tensor | Any) -> np.ndarray | float | int | Any:
     """
-    Convert a PyTorch tensor to a numpy array or scalar if applicable.
+    将 PyTorch 张量转换为 numpy 数组，或在适用时转换为标量。
 
-    If the input is not a tensor, it is returned unchanged.
+    如果输入不是张量，则原样返回。
 
     Args:
-        x: The input, which can be a tensor or any other type.
+        x: 输入，可以是张量或任何其他类型。
 
     Returns:
-        A numpy array, a scalar, or the original input.
+        numpy 数组、标量或原始输入。
     """
     if isinstance(x, torch.Tensor):
         return x.item() if x.numel() == 1 else x.detach().cpu().numpy()
@@ -175,19 +175,18 @@ _COMPLEMENTARY_KEYS = (
     MESSAGES_RENDERED,
     "message_streams",
     "target_message_indices",
-    # Text-generation request keys: carried into complementary_data so a prompt-formatting
-    # processor step can read the kind and rewrite QUERY_TEXT.
+    # 文本生成请求键：被携带进 complementary_data，以便提示词格式化
+    # 处理步骤可以读取该类型并重写 QUERY_TEXT。
     QUERY_KIND,
     QUERY_TEXT,
 )
 
 
 def _extract_complementary_data(batch: dict[str, Any]) -> dict[str, Any]:
-    """Extract complementary data from a batch dictionary.
+    """从批次字典中提取补充数据。
 
-    Includes padding flags (any key containing ``_is_pad``) plus the fixed
-    set of metadata / language keys defined in ``_COMPLEMENTARY_KEYS`` —
-    each only when present in ``batch``.
+    包括填充标志（任何包含 ``_is_pad`` 的键），以及在 ``_COMPLEMENTARY_KEYS``
+    中定义的固定元数据/语言键集合——每个键仅在存在于 ``batch`` 中时才包含。
     """
     pad_keys = {k: v for k, v in batch.items() if "_is_pad" in k}
     extras = {k: batch[k] for k in _COMPLEMENTARY_KEYS if k in batch}
@@ -204,19 +203,19 @@ def create_transition(
     complementary_data: dict[str, Any] | None = None,
 ) -> EnvTransition:
     """
-    Create an `EnvTransition` dictionary with sensible defaults.
+    创建一个带有合理默认值的 `EnvTransition` 字典。
 
     Args:
-        observation: Observation dictionary.
-        action: Action dictionary.
-        reward: Scalar reward value.
-        done: Episode termination flag.
-        truncated: Episode truncation flag.
-        info: Additional info dictionary.
-        complementary_data: Complementary data dictionary.
+        observation: 观测字典。
+        action: 动作字典。
+        reward: 标量奖励值。
+        done: 回合终止标志。
+        truncated: 回合截断标志。
+        info: 附加信息字典。
+        complementary_data: 补充数据字典。
 
     Returns:
-        A complete `EnvTransition` dictionary.
+        一个完整的 `EnvTransition` 字典。
     """
     return {
         TransitionKey.OBSERVATION: observation,
@@ -233,14 +232,14 @@ def robot_action_observation_to_transition(
     action_observation: tuple[RobotAction, RobotObservation],
 ) -> EnvTransition:
     """
-    Convert a raw robot action and observation dictionary into a standardized `EnvTransition`.
+    将原始机器人动作和观测字典转换为标准化的 `EnvTransition`。
 
     Args:
-        action: The raw action dictionary from a teleoperation device or controller.
-        observation: The raw observation dictionary from the environment.
+        action: 来自遥操作设备或控制器的原始动作字典。
+        observation: 来自环境的原始观测字典。
 
     Returns:
-        An `EnvTransition` containing the formatted observation.
+        包含格式化后观测的 `EnvTransition`。
     """
     if not isinstance(action_observation, tuple):
         raise ValueError("action_observation should be a tuple type with an action and observation")
@@ -258,13 +257,13 @@ def robot_action_observation_to_transition(
 
 def robot_action_to_transition(action: RobotAction) -> EnvTransition:
     """
-    Convert a raw robot action dictionary into a standardized `EnvTransition`.
+    将原始机器人动作字典转换为标准化的 `EnvTransition`。
 
     Args:
-        action: The raw action dictionary from a teleoperation device or controller.
+        action: 来自遥操作设备或控制器的原始动作字典。
 
     Returns:
-        An `EnvTransition` containing the formatted action.
+        包含格式化后动作的 `EnvTransition`。
     """
     if not isinstance(action, dict):
         raise ValueError(f"Action should be a RobotAction type got {type(action)}")
@@ -273,13 +272,13 @@ def robot_action_to_transition(action: RobotAction) -> EnvTransition:
 
 def observation_to_transition(observation: RobotObservation) -> EnvTransition:
     """
-    Convert a raw robot observation dictionary into a standardized `EnvTransition`.
+    将原始机器人观测字典转换为标准化的 `EnvTransition`。
 
     Args:
-        observation: The raw observation dictionary from the environment.
+        observation: 来自环境的原始观测字典。
 
     Returns:
-        An `EnvTransition` containing the formatted observation.
+        包含格式化后观测的 `EnvTransition`。
     """
     if not isinstance(observation, dict):
         raise ValueError(f"Observation should be a RobotObservation type got {type(observation)}")
@@ -288,16 +287,16 @@ def observation_to_transition(observation: RobotObservation) -> EnvTransition:
 
 def transition_to_robot_action(transition: EnvTransition) -> RobotAction:
     """
-    Extract a raw robot action dictionary for a robot from an `EnvTransition`.
+    从 `EnvTransition` 中提取用于机器人的原始机器人动作字典。
 
-    This function searches for keys in the format "action.*.pos" or "action.*.vel"
-    and converts them into a flat dictionary suitable for sending to a robot controller.
+    该函数查找格式为 "action.*.pos" 或 "action.*.vel" 的键，
+    并将其转换为适合发送给机器人控制器的扁平字典。
 
     Args:
-        transition: The `EnvTransition` containing the action.
+        transition: 包含动作的 `EnvTransition`。
 
     Returns:
-        A dictionary representing the raw robot action.
+        表示原始机器人动作的字典。
     """
     if not isinstance(transition, dict):
         raise ValueError(f"Transition should be a EnvTransition type (dict) got {type(transition)}")
@@ -310,7 +309,7 @@ def transition_to_robot_action(transition: EnvTransition) -> RobotAction:
 
 def transition_to_policy_action(transition: EnvTransition) -> PolicyAction:
     """
-    Convert an `EnvTransition` to a `PolicyAction`.
+    将 `EnvTransition` 转换为 `PolicyAction`。
     """
     if not isinstance(transition, dict):
         raise ValueError(f"Transition should be a EnvTransition type (dict) got {type(transition)}")
@@ -323,7 +322,7 @@ def transition_to_policy_action(transition: EnvTransition) -> PolicyAction:
 
 def transition_to_observation(transition: EnvTransition) -> RobotObservation:
     """
-    Convert an `EnvTransition` to a `RobotObservation`.
+    将 `EnvTransition` 转换为 `RobotObservation`。
     """
     if not isinstance(transition, dict):
         raise ValueError(f"Transition should be a EnvTransition type (dict) got {type(transition)}")
@@ -336,7 +335,7 @@ def transition_to_observation(transition: EnvTransition) -> RobotObservation:
 
 def policy_action_to_transition(action: PolicyAction) -> EnvTransition:
     """
-    Convert a `PolicyAction` to an `EnvTransition`.
+    将 `PolicyAction` 转换为 `EnvTransition`。
     """
     if not isinstance(action, PolicyAction):
         raise ValueError(f"Action should be a PolicyAction type got {type(action)}")
@@ -345,22 +344,22 @@ def policy_action_to_transition(action: PolicyAction) -> EnvTransition:
 
 def batch_to_transition(batch: dict[str, Any]) -> EnvTransition:
     """
-    Convert a batch dictionary from a dataset/dataloader into an `EnvTransition`.
+    将来自数据集/数据加载器的批次字典转换为 `EnvTransition`。
 
-    This function maps recognized keys from a batch to the `EnvTransition` structure,
-    filling in missing keys with sensible defaults.
+    该函数将批次中可识别的键映射到 `EnvTransition` 结构，
+    并用合理的默认值填充缺失的键。
 
     Args:
-        batch: A batch dictionary.
+        batch: 批次字典。
 
     Returns:
-        An `EnvTransition` dictionary.
+        一个 `EnvTransition` 字典。
 
     Raises:
-        ValueError: If the input is not a dictionary.
+        ValueError: 如果输入不是字典。
     """
 
-    # Validate input type.
+    # 验证输入类型。
     if not isinstance(batch, dict):
         raise ValueError(f"EnvTransition must be a dictionary. Got {type(batch).__name__}")
 
@@ -368,7 +367,7 @@ def batch_to_transition(batch: dict[str, Any]) -> EnvTransition:
     if action is not None and not isinstance(action, PolicyAction):
         raise ValueError(f"Action should be a PolicyAction type got {type(action)}")
 
-    # Extract observation and complementary data keys.
+    # 提取观测和补充数据键。
     observation_keys = {k: v for k, v in batch.items() if k.startswith(OBS_PREFIX)}
     complementary_data = _extract_complementary_data(batch)
 
@@ -385,15 +384,15 @@ def batch_to_transition(batch: dict[str, Any]) -> EnvTransition:
 
 def transition_to_batch(transition: EnvTransition) -> dict[str, Any]:
     """
-    Convert an `EnvTransition` back to the canonical batch format used in LeRobot.
+    将 `EnvTransition` 转换回 LeRobot 中使用的规范批次格式。
 
-    This is the inverse of `batch_to_transition`.
+    这是 `batch_to_transition` 的逆操作。
 
     Args:
-        transition: The `EnvTransition` to convert.
+        transition: 要转换的 `EnvTransition`。
 
     Returns:
-        A batch dictionary with canonical LeRobot field names.
+        具有规范 LeRobot 字段名的批次字典。
     """
     if not isinstance(transition, dict):
         raise ValueError(f"Transition should be a EnvTransition type (dict) got {type(transition)}")
@@ -406,12 +405,12 @@ def transition_to_batch(transition: EnvTransition) -> dict[str, Any]:
         INFO: transition.get(TransitionKey.INFO, {}),
     }
 
-    # Add complementary data.
+    # 添加补充数据。
     comp_data = transition.get(TransitionKey.COMPLEMENTARY_DATA, {})
     if comp_data:
         batch.update(comp_data)
 
-    # Flatten observation dictionary.
+    # 展平观测字典。
     observation = transition.get(TransitionKey.OBSERVATION)
     if isinstance(observation, dict):
         batch.update(observation)
@@ -421,14 +420,14 @@ def transition_to_batch(transition: EnvTransition) -> dict[str, Any]:
 
 def identity_transition(transition: EnvTransition) -> EnvTransition:
     """
-    An identity function for transitions, returning the input unchanged.
+    转移的恒等函数，原样返回输入。
 
-    Useful as a default or placeholder in processing pipelines.
+    可用作处理流水线中的默认值或占位符。
 
     Args:
-        tr: An `EnvTransition`.
+        tr: 一个 `EnvTransition`。
 
     Returns:
-        The same `EnvTransition`.
+        相同的 `EnvTransition`。
     """
     return transition

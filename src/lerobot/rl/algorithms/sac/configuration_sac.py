@@ -28,71 +28,70 @@ from ..configs import RLAlgorithmConfig
 @RLAlgorithmConfig.register_subclass("sac")
 @dataclass
 class SACAlgorithmConfig(RLAlgorithmConfig):
-    """Soft Actor-Critic (SAC) algorithm configuration.
+    """Soft Actor-Critic（SAC）算法配置。
 
-    SAC is an off-policy actor-critic deep RL algorithm based on the maximum
-    entropy reinforcement learning framework. It learns a policy and a Q-function
-    simultaneously using experience collected from the environment.
+    SAC 是一种基于最大熵强化学习框架的离策略（off-policy）
+    actor-critic 深度强化学习算法。它使用从环境中收集的经验，
+    同时学习策略和 Q 函数。
 
-    This configuration class contains the algorithm-side hyperparameters: critic
-    ensemble, target networks, temperature / entropy tuning, and the Bellman
-    update loop. The policy-side (actor + observation encoder) lives in
-    :class:`~lerobot.policies.gaussian_actor.GaussianActorConfig` and is
-    referenced via :attr:`policy_config`.
+    该配置类包含算法侧的超参数：critic 集成、目标网络、
+    温度/熵调节以及 Bellman 更新循环。策略侧（actor + 观测编码器）
+    位于 :class:`~lerobot.policies.gaussian_actor.GaussianActorConfig` 中，
+    并通过 :attr:`policy_config` 引用。
     """
 
-    # Optimizer learning rates
-    # Learning rate for the actor network
+    # 优化器学习率
+    # actor 网络的学习率
     actor_lr: float = 3e-4
-    # Learning rate for the critic network
+    # critic 网络的学习率
     critic_lr: float = 3e-4
-    # Learning rate for the temperature parameter
+    # 温度参数的学习率
     temperature_lr: float = 3e-4
 
-    # Bellman update
-    # Discount factor for the SAC algorithm
+    # Bellman 更新
+    # SAC 算法的折扣因子
     discount: float = 0.99
-    # Whether to use backup entropy for the SAC algorithm
+    # SAC 算法是否使用 backup 熵
     use_backup_entropy: bool = True
-    # Weight for the critic target update
+    # critic 目标网络更新的权重
     critic_target_update_weight: float = 0.005
 
-    # Critic ensemble
-    # Number of critics in the ensemble
+    # Critic 集成
+    # 集成中 critic 的数量
     num_critics: int = 2
-    # Number of subsampled critics for training
+    # 训练时子采样的 critic 数量
     num_subsample_critics: int | None = None
-    # Configuration for the critic network architecture
+    # critic 网络架构的配置
     critic_network_kwargs: CriticNetworkConfig = field(default_factory=CriticNetworkConfig)
-    # Configuration for the discrete critic network
+    # 离散 critic 网络的配置
     discrete_critic_network_kwargs: CriticNetworkConfig = field(default_factory=CriticNetworkConfig)
 
-    # Temperature / entropy
-    # Initial temperature value
+    # 温度/熵
+    # 初始温度值
     temperature_init: float = 1.0
-    # Target entropy for automatic temperature tuning. If ``None``, defaults to
-    # ``-|A|/2`` where ``|A|`` is the total action dimension (continuous + 1 if
-    # there is a discrete action head).
+    # 用于自动温度调节的目标熵。若为 ``None``，默认为
+    # ``-|A|/2``，其中 ``|A|`` 是总动作维度（连续动作维度，
+    # 若存在离散动作头则再 +1）。
     target_entropy: float | None = None
 
-    # Update loop
-    # Update-to-data ratio. Set to >1 to enable extra critic updates per env step.
+    # 更新循环
+    # 更新-数据比（update-to-data ratio）。设为 >1 可在每个环境步进行额外的 critic 更新。
     utd_ratio: int = 1
-    # Frequency of policy updates
+    # 策略更新的频率
     policy_update_freq: int = 1
-    # Gradient clipping norm for the SAC algorithm
+    # SAC 算法的梯度裁剪范数
     grad_clip_norm: float = 40.0
 
-    # Optimizations
-    # torch.compile is currently disabled by default
+    # 优化选项
+    # 目前默认禁用 torch.compile
     use_torch_compile: bool = False
 
-    # Policy config
+    # 策略配置
     policy_config: PreTrainedConfig | None = None
 
     @classmethod
     def from_policy_config(cls, policy_cfg: GaussianActorConfig) -> SACAlgorithmConfig:
-        """Build an algorithm config with default hyperparameters for a given policy."""
+        """为给定策略构建使用默认超参数的算法配置。"""
         return cls(
             policy_config=policy_cfg,
             discrete_critic_network_kwargs=policy_cfg.discrete_critic_network_kwargs,

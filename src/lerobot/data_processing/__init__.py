@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Data processing utilities (annotation tools, dataset transformations).
+数据处理工具（标注工具、数据集转换）。
 
-Available sub-modules (import directly)::
+可用子模块（直接导入）::
 
     from lerobot.data_processing.sarm_annotations import ...
 """

@@ -43,7 +43,7 @@ class WeightedMovingFilter:
 
         if len(self._data_queue) > 0 and np.array_equal(
             new_data, self._data_queue[-1]
-        ):  # skip duplicate data
+        ):  # 跳过重复数据
             return
 
         self._data_queue.append(new_data)
@@ -107,7 +107,7 @@ class G1_29_ArmIK:  # noqa: N801
             reference_configuration=np.array([0.0] * self.robot.model.nq),
         )
 
-        # Arm joint names in G1 motor order (G1_29_JointArmIndex)
+        # G1 电机顺序（G1_29_JointArmIndex）下的手臂关节名称
         self._arm_joint_names_g1 = [
             "left_shoulder_pitch_joint",
             "left_shoulder_roll_joint",
@@ -124,7 +124,7 @@ class G1_29_ArmIK:  # noqa: N801
             "right_wrist_pitch_joint",
             "right_wrist_yaw_joint",
         ]
-        # Pinocchio uses its own joint order in q; build index mapping.
+        # Pinocchio 在 q 中使用自己的关节顺序；在此构建索引映射。
         self._arm_joint_names_pin = sorted(
             self._arm_joint_names_g1,
             key=lambda name: self.reduced_robot.model.idx_qs[self.reduced_robot.model.getJointId(name)],
@@ -133,7 +133,7 @@ class G1_29_ArmIK:  # noqa: N801
         self._arm_reorder_g1_to_pin = [
             self._arm_joint_names_g1.index(name) for name in self._arm_joint_names_pin
         ]
-        # Inverse mapping to return tau in G1 motor order.
+        # 逆映射，用于按 G1 电机顺序返回 tau。
         self._arm_reorder_pin_to_g1 = np.argsort(self._arm_reorder_g1_to_pin)
 
         self.reduced_robot.model.addFrame(
@@ -154,17 +154,17 @@ class G1_29_ArmIK:  # noqa: N801
             )
         )
 
-        # Creating Casadi models and data for symbolic computing
+        # 创建用于符号计算的 Casadi 模型和数据
         self.cmodel = cpin.Model(self.reduced_robot.model)
         self.cdata = self.cmodel.createData()
 
-        # Creating symbolic variables
+        # 创建符号变量
         self.cq = casadi.SX.sym("q", self.reduced_robot.model.nq, 1)
         self.cTf_l = casadi.SX.sym("tf_l", 4, 4)
         self.cTf_r = casadi.SX.sym("tf_r", 4, 4)
         cpin.framesForwardKinematics(self.cmodel, self.cdata, self.cq)
 
-        # Get the hand joint ID and define the error function
+        # 获取手部关节 ID 并定义误差函数
         self.L_hand_id = self.reduced_robot.model.getFrameId("L_ee")
         self.R_hand_id = self.reduced_robot.model.getFrameId("R_ee")
 
@@ -189,10 +189,10 @@ class G1_29_ArmIK:  # noqa: N801
             ],
         )
 
-        # Defining the optimization problem
+        # 定义优化问题
         self.opti = casadi.Opti()
         self.var_q = self.opti.variable(self.reduced_robot.model.nq)
-        self.var_q_last = self.opti.parameter(self.reduced_robot.model.nq)  # for smooth
+        self.var_q_last = self.opti.parameter(self.reduced_robot.model.nq)  # 用于平滑
         self.param_tf_l = self.opti.parameter(4, 4)
         self.param_tf_r = self.opti.parameter(4, 4)
         self.translational_cost = casadi.sumsqr(
@@ -204,7 +204,7 @@ class G1_29_ArmIK:  # noqa: N801
         self.regularization_cost = casadi.sumsqr(self.var_q)
         self.smooth_cost = casadi.sumsqr(self.var_q - self.var_q_last)
 
-        # Setting optimization constraints and goals
+        # 设置优化约束和目标
         self.opti.subject_to(
             self.opti.bounded(
                 self.reduced_robot.model.lowerPositionLimit,
@@ -221,7 +221,7 @@ class G1_29_ArmIK:  # noqa: N801
 
         opts = {
             "ipopt": {"print_level": 0, "max_iter": 50, "tol": 1e-6},
-            "print_time": False,  # print or not
+            "print_time": False,  # 是否打印
             "calc_lam_p": False,  # https://github.com/casadi/casadi/wiki/FAQ:-Why-am-I-getting-%22NaN-detected%22in-my-optimization%3F
         }
         self.opti.solver("ipopt", opts)
@@ -236,7 +236,7 @@ class G1_29_ArmIK:  # noqa: N801
 
         self.opti.set_value(self.param_tf_l, left_wrist)
         self.opti.set_value(self.param_tf_r, right_wrist)
-        self.opti.set_value(self.var_q_last, self.init_data)  # for smooth
+        self.opti.set_value(self.var_q_last, self.init_data)  # 用于平滑
 
         converged = True
         try:

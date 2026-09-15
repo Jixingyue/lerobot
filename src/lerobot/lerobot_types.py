@@ -24,9 +24,9 @@ import torch
 
 
 class TransitionKey(str, Enum):
-    """Keys for accessing EnvTransition dictionary components."""
+    """用于访问 EnvTransition 字典组件的键。"""
 
-    # TODO(Steven): Use consts
+    # TODO(Steven): 使用常量
     OBSERVATION = "observation"
     ACTION = "action"
     REWARD = "reward"

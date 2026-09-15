@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Depth encoding/decoding helpers for :class:`DepthEncoderConfig`.
+:class:`DepthEncoderConfig` 的深度编码/解码辅助函数。
 """
 
 import math
@@ -45,7 +45,7 @@ _UINT16_MAX = 65535
 
 
 def _validate_log_quant_params(depth_min: float, shift: float) -> None:
-    """Ensure ``log(depth_min + shift)`` is finite."""
+    """确保 ``log(depth_min + shift)`` 是有限值。"""
     if depth_min + shift <= 0:
         raise ValueError(
             f"depth_min + shift must be positive for logarithmic quantization, "
@@ -57,7 +57,7 @@ def _depth_input_to_float32_and_unit(
     depth: NDArray[np.integer] | NDArray[np.floating],
     input_unit: Literal["auto", DEPTH_METER_UNIT, DEPTH_MILLIMETER_UNIT],
 ) -> tuple[NDArray[np.float32], Literal[DEPTH_METER_UNIT, DEPTH_MILLIMETER_UNIT]]:
-    """Convert depth to float32 in the chosen unit, and return the resolved unit."""
+    """将深度转换为所选单位的 float32，并返回解析出的单位。"""
     resolved_unit = infer_depth_unit(depth.dtype) if input_unit == "auto" else input_unit
     return depth.astype(np.float32, order="K"), resolved_unit
 
@@ -72,41 +72,41 @@ def quantize_depth(
     video_backend: str | None = "pyav",
     input_unit: Literal["auto", DEPTH_METER_UNIT, DEPTH_MILLIMETER_UNIT] = "auto",
 ) -> NDArray[np.uint16] | av.VideoFrame:
-    """Quantize depth to 12-bit codes (``uint16``, values ``0…DEPTH_QMAX``).
+    """将深度量化为 12 位编码（``uint16``，取值 ``0…DEPTH_QMAX``）。
 
-    Depth maps are packed into 12-bit integer frames so they fit in standard
-    high-bit-depth pixel formats (e.g. ``yuv420p12le`` / ``gray12le``)
-    and can be encoded by widely supported video codecs (e.g. HEVC Main 12).
-    Logarithmic quantization is the default because it allocates more quanta
-    to near-range depth, which matches the (1/depth) error profile of typical
-    depth sensors. Math is ported from BEHAVIOR-1K's ``obs_utils.py``.
+    深度图被打包为 12 位整数帧，以便适配标准的
+    高位深像素格式（例如 ``yuv420p12le`` / ``gray12le``），
+    并可被广泛支持的视频编解码器（例如 HEVC Main 12）编码。
+    对数量化是默认方式，因为它为近距离深度分配更多量化级，
+    这符合典型深度传感器的 (1/depth) 误差特性。
+    数学实现移植自 BEHAVIOR-1K 的 ``obs_utils.py``。
 
-    **Input units**:
+    **输入单位**：
 
-    - ``input_unit="auto"`` (default): infer from dtype (floating = m, non-floating = mm).
-    - ``input_unit="mm"``: interpret input values as millimetres.
-    - ``input_unit="m"``: interpret input values as metres.
+    - ``input_unit="auto"``（默认）：根据 dtype 推断（浮点 = m，非浮点 = mm）。
+    - ``input_unit="mm"``：将输入值解释为毫米。
+    - ``input_unit="m"``：将输入值解释为米。
 
-    Quantization math runs in the **resolved input unit**.
+    量化数学运算在**解析出的输入单位**下进行。
 
-    ``depth_min``, ``depth_max``, and ``shift`` are always in **metres**.
+    ``depth_min``、``depth_max`` 和 ``shift`` 始终以**米**为单位。
 
     Args:
-        depth: Depth map; ``torch.Tensor`` is moved to CPU for conversion.
-        depth_min: Depth (metres) at quantum ``0``.
-        depth_max: Depth (metres) at quantum :data:`DEPTH_QMAX`.
-        shift: Depth shift (metres); used in log mode. Must satisfy ``depth_min + shift > 0``.
-        use_log: If ``True`` (default), quantize in log space.
-        video_backend: Video backend to use for encoding. Defaults to "pyav".
-        input_unit: Input unit policy (``"auto"``, ``"mm"``, ``"m"``).
+        depth: 深度图；``torch.Tensor`` 会被移到 CPU 上进行转换。
+        depth_min: 量化级 ``0`` 对应的深度（米）。
+        depth_max: 量化级 :data:`DEPTH_QMAX` 对应的深度（米）。
+        shift: 深度偏移量（米）；用于 log 模式。必须满足 ``depth_min + shift > 0``。
+        use_log: 如果为 ``True``（默认），在 log 空间中量化。
+        video_backend: 用于编码的视频后端。默认为 "pyav"。
+        input_unit: 输入单位策略（``"auto"``、``"mm"``、``"m"``）。
 
     Returns:
-        ``numpy.ndarray``, ``dtype=uint16``, same shape as ``depth``, values in
-        ``[0, DEPTH_QMAX]``.
+        ``numpy.ndarray``，``dtype=uint16``，与 ``depth`` 形状相同，取值在
+        ``[0, DEPTH_QMAX]`` 范围内。
 
     Raises:
-        ValueError: If ``input_unit`` is not ``"auto"``, ``"mm"``, or ``"m"``.
-        ValueError: If ``use_log=True`` and ``depth_min + shift <= 0``.
+        ValueError: 如果 ``input_unit`` 不是 ``"auto"``、``"mm"`` 或 ``"m"``。
+        ValueError: 如果 ``use_log=True`` 且 ``depth_min + shift <= 0``。
     """
     if input_unit not in ("auto", DEPTH_METER_UNIT, DEPTH_MILLIMETER_UNIT):
         raise ValueError(
@@ -116,12 +116,12 @@ def quantize_depth(
     if isinstance(depth, torch.Tensor):
         depth = depth.detach().cpu().numpy()
 
-    # Squeeze single-channel dim: (H, W, 1) or (1, H, W) → (H, W)
+    # 去除单通道维度：(H, W, 1) 或 (1, H, W) → (H, W)
     depth = squeeze_single_channel(depth)
 
     depth_f, resolved_unit = _depth_input_to_float32_and_unit(depth, input_unit=input_unit)
 
-    # Convert depth_min, depth_max, and shift to the resolved input unit.
+    # 将 depth_min、depth_max 和 shift 转换为解析出的输入单位。
     depth_min_u = (
         np.float32(depth_min) if resolved_unit == DEPTH_METER_UNIT else np.float32(depth_min * MM_PER_METRE)
     )
@@ -130,7 +130,7 @@ def quantize_depth(
     )
     shift_u = np.float32(shift) if resolved_unit == DEPTH_METER_UNIT else np.float32(shift * MM_PER_METRE)
 
-    # Normalization and quantization is performed in the resolved input unit.
+    # 归一化和量化在解析出的输入单位下执行。
     if use_log:
         _validate_log_quant_params(depth_min, shift)
         log_min = math.log(float(depth_min_u + shift_u))
@@ -160,36 +160,36 @@ def dequantize_depth(
     output_tensor: bool = True,
     output_channel_last: bool = False,
 ) -> NDArray[np.uint16] | NDArray[np.float32] | torch.Tensor:
-    """Inverse of :func:`quantize_depth`.
+    """:func:`quantize_depth` 的逆操作。
 
-    Decoding inverts the same normalized code mapping as :func:`quantize_depth`
-    using ``depth_min`` / ``depth_max`` / ``shift`` (in metres), then returns
-    the requested output unit. Tuning arguments **must match** :func:`quantize_depth`.
+    解码时使用 ``depth_min`` / ``depth_max`` / ``shift``（单位为米）
+    反转与 :func:`quantize_depth` 相同的归一化编码映射，然后返回
+    所请求的输出单位。调参**必须与** :func:`quantize_depth` 一致。
 
-    Accepted input layouts :
+    接受的输入布局：
 
-    - ``(H, W, 1)`` or ``(H, W)`` — single frame with channel-last.
-    - ``(..., 1, H, W)`` — batched frames with channel-first.
-    - ``(..., H, W, 1)`` — batched frames with channel-last.
-    Output layout is determined by ``output_channel_last``.
+    - ``(H, W, 1)`` 或 ``(H, W)`` — 通道在后的单帧。
+    - ``(..., 1, H, W)`` — 通道在前的批量帧。
+    - ``(..., H, W, 1)`` — 通道在后的批量帧。
+    输出布局由 ``output_channel_last`` 决定。
 
     Args:
-        quantized: 12-bit codes in ``[0, DEPTH_QMAX]``. ``np.ndarray``,
-            ``av.VideoFrame``, or ``torch.Tensor`` (any integer or float dtype).
-        depth_min, depth_max, shift, use_log: Same as :func:`quantize_depth` (metres).
-        pix_fmt: Pixel format used to extract the plane from an ``av.VideoFrame``.
-        output_unit: ``"mm"`` returns ``uint16`` millimetres (rint, clip
-            ``[0, 65535]``) when returning a numpy array, or ``float32`` mm when
-            ``output_tensor=True``. ``"m"`` returns ``float32`` metres in
-            ``[depth_min, depth_max]``.
-        output_tensor: If True, return a ``torch.Tensor`` instead of a numpy array.
+        quantized: ``[0, DEPTH_QMAX]`` 范围内的 12 位编码。``np.ndarray``、
+            ``av.VideoFrame`` 或 ``torch.Tensor``（任意整数或浮点 dtype）。
+        depth_min, depth_max, shift, use_log: 与 :func:`quantize_depth` 相同（米）。
+        pix_fmt: 用于从 ``av.VideoFrame`` 提取平面的像素格式。
+        output_unit: ``"mm"`` 在返回 numpy 数组时返回 ``uint16`` 毫米值
+            （rint、裁剪到 ``[0, 65535]``），或在 ``output_tensor=True`` 时
+            返回 ``float32`` mm。``"m"`` 返回 ``[depth_min, depth_max]``
+            范围内的 ``float32`` 米值。
+        output_tensor: 如果为 True，返回 ``torch.Tensor`` 而不是 numpy 数组。
 
     Returns:
-        Depth map in the requested unit and dtype.
+        以所请求单位和 dtype 表示的深度图。
 
     Raises:
-        ValueError: If ``output_unit`` is not ``"m"`` or ``"mm"``.
-        ValueError: If ``use_log=True`` and ``depth_min + shift <= 0``.
+        ValueError: 如果 ``output_unit`` 不是 ``"m"`` 或 ``"mm"``。
+        ValueError: 如果 ``use_log=True`` 且 ``depth_min + shift <= 0``。
     """
     if output_unit not in (DEPTH_METER_UNIT, DEPTH_MILLIMETER_UNIT):
         raise ValueError(
@@ -201,7 +201,7 @@ def dequantize_depth(
     if isinstance(quantized, av.VideoFrame):
         quantized = quantized.to_ndarray(format=pix_fmt)
 
-    # Compute the scale and offset first.
+    # 先计算缩放系数和偏移量。
     depth_min_m = float(depth_min)
     depth_max_m = float(depth_max)
     shift_m = float(shift)
@@ -214,13 +214,13 @@ def dequantize_depth(
         scale = (depth_max_m - depth_min_m) / DEPTH_QMAX
         offset = depth_min_m
 
-    # ── Torch path: stay on the input device, single fp32 allocation. ────────
+    # ── Torch 路径：保持在输入设备上，单次 fp32 分配。 ────────
     if isinstance(quantized, torch.Tensor):
         if quantized.ndim >= 3:
-            # Drop the single-channel dimension so the math runs on (..., H, W).
+            # 去掉单通道维度，使数学运算在 (..., H, W) 上进行。
             quantized = quantized.squeeze(-3) if quantized.shape[-3] == 1 else quantized.squeeze(-1)
 
-        # Single allocation we own; everything else is in-place.
+        # 由我们拥有的单次分配；其余操作均为原地执行。
         buf = quantized.to(dtype=torch.float32, copy=True)
         buf.mul_(scale).add_(offset)
         if use_log:
@@ -231,17 +231,17 @@ def dequantize_depth(
         if output_unit == DEPTH_METER_UNIT:
             return buf if output_tensor else buf.cpu().numpy()
 
-        # mm path: round + clamp in float32, skipping the uint16 round-trip
-        # when returning a tensor (torch.uint16 is poorly supported).
+        # mm 路径：在 float32 下做舍入 + 裁剪，返回张量时跳过
+        # uint16 往返转换（torch.uint16 支持较差）。
         buf.mul_(MM_PER_METRE).round_().clamp_(0.0, _UINT16_MAX)
         if output_tensor:
             return buf
         return buf.cpu().numpy().astype(np.uint16, copy=False)
 
-    # ── NumPy path: single fp32 allocation, ``out=`` for in-place math. ─────
+    # ── NumPy 路径：单次 fp32 分配，使用 ``out=`` 进行原地运算。 ─────
     arr = np.asarray(quantized)
     if arr.ndim >= 3:
-        # Drop the single-channel dimension so the math runs on (..., H, W).
+        # 去掉单通道维度，使数学运算在 (..., H, W) 上进行。
         arr = np.squeeze(arr, axis=-3) if arr.shape[-3] == 1 else np.squeeze(arr, axis=-1)
 
     buf = np.empty(arr.shape, dtype=np.float32)
@@ -260,6 +260,6 @@ def dequantize_depth(
     np.rint(buf, out=buf)
     np.clip(buf, 0.0, _UINT16_MAX, out=buf)
     if output_tensor:
-        # torch.uint16 support is very limited; return float32 millimetres.
+        # torch.uint16 的支持非常有限；返回 float32 毫米值。
         return torch.from_numpy(buf)
     return buf.astype(np.uint16, copy=False)

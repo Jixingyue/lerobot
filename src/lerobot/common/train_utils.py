@@ -13,14 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Training-output persistence: checkpoints, two-phase resume, and hub publishing.
+"""训练输出持久化：检查点、两阶段恢复和 hub 发布。
 
-Rank discipline: every function here that can
-contain a collective is documented as such and must run on ALL ranks; rank-0-only file writes
-sit under one grouped ``is_main_process()`` gate per contiguous region, placed below all
-collectives. The leaf save/load helpers carry no rank gates of their own — the exception is
-``PreTrainedPolicy._save_pretrained``, whose gate is internal because its collective gather and
-its writes live in the same method.
+秩纪律：这里每个可能包含集合通信的函数
+都有相应文档说明，并且必须在所有秩上运行；仅秩 0 的文件写入
+位于每个连续区域的一个分组 ``is_main_process()`` 门控之下，放置在所有
+集合通信之后。叶子保存/加载助手本身不携带秩门控——例外是
+``PreTrainedPolicy._save_pretrained``，其门控是内部的，因为它的集合通信聚合
+和写入位于同一方法中。
 """
 
 import logging
@@ -73,54 +73,54 @@ if TYPE_CHECKING:
 
 
 def get_step_identifier(step: int, total_steps: int) -> str:
-    """Format a step number as the zero-padded identifier used for checkpoint directory names.
+    """将步数格式化为用于检查点目录名称的零填充标识符。
 
-    Args:
-        step (int): The training step to format.
-        total_steps (int): The total number of training steps; sets the padding width
-            (minimum 6 digits).
+    参数:
+        step (int): 要格式化的训练步数。
+        total_steps (int): 训练总步数；设置填充宽度
+            （最少 6 位数字）。
 
-    Returns:
-        str: The zero-padded step identifier, e.g. `"005000"`.
+    返回:
+        str: 零填充的步数标识符，例如 `"005000"`。
     """
     num_digits = max(6, len(str(total_steps)))
     return f"{step:0{num_digits}d}"
 
 
 def get_step_checkpoint_dir(output_dir: Path, total_steps: int, step: int) -> Path:
-    """Returns the checkpoint sub-directory corresponding to the step number.
+    """返回与步数对应的检查点子目录。
 
-    Args:
-        output_dir (Path): The training run's output directory.
-        total_steps (int): The total number of training steps; sets the identifier padding.
-        step (int): The training step of the checkpoint.
+    参数:
+        output_dir (Path): 训练运行的输出目录。
+        total_steps (int): 训练总步数；设置标识符填充。
+        step (int): 检查点的训练步数。
 
-    Returns:
-        Path: The checkpoint step directory, `output_dir/checkpoints/<step-identifier>`.
+    返回:
+        Path: 检查点步数目录，`output_dir/checkpoints/<step-identifier>`。
     """
     step_identifier = get_step_identifier(step, total_steps)
     return output_dir / CHECKPOINTS_DIR / step_identifier
 
 
 def should_save_checkpoint(step: int, save_freq: int, total_steps: int) -> bool:
-    """Whether a checkpoint should be saved at ``step``.
+    """是否应在 ``step`` 处保存检查点。
 
-    A checkpoint is saved every ``save_freq`` steps and always after the final step. A
-    non-positive ``save_freq`` disables periodic saving (only the final checkpoint is
-    written), mirroring how ``log_freq``/``eval_freq`` treat non-positive values and
-    avoiding a ``ZeroDivisionError`` from ``step % 0``.
+    每 ``save_freq`` 步保存一次检查点，并且在最后一步之后始终保存。
+    非正的 ``save_freq`` 会禁用周期性保存（只写入最终检查点），
+    这与 ``log_freq``/``eval_freq`` 处理非正值的方式一致，
+    并避免了 ``step % 0`` 引发的 ``ZeroDivisionError``。
     """
     return (save_freq > 0 and step % save_freq == 0) or step == total_steps
 
 
 def update_last_checkpoint(checkpoint_dir: Path) -> None:
-    """Point the `last` symlink in the checkpoints directory at the given checkpoint.
+    """将检查点目录中的 `last` 符号链接指向给定的检查点。
 
-    Any existing `last` symlink is replaced. The link target is relative to the checkpoints
-    directory, so the tree stays valid when the run directory is moved.
+    任何已存在的 `last` 符号链接都会被替换。链接目标是相对于检查点
+    目录的，因此当运行目录被移动时目录树仍然有效。
 
-    Args:
-        checkpoint_dir (Path): The checkpoint step directory the `last` link should target.
+    参数:
+        checkpoint_dir (Path): `last` 链接应指向的检查点步数目录。
     """
     last_checkpoint_dir = checkpoint_dir.parent / LAST_CHECKPOINT_LINK
     if last_checkpoint_dir.is_symlink():
@@ -135,18 +135,18 @@ def update_last_checkpoint(checkpoint_dir: Path) -> None:
 
 
 def save_training_metadata(step: int, save_dir: Path, cfg: TrainPipelineConfig) -> None:
-    """Record the step counter plus everything a resume needs to reason about topology changes.
+    """记录步数计数器以及恢复时推断拓扑变化所需的一切。
 
-    `step` counts loop iterations (= micro-batches), so
-    the sampler resume offset is `step x batch_size x dp_world_size` with no grad-accum factor.
-    `grad_accum_steps` and the parallelism snapshot are recorded so a resume can warn precisely
-    when the optimizer-update cadence or the sharding topology changed.
+    `step` 统计循环迭代次数（= 微批次），因此
+    采样器恢复偏移量为 `step x batch_size x dp_world_size`，不含梯度累积因子。
+    记录 `grad_accum_steps` 和并行度快照，以便在优化器更新节奏
+    或分片拓扑发生变化时恢复能精确警告。
 
-    Args:
-        step (int): The training step (micro-batch counter) to record.
-        save_dir (Path): The `training_state/` directory to write `training_step.json` into.
-        cfg (TrainPipelineConfig): The training config whose batch size, gradient-accumulation,
-            and parallelism settings are snapshotted alongside the step.
+    参数:
+        step (int): 要记录的训练步数（微批次计数器）。
+        save_dir (Path): 写入 `training_step.json` 的 `training_state/` 目录。
+        cfg (TrainPipelineConfig): 训练配置，其批量大小、梯度累积
+            和并行度设置与步数一起被快照。
     """
     state: dict[str, Any] = {
         "step": step,
@@ -164,17 +164,17 @@ def save_training_metadata(step: int, save_dir: Path, cfg: TrainPipelineConfig) 
 
 
 def load_training_metadata(training_state_dir: Path) -> dict[str, Any]:
-    """Read everything `save_training_metadata` recorded, in a single pass.
+    """一次性读取 `save_training_metadata` 记录的所有内容。
 
-    Every key is always present: fields a checkpoint predates come back as None, so a caller
-    reading `metadata["batch_size"]` gets a KeyError on a typo rather than a silent None.
+    每个键始终存在：检查点之前不存在的字段返回 None，因此调用方
+    读取 `metadata["batch_size"]` 时，拼写错误会得到 KeyError 而不是静默的 None。
 
-    Args:
-        training_state_dir (Path): The checkpoint's `training_state/` directory.
+    参数:
+        training_state_dir (Path): 检查点的 `training_state/` 目录。
 
-    Returns:
-        dict[str, Any]: `step` plus the `dp_world_size`, `batch_size`, `grad_accum_steps` and
-            `parallelism` snapshot recorded alongside it (None where not recorded).
+    返回:
+        dict[str, Any]: `step` 加上与其一起记录的 `dp_world_size`、`batch_size`、
+            `grad_accum_steps` 和 `parallelism` 快照（未记录处为 None）。
     """
     state = load_json(training_state_dir / TRAINING_STEP)
     return {
@@ -187,7 +187,7 @@ def load_training_metadata(training_state_dir: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------------------------
-# Checkpoint save
+# 检查点保存
 # ---------------------------------------------------------------------------------------------
 
 
@@ -202,71 +202,71 @@ def save_checkpoint(
     postprocessor: PolicyProcessorPipeline | None = None,
     accelerator: "Accelerator | None" = None,
 ) -> None:
-    """This function creates the following directory structure:
+    """此函数创建以下目录结构：
 
-    005000/  #  training step at checkpoint
+    005000/  #  检查点处的训练步数
     ├── pretrained_model/
-    │   ├── config.json  # policy config
-    │   ├── model.safetensors  # policy weights (checkpoint_format ∈ {safetensors, safetensors_dcp}, or any non-sharded run)
-    │   ├── pytorch_model_fsdp_0/  # DCP model shards (checkpoint_format ∈ {dcp, safetensors_dcp})
-    │   ├── train_config.json  # train config
-    │   ├── policy_preprocessor.json  # preprocessor config (if preprocessor provided)
-    │   ├── policy_preprocessor_step_*.safetensors  # state of the stateful preprocessor steps
-    │   ├── policy_postprocessor.json  # postprocessor config (if postprocessor provided)
-    │   └── policy_postprocessor_step_*.safetensors  # state of the stateful postprocessor steps
+    │   ├── config.json  # 策略配置
+    │   ├── model.safetensors  # 策略权重（checkpoint_format ∈ {safetensors, safetensors_dcp}，或任何非分片运行）
+    │   ├── pytorch_model_fsdp_0/  # DCP 模型分片（checkpoint_format ∈ {dcp, safetensors_dcp}）
+    │   ├── train_config.json  # 训练配置
+    │   ├── policy_preprocessor.json  # 预处理器配置（如果提供了预处理器）
+    │   ├── policy_preprocessor_step_*.safetensors  # 有状态预处理器步骤的状态
+    │   ├── policy_postprocessor.json  # 后处理器配置（如果提供了后处理器）
+    │   └── policy_postprocessor_step_*.safetensors  # 有状态后处理器步骤的状态
     └── training_state/
-        ├── optimizer_param_groups.json  # optimizer param groups (non-sharded runs)
-        ├── optimizer_state.safetensors  # optimizer state (non-sharded runs)
-        ├── optimizer_0/  # DCP optimizer shards (sharded runs)
-        ├── rng_state.safetensors  # rng states
-        ├── scheduler_state.json  # scheduler state (if scheduler provided)
-        └── training_step.json  # training step + dp_world_size/batch_size/grad_accum + topology
+        ├── optimizer_param_groups.json  # 优化器参数组（非分片运行）
+        ├── optimizer_state.safetensors  # 优化器状态（非分片运行）
+        ├── optimizer_0/  # DCP 优化器分片（分片运行）
+        ├── rng_state.safetensors  # 随机数状态
+        ├── scheduler_state.json  # 调度器状态（如果提供了调度器）
+        └── training_step.json  # 训练步数 + dp_world_size/batch_size/grad_accum + 拓扑
 
-    Collective: MUST be called on every rank. Rank-0-only writes are gated internally, so the
-    call site needs no rank branches.
+    集合通信：必须在每个秩上调用。仅秩 0 的写入在内部门控，因此
+    调用点不需要秩分支。
 
-    Args:
-        checkpoint_dir (Path): The checkpoint step directory to write (e.g. `.../checkpoints/005000`).
-        step (int): The training step at that checkpoint.
-        cfg (TrainPipelineConfig): The training config used for this run.
-        policy (PreTrainedPolicy): The policy to save.
-        optimizer (Optimizer): The optimizer to save the state from.
-        scheduler (LRScheduler | None, optional): The scheduler to save the state from. Defaults to None.
-        preprocessor (PolicyProcessorPipeline | None, optional): The preprocessor/pipeline to save.
-            Defaults to None.
-        postprocessor (PolicyProcessorPipeline | None, optional): The postprocessor/pipeline to save.
-            Defaults to None.
-        accelerator (Accelerator | None, optional): The accelerator the policy was prepared with;
-            used to unwrap the model and required on sharded runs, where it owns the DCP save
-            channels. Defaults to None (plain single-process saves).
+    参数:
+        checkpoint_dir (Path): 要写入的检查点步数目录（例如 `.../checkpoints/005000`）。
+        step (int): 该检查点处的训练步数。
+        cfg (TrainPipelineConfig): 本次运行使用的训练配置。
+        policy (PreTrainedPolicy): 要保存的策略。
+        optimizer (Optimizer): 要保存其状态的优化器。
+        scheduler (LRScheduler | None, optional): 要保存其状态的调度器。默认为 None。
+        preprocessor (PolicyProcessorPipeline | None, optional): 要保存的预处理器/流水线。
+            默认为 None。
+        postprocessor (PolicyProcessorPipeline | None, optional): 要保存的后处理器/流水线。
+            默认为 None。
+        accelerator (Accelerator | None, optional): 策略准备时使用的加速器；
+            用于解包模型，在分片运行中是必需的，它拥有 DCP 保存
+            通道。默认为 None（普通单进程保存）。
     """
     pretrained_dir = checkpoint_dir / PRETRAINED_MODEL_DIR
     fmt = cfg.checkpoint_format
     policy_to_save = accelerator.unwrap_model(policy) if accelerator is not None else policy
     sharded = is_sharded_module(policy_to_save)
 
-    # -- model artifact(s): the two collective-capable calls ----------------------------------
+    # -- 模型工件：两个支持集合通信的调用 ----------------------------------
     if cfg.peft is not None:
-        # PeftModel.save_pretrained is an external API with no internal rank gate, and the
-        # adapters are replicated (PEFT x sharded is rejected at validation): main rank writes.
+        # PeftModel.save_pretrained 是没有内部门控的外部 API，
+        # 适配器是复制的（PEFT x 分片在验证时被拒绝）：主秩写入。
         if is_main_process():
             policy_to_save.save_pretrained(pretrained_dir)
     elif fmt.wants_safetensors or not sharded:
-        # Collective when sharded (full gather); writes happen on the main process only in all
-        # multi-rank layouts (the gate lives inside _save_pretrained, next to its collective gather).
+        # 分片时是集合通信（完整聚合）；在所有多秩布局中写入仅发生在主进程
+        # （门控位于 _save_pretrained 内部，紧邻其集合通信聚合）。
         policy_to_save.save_pretrained(pretrained_dir)
     if fmt.wants_dcp and sharded:
         save_sharded_model(accelerator, policy_to_save, pretrained_dir)
 
-    # -- sidecar configs: ONE gate for the whole contiguous rank-0-only region ----------------
+    # -- 侧车配置：整个连续的仅秩 0 区域的单一门控 ----------------
     if is_main_process():
         if fmt.wants_dcp and not fmt.wants_safetensors:
-            # save_pretrained did not run: keep the DCP-only checkpoint self-describing.
+            # save_pretrained 未运行：保持仅 DCP 检查点的自描述性。
             policy_to_save.config.save_pretrained(pretrained_dir)
         cfg.save_pretrained(pretrained_dir)
         if cfg.peft is not None:
-            # PEFT's save_pretrained writes only adapter weights + config; the policy config
-            # needed to reload the base model is written explicitly.
+            # PEFT 的 save_pretrained 只写入适配器权重 + 配置；重新加载
+            # 基础模型所需的策略配置被显式写入。
             policy_to_save.config.save_pretrained(pretrained_dir)
         if preprocessor is not None:
             preprocessor.save_pretrained(pretrained_dir)
@@ -291,38 +291,38 @@ def save_training_state(
     sharded: bool = False,
     model: PreTrainedPolicy | None = None,
 ) -> None:
-    """Write training_state/. Collective under sharding: call on every rank.
+    """写入 training_state/。分片下是集合通信：在每个秩上调用。
 
-    Args:
-        checkpoint_dir (Path): The checkpoint step directory; `training_state/` is created inside it.
-        step (int): The training step at that checkpoint.
-        cfg (TrainPipelineConfig): The training config used for this run (its topology and
-            accumulation settings are recorded in `training_step.json`).
-        optimizer (Optimizer | dict[str, Optimizer] | None, optional): The optimizer(s) to save
-            the state from. Defaults to None.
-        scheduler (LRScheduler | None, optional): The scheduler to save the state from.
-            Defaults to None.
-        accelerator (Accelerator | None, optional): Required when `sharded` is True — it owns
-            the DCP optimizer save channel. Defaults to None.
-        sharded (bool): The model's sharding state, computed once in `save_checkpoint` and
-            threaded here so the two sites cannot disagree. Defaults to False.
-        model (PreTrainedPolicy | None, optional): Required only for the sharded optimizer
-            channel: torch's optimizer DCP APIs are model-coupled (the state dict is keyed by
-            model FQNs), so accelerate's `save_fsdp_optimizer` needs the sharded module
-            alongside the optimizer. Defaults to None.
+    参数:
+        checkpoint_dir (Path): 检查点步数目录；`training_state/` 在其中创建。
+        step (int): 该检查点处的训练步数。
+        cfg (TrainPipelineConfig): 本次运行使用的训练配置（其拓扑和
+            累积设置记录在 `training_step.json` 中）。
+        optimizer (Optimizer | dict[str, Optimizer] | None, optional): 要保存
+            其状态的优化器。默认为 None。
+        scheduler (LRScheduler | None, optional): 要保存其状态的调度器。
+            默认为 None。
+        accelerator (Accelerator | None, optional): 当 `sharded` 为 True 时必需——
+            它拥有 DCP 优化器保存通道。默认为 None。
+        sharded (bool): 模型的分片状态，在 `save_checkpoint` 中计算一次并
+            传递到这里，使两处不会不一致。默认为 False。
+        model (PreTrainedPolicy | None, optional): 仅分片优化器通道需要：
+            torch 的优化器 DCP API 与模型耦合（状态字典以模型 FQN 为键），
+            因此 accelerate 的 `save_fsdp_optimizer` 需要分片模块
+            与优化器一起。默认为 None。
     """
     save_dir = checkpoint_dir / TRAINING_STATE_DIR
-    # All ranks: the directory must exist before the DCP optimizer collective writes into it
-    # (exist_ok makes the concurrent mkdir race-free on shared filesystems).
+    # 所有秩：在 DCP 优化器集合通信写入之前目录必须存在
+    # （exist_ok 使并发 mkdir 在共享文件系统上无竞争）。
     save_dir.mkdir(parents=True, exist_ok=True)
 
     if optimizer is not None and sharded:
         if accelerator is None or model is None:
             raise ValueError("Saving a sharded optimizer state requires the accelerator and model.")
-        # Collective — all ranks write their DCP shards into optimizer_0/.
+        # 集合通信——所有秩将其 DCP 分片写入 optimizer_0/。
         save_sharded_optimizer(accelerator, optimizer, model, save_dir)
 
-    if is_main_process():  # ONE grouped gate for the whole rank-0-only region
+    if is_main_process():  # 整个仅秩 0 区域的单一分组门控
         save_training_metadata(step, save_dir, cfg)
         save_rng_state(save_dir)
         if scheduler is not None:
@@ -332,28 +332,28 @@ def save_training_state(
 
 
 # ---------------------------------------------------------------------------------------------
-# Two-phase resume
+# 两阶段恢复
 # ---------------------------------------------------------------------------------------------
 
 
 def resume_before_prepare(cfg: TrainPipelineConfig) -> int:
-    """Phase 1 — before `accelerator.prepare()`: restore RNG and return the step counter.
+    """阶段 1——在 `accelerator.prepare()` 之前：恢复 RNG 并返回步数计数器。
 
-    Pure loaders only. The sampler resume offset is *derived* from the returned step inside the
-    dataloader factory, and everything bound to sharded objects (model DCP shards, optimizer,
-    scheduler) loads in `resume_after_prepare`.
+    仅纯加载器。采样器恢复偏移量在数据加载器工厂内部从返回的步数
+    *推导*得出，绑定到分片对象的一切（模型 DCP 分片、优化器、
+    调度器）在 `resume_after_prepare` 中加载。
 
-    Args:
-        cfg (TrainPipelineConfig): The resumed training config; `cfg.checkpoint_path` locates
-            the checkpoint to restore from.
+    参数:
+        cfg (TrainPipelineConfig): 恢复的训练配置；`cfg.checkpoint_path` 定位
+            要从中恢复的检查点。
 
-    Returns:
-        int: The training step recorded in the checkpoint (micro-batch counter).
+    返回:
+        int: 检查点中记录的训练步数（微批次计数器）。
 
-    Raises:
-        NotADirectoryError: If the checkpoint has no `training_state/` directory.
-        ValueError: If the resumed topology crosses the sharded/non-sharded boundary relative
-            to the one recorded in the checkpoint.
+    引发:
+        NotADirectoryError: 如果检查点没有 `training_state/` 目录。
+        ValueError: 如果恢复的拓扑相对于检查点中记录的拓扑
+            跨越了分片/非分片边界。
     """
     training_state_dir = cfg.checkpoint_path / TRAINING_STATE_DIR
     if not training_state_dir.is_dir():
@@ -365,29 +365,29 @@ def resume_before_prepare(cfg: TrainPipelineConfig) -> int:
 
 
 def _guard_resume_changes(cfg: TrainPipelineConfig, metadata: dict[str, Any]) -> None:
-    """Check the resumed run settings against the ones recorded in the checkpoint.
+    """将恢复运行的设置与检查点中记录的设置进行对照检查。
 
-    Two tiers, both driven by the checkpoint's recorded parallelism snapshot:
+    两个层级，均由检查点记录的并行度快照驱动：
 
-    - **Hard error** when the resume crosses the sharded/non-sharded boundary in either
-      direction: the checkpoint's training-state artifacts only support resuming on the same
-      kind of topology (resharding works across sizes, not across kinds). Checkpoints without
-      a recorded snapshot skip this check.
-    - **One warning** naming every other recorded setting that differs — those changes are
-      legal (DCP reshards weights and optimizer state across topologies and the sampler offset
-      adapts), but a changed ``grad_accum_steps`` shifts the optimizer-update cadence, so the
-      resume says precisely what differs. The sampler-exactness warnings
-      (``dp_world_size``/``batch_size``) live with the sampler math in the dataloader factory.
+    - **硬错误**：当恢复在任一方向上跨越分片/非分片边界时：
+      检查点的训练状态工件仅支持在同类拓扑上恢复
+      （重新分片可跨大小工作，但不能跨类别）。没有记录快照的
+      检查点跳过此检查。
+    - **一条警告**：列出所有其他有差异的已记录设置——这些更改是
+      合法的（DCP 会跨拓扑重新分片权重和优化器状态，采样器偏移量
+      会自适应），但更改 ``grad_accum_steps`` 会改变优化器更新节奏，因此
+      恢复时会精确说明差异所在。采样器精确性警告
+      （``dp_world_size``/``batch_size``）与数据加载器工厂中的采样器计算放在一起。
 
-    Args:
-        cfg (TrainPipelineConfig): The resumed training config, compared against the settings
-            recorded in the checkpoint.
-        metadata (dict[str, Any]): The checkpoint's recorded training metadata, as returned by
-            `load_training_metadata`.
+    参数:
+        cfg (TrainPipelineConfig): 恢复的训练配置，与检查点中记录的
+            设置进行比较。
+        metadata (dict[str, Any]): 检查点记录的训练元数据，由
+            `load_training_metadata` 返回。
 
-    Raises:
-        ValueError: If the checkpoint records a sharded topology and the resumed run is
-            non-sharded, or vice versa.
+    引发:
+        ValueError: 如果检查点记录的是分片拓扑而恢复运行是
+            非分片的，或反之。
     """
     snapshot = metadata["parallelism"]
 
@@ -442,26 +442,26 @@ def resume_after_prepare(
     optimizer: Optimizer | dict[str, Optimizer],
     scheduler: LRScheduler | None,
 ) -> None:
-    """Phase 2 — after `accelerator.prepare()`: model (DCP) -> optimizer -> scheduler.
+    """阶段 2——在 `accelerator.prepare()` 之后：模型 (DCP) -> 优化器 -> 调度器。
 
-    Collective under sharding: call on every rank. The model-weight source follows the
-    checkpoint's own recorded `checkpoint_format` (on resume, `cfg` was parsed from the
-    checkpoint's train_config.json): DCP-bearing formats load shards here into the prepared
-    model (whose construction skipped the safetensors load); the safetensors format was already
-    loaded by `from_pretrained` before sharding — no model step here.
+    分片下是集合通信：在每个秩上调用。模型权重来源遵循
+    检查点自身记录的 `checkpoint_format`（恢复时，`cfg` 是从检查点的
+    train_config.json 解析的）：含 DCP 的格式在此处将分片加载到已准备的
+    模型中（其构造跳过了 safetensors 加载）；safetensors 格式已在分片之前
+    由 `from_pretrained` 加载——此处没有模型步骤。
 
-    Args:
-        cfg (TrainPipelineConfig): The resumed training config; `cfg.checkpoint_path` locates
-            the checkpoint and `cfg.checkpoint_format` selects the model-weight source.
-        accelerator (Accelerator): The accelerator the policy was prepared with; it unwraps the
-            model and owns the DCP load channels.
-        policy (PreTrainedPolicy): The prepared (possibly sharded) policy to load weights into.
-        optimizer (Optimizer | dict[str, Optimizer]): The prepared optimizer(s) to restore.
-        scheduler (LRScheduler | None): The scheduler to restore, or None if the run has none.
+    参数:
+        cfg (TrainPipelineConfig): 恢复的训练配置；`cfg.checkpoint_path` 定位
+            检查点，`cfg.checkpoint_format` 选择模型权重来源。
+        accelerator (Accelerator): 策略准备时使用的加速器；它解包
+            模型并拥有 DCP 加载通道。
+        policy (PreTrainedPolicy): 要加载权重的已准备（可能已分片）策略。
+        optimizer (Optimizer | dict[str, Optimizer]): 要恢复的已准备优化器。
+        scheduler (LRScheduler | None): 要恢复的调度器，如果运行没有则为 None。
 
-    Raises:
-        FileNotFoundError: If the checkpoint format declares DCP model shards but the shard
-            directory is missing (e.g. it was pruned before upload).
+    引发:
+        FileNotFoundError: 如果检查点格式声明了 DCP 模型分片但分片
+            目录缺失（例如在上传前被修剪）。
     """
     checkpoint_dir = cfg.checkpoint_path
     pretrained_dir = checkpoint_dir / PRETRAINED_MODEL_DIR
@@ -482,8 +482,8 @@ def resume_after_prepare(
         load_sharded_model(accelerator, unwrapped, pretrained_dir)
 
     if sharded:
-        # Requires the prepared optimizer: FSDP2's prepare rebinds param groups to DTensors but
-        # never migrates optimizer.state — DCP reshards it here (works across topology changes).
+        # 需要已准备的优化器：FSDP2 的 prepare 将参数组重新绑定到 DTensor，
+        # 但从不迁移 optimizer.state——DCP 在此处重新分片（可跨拓扑变更工作）。
         load_sharded_optimizer(accelerator, optimizer, unwrapped, training_state_dir)
     else:
         load_optimizer_state(optimizer, training_state_dir)
@@ -493,7 +493,7 @@ def resume_after_prepare(
 
 
 # ---------------------------------------------------------------------------------------------
-# Hub: checkpoint push (resume artifact) and publishing (distribution artifact)
+# Hub：检查点推送（恢复工件）和发布（分发工件）
 # ---------------------------------------------------------------------------------------------
 
 
@@ -503,23 +503,23 @@ def push_checkpoint_to_hub(
     *,
     private: bool | None = None,
 ) -> None:
-    """Upload a saved checkpoint directory to the Hub under checkpoints/<name>/.
+    """将已保存的检查点目录上传到 Hub 的 checkpoints/<name>/ 下。
 
-    Called once per save step when save_checkpoint_to_hub is enabled, so a
-    timed-out or crashed run still leaves recoverable checkpoints on the Hub.
-    The model repo is created idempotently, and the commit is tagged with the
-    checkpoint step so a checkpoint can be recovered with
-    --policy.pretrained_revision=<step> instead of a commit sha.
+    启用 save_checkpoint_to_hub 时，每个保存步骤调用一次，因此
+    超时或崩溃的运行仍会在 Hub 上留下可恢复的检查点。
+    模型仓库以幂等方式创建，提交会以检查点步数打标签，
+    这样检查点可以用 --policy.pretrained_revision=<step>
+    而不是 commit sha 来恢复。
 
-    The directory is uploaded verbatim — including DCP shards under the DCP formats: this tree
-    exists for *resume*, not distribution, and `resolve_resume_checkpoint` downloads it back
-    symmetrically.
+    目录按原样上传——包括 DCP 格式下的 DCP 分片：此目录树
+    是为*恢复*而非分发而存在的，`resolve_resume_checkpoint` 会
+    对称地将其下载回来。
 
-    Args:
-        checkpoint_dir (Path): The local checkpoint step directory to upload.
-        repo_id (str): The Hub model repo to push to (created idempotently if missing).
-        private (bool | None): Whether a newly created repo should be private. Defaults to
-            None (public unless the organization's default is private).
+    参数:
+        checkpoint_dir (Path): 要上传的本地检查点步数目录。
+        repo_id (str): 要推送的 Hub 模型仓库（缺失时幂等创建）。
+        private (bool | None): 新创建的仓库是否应为私有。默认为
+            None（除非组织默认为私有，否则为公开）。
     """
     api = HfApi()
     api.create_repo(repo_id=repo_id, repo_type="model", private=private, exist_ok=True)
@@ -540,23 +540,23 @@ def push_checkpoint_to_hub(
 
 
 def resolve_resume_checkpoint(repo_id: str, output_dir: Path) -> Path:
-    """Download the latest checkpoint of a Hub training repo into a local run dir.
+    """将 Hub 训练仓库的最新检查点下载到本地运行目录。
 
-    The symmetric counterpart to `push_checkpoint_to_hub`: given a model repo holding
-    `checkpoints/<step>/{pretrained_model,training_state}` subtrees, download the highest-numbered step
-    into `output_dir/checkpoints/<step>/`, recreate the local `last` symlink, and return that local
-    checkpoint dir. Used to resume training from the Hub on a machine (or HF Jobs pod) that does not
-    have the original local run dir.
+    `push_checkpoint_to_hub` 的对称操作：给定一个保存有
+    `checkpoints/<step>/{pretrained_model,training_state}` 子树的模型仓库，
+    将编号最大的步数下载到 `output_dir/checkpoints/<step>/`，重建本地
+    `last` 符号链接，并返回该本地检查点目录。用于在没有原始本地
+    运行目录的机器（或 HF Jobs pod）上从 Hub 恢复训练。
 
-    Args:
-        repo_id (str): The Hub model repo holding `checkpoints/<step>/` subtrees.
-        output_dir (Path): The local run directory to download the checkpoint into.
+    参数:
+        repo_id (str): 保存有 `checkpoints/<step>/` 子树的 Hub 模型仓库。
+        output_dir (Path): 下载检查点的本地运行目录。
 
-    Returns:
-        Path: The local checkpoint step directory, `output_dir/checkpoints/<step>`.
+    返回:
+        Path: 本地检查点步数目录，`output_dir/checkpoints/<step>`。
 
-    Raises:
-        FileNotFoundError: If the repo contains no checkpoints under `checkpoints/`.
+    引发:
+        FileNotFoundError: 如果仓库在 `checkpoints/` 下没有检查点。
     """
     latest = find_latest_hub_checkpoint(repo_id)
     if latest is None:
@@ -584,32 +584,32 @@ def publish_trained_model(
     *,
     peft_model: Any | None = None,
 ) -> None:
-    """Publish the complete training bundle as a distributable model repo.
+    """将完整的训练捆绑包作为可分发的模型仓库发布。
 
-    Collective-safe: call on ALL ranks — the model commit gathers sharded weights through
-    `save_pretrained`; uploads happen on the main process only (gated inside
-    `HubMixin.push_to_hub` and here). Commits, in order: (1) the model (skipped for PEFT —
-    adapters replace full weights), (2) the preprocessor, (3) the postprocessor, (4) the bundle
-    sidecar: README.md model card + train_config.json (+ adapter weights and the wrapped
-    policy's config in the PEFT case). Every commit uploads a freshly assembled directory, so
-    a published repo carries only the distributable artifacts.
+    集合通信安全：在所有秩上调用——模型提交通过 `save_pretrained`
+    聚合分片权重；上传仅在主进程上进行（在
+    `HubMixin.push_to_hub` 内部和此处门控）。提交按顺序为：(1) 模型
+    （PEFT 时跳过——适配器替代完整权重），(2) 预处理器，(3) 后处理器，
+    (4) 捆绑侧车：README.md 模型卡片 + train_config.json（PEFT 情况下
+    还有适配器权重和被包装策略的配置）。每次提交都上传一个新组装的
+    目录，因此发布的仓库只携带可分发的工件。
 
-    Args:
-        cfg (TrainPipelineConfig): The training config; saved as `train_config.json` and used
-            to render the model card.
-        model (PreTrainedPolicy | PreTrainedRewardModel): The trained model to publish; its
-            config supplies the target repo id, visibility, license, and tags.
-        preprocessor (PolicyProcessorPipeline | None): The preprocessor pipeline to publish
-            alongside the model, if any.
-        postprocessor (PolicyProcessorPipeline | None): The postprocessor pipeline to publish
-            alongside the model, if any.
-        dataset_meta (LeRobotDatasetMetadata | None): Dataset metadata for the model card, if
-            available.
-        peft_model (Any | None): The PEFT wrapper when training adapters; its adapter weights
-            replace the full model weights in the published repo. Defaults to None.
+    参数:
+        cfg (TrainPipelineConfig): 训练配置；保存为 `train_config.json` 并用于
+            渲染模型卡片。
+        model (PreTrainedPolicy | PreTrainedRewardModel): 要发布的已训练模型；
+            其配置提供目标仓库 id、可见性、许可证和标签。
+        preprocessor (PolicyProcessorPipeline | None): 要与模型一起发布的
+            预处理器流水线（如果有）。
+        postprocessor (PolicyProcessorPipeline | None): 要与模型一起发布的
+            后处理器流水线（如果有）。
+        dataset_meta (LeRobotDatasetMetadata | None): 用于模型卡片的数据集
+            元数据（如果可用）。
+        peft_model (Any | None): 训练适配器时的 PEFT 包装器；其适配器权重
+            在发布的仓库中替代完整模型权重。默认为 None。
 
-    Raises:
-        ValueError: If the model config carries no repo id (`--policy.repo_id`).
+    引发:
+        ValueError: 如果模型配置没有仓库 id（`--policy.repo_id`）。
     """
     model_cfg = model.config
     repo_id = model_cfg.repo_id
@@ -618,8 +618,8 @@ def publish_trained_model(
     ignore = ["*.tmp", "*.log"]
 
     if peft_model is None:
-        # Calls are made on the exact objects that own each method (never through PEFT's
-        # attribute forwarding), so the peft branch below never touches this path.
+        # 调用是在拥有每个方法的确切对象上进行的（从不通过 PEFT 的
+        # 属性转发），因此下面的 peft 分支永远不会触及此路径。
         model.push_to_hub(repo_id, private=model_cfg.private, ignore_patterns=ignore)
     if preprocessor is not None:
         preprocessor.push_to_hub(repo_id, private=model_cfg.private)
@@ -633,8 +633,8 @@ def publish_trained_model(
             saved_path = Path(tmp) / repo_id
             saved_path.mkdir(parents=True, exist_ok=True)
             if peft_model is not None:
-                peft_model.save_pretrained(saved_path)  # adapter weights + adapter config
-                model.config.save_pretrained(saved_path)  # PEFT cannot write the policy config
+                peft_model.save_pretrained(saved_path)  # 适配器权重 + 适配器配置
+                model.config.save_pretrained(saved_path)  # PEFT 无法写入策略配置
             card = generate_model_card(model_cfg, cfg=cfg, dataset_meta=dataset_meta)
             card.save(str(saved_path / "README.md"))
             cfg.save_pretrained(saved_path)  # train_config.json
@@ -646,8 +646,8 @@ def publish_trained_model(
                 allow_patterns=["*.safetensors", "*.json", "*.yaml", "*.md"],
                 ignore_patterns=ignore,
             )
-        # Contract: lerobot.jobs.hf.submit_to_hf watches for this exact "Model pushed to <url>"
-        # line to end a remote run early. Keep the wording and URL format in sync.
+        # 约定：lerobot.jobs.hf.submit_to_hf 监视这条确切的 "Model pushed to <url>"
+        # 日志行，以便提前结束远程运行。保持措辞和 URL 格式同步。
         logging.info(f"Model pushed to {commit_info.repo_url.url}")
 
     if dist.is_initialized():
@@ -655,7 +655,7 @@ def publish_trained_model(
 
 
 # ---------------------------------------------------------------------------------------------
-# Model card
+# 模型卡片
 # ---------------------------------------------------------------------------------------------
 
 _BASE_MODEL_MAPPING = {
@@ -673,25 +673,25 @@ def build_card_context(
     input_features: dict | None,
     output_features: dict | None,
 ) -> dict:
-    """Collect optional data for the model-card template.
+    """为模型卡片模板收集可选数据。
 
-    Returns plain values only (no Markdown) — the template in
-    ``lerobot/templates/lerobot_modelcard_template.md`` decides how and whether to show
-    each one. Everything is best-effort: anything unavailable is left empty/None and the
-    template simply skips that section, so this never breaks a Hub push.
+    仅返回纯值（不含 Markdown）——
+    ``lerobot/templates/lerobot_modelcard_template.md`` 中的模板决定如何以及是否
+    显示每一项。一切都是尽力而为：任何不可用的内容都留空/None，
+    模板只是跳过该部分，因此这永远不会破坏 Hub 推送。
 
-    Args:
-        cfg (TrainPipelineConfig | None): The training config supplying the training section,
-            if available.
-        dataset_meta (LeRobotDatasetMetadata | None): Dataset metadata supplying the dataset,
-            robot-type, and camera sections, if available.
-        input_features (dict | None): The policy's input feature declarations, if any.
-        output_features (dict | None): The policy's output feature declarations, if any.
+    参数:
+        cfg (TrainPipelineConfig | None): 提供训练部分的训练配置
+            （如果可用）。
+        dataset_meta (LeRobotDatasetMetadata | None): 提供数据集、
+            机器人类型和摄像头部分的数据集元数据（如果可用）。
+        input_features (dict | None): 策略的输入特征声明（如果有）。
+        output_features (dict | None): 策略的输出特征声明（如果有）。
 
-    Returns:
-        dict: Template context with `training`, `input_features`, `output_features`,
-            `dataset`, `robot_type`, and `cameras` entries; unavailable pieces stay
-            empty/None.
+    返回:
+        dict: 包含 `training`、`input_features`、`output_features`、
+            `dataset`、`robot_type` 和 `cameras` 条目的模板上下文；
+            不可用的部分保持为空/None。
     """
     context = {
         "training": None,
@@ -732,24 +732,24 @@ def generate_model_card(
     cfg: TrainPipelineConfig | None = None,
     dataset_meta: "LeRobotDatasetMetadata | None" = None,
 ) -> ModelCard:
-    """Render the LeRobot model card for a trained policy or reward model.
+    """为已训练的策略或奖励模型渲染 LeRobot 模型卡片。
 
-    A free function on purpose: every template variable comes from arguments — the model
-    config, the training config, and the dataset metadata — none from a live model, so a card
-    can also be rendered from a checkpoint's `config.json` alone (see `lerobot-convert-dcp`).
-    The config type selects the template: reward models get the reward-model card, policies the
-    policy card with the training/dataset sections.
+    故意做成自由函数：每个模板变量都来自参数——模型配置、
+    训练配置和数据集元数据——没有一个来自活动模型，因此卡片
+    也可以仅从检查点的 `config.json` 渲染（参见 `lerobot-convert-dcp`）。
+    配置类型选择模板：奖励模型获得奖励模型卡片，策略获得
+    带有训练/数据集部分的策略卡片。
 
-    Args:
-        model_cfg (PreTrainedConfig | RewardModelConfig): The model config providing type,
-            license, tags, repo id, and — for policies — the feature declarations.
-        cfg (TrainPipelineConfig | None, optional): The training config for the training and
-            dataset card sections. Defaults to None.
-        dataset_meta (LeRobotDatasetMetadata | None, optional): Dataset metadata for the
-            dataset card sections. Defaults to None.
+    参数:
+        model_cfg (PreTrainedConfig | RewardModelConfig): 提供类型、
+            许可证、标签、仓库 id 以及——对策略而言——特征声明的模型配置。
+        cfg (TrainPipelineConfig | None, optional): 用于训练和数据集
+            卡片部分的训练配置。默认为 None。
+        dataset_meta (LeRobotDatasetMetadata | None, optional): 用于
+            数据集卡片部分的数据集元数据。默认为 None。
 
-    Returns:
-        ModelCard: The rendered and validated LeRobot model card.
+    返回:
+        ModelCard: 已渲染并验证的 LeRobot 模型卡片。
     """
     model_type = model_cfg.type
     base_model = _BASE_MODEL_MAPPING.get(model_type)
@@ -761,14 +761,14 @@ def generate_model_card(
             .joinpath("lerobot_rewardmodel_modelcard_template.md")
             .read_text("utf-8")
         )
-        context: dict[str, Any] = {}  # the reward template renders from card_data alone
+        context: dict[str, Any] = {}  # 奖励模板仅从 card_data 渲染
     else:
         tags = {"robotics", "lerobot", model_type}
         template_card = (
             files("lerobot.templates").joinpath("lerobot_modelcard_template.md").read_text("utf-8")
         )
         context = build_card_context(cfg, dataset_meta, model_cfg.input_features, model_cfg.output_features)
-        # Used by the template to pre-fill commands and the "Fine-tuned from" line.
+        # 模板用它来预填充命令和 "Fine-tuned from" 行。
         context["policy_repo_id"] = model_cfg.repo_id
         context["base_model"] = base_model
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Real-Time Chunking (RTC) utilities for action-chunking policies."""
+"""面向动作分块（action-chunking）策略的实时分块（Real-Time Chunking，RTC）工具。"""
 
 from .action_interpolator import ActionInterpolator
 from .action_queue import ActionQueue

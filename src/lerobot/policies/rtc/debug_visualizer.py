@@ -14,16 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Visualization utilities for RTC debug information."""
+"""RTC 调试信息的可视化工具。"""
 
 import torch
 
 
 class RTCDebugVisualizer:
-    """Visualizer for RTC debug information.
+    """RTC 调试信息可视化器。
 
-    This class provides methods to visualize debug information collected by the Tracker,
-    including corrections, errors, weights, and guidance weights over denoising steps.
+    该类提供了一系列方法，用于可视化 Tracker 收集到的调试信息，
+    包括各个去噪步骤上的校正量、误差、权重以及引导权重。
     """
 
     @staticmethod
@@ -38,58 +38,58 @@ class RTCDebugVisualizer:
         marker: str | None = None,
         markersize: int = 4,
     ):
-        """Plot trajectories across multiple dimensions.
+        """绘制多个维度上的轨迹。
 
-        This function plots a tensor's values across time for multiple dimensions,
-        with each dimension plotted on a separate axis.
+        该函数将张量在多个维度上的值随时间的变化绘制成图，
+        每个维度绘制在单独的坐标轴上。
 
         Args:
-            axes: Array of matplotlib axes (one for each dimension).
-            tensor: The tensor to plot (can be torch.Tensor or numpy array).
-                   Shape should be (time_steps, num_dims) or (batch, time_steps, num_dims).
-            start_from: Starting index for the x-axis.
-            color: Color for the plot lines.
-            label: Label for the plot legend.
-            alpha: Transparency level for the plot.
-            linewidth: Width of the plot lines.
-            marker: Marker style for data points (e.g., 'o', 's', '^').
-            markersize: Size of the markers.
+            axes: matplotlib 坐标轴数组（每个维度对应一个）。
+            tensor: 要绘制的张量（可以是 torch.Tensor 或 numpy 数组）。
+                   形状应为 (time_steps, num_dims) 或 (batch, time_steps, num_dims)。
+            start_from: x 轴的起始索引。
+            color: 曲线的颜色。
+            label: 图例标签。
+            alpha: 图形的透明度。
+            linewidth: 曲线的线宽。
+            marker: 数据点的标记样式（如 'o'、's'、'^'）。
+            markersize: 标记的大小。
         """
         import numpy as np
 
-        # Handle None tensor
+        # 处理张量为 None 的情况
         if tensor is None:
             return
 
-        # Convert tensor to numpy if needed
+        # 必要时将张量转换为 numpy
         tensor_np = tensor.detach().cpu().numpy() if isinstance(tensor, torch.Tensor) else tensor
 
-        # Handle different tensor shapes
+        # 处理不同的张量形状
         if tensor_np.ndim == 3:
-            # If batch dimension present, take first batch
+            # 若存在批次维度，则取第一个批次
             tensor_np = tensor_np[0]
         elif tensor_np.ndim == 1:
-            # If 1D, reshape to (time_steps, 1)
+            # 若为一维，则重塑为 (time_steps, 1)
             tensor_np = tensor_np.reshape(-1, 1)
 
-        # Get dimensions
+        # 获取维度
         time_steps, num_dims = tensor_np.shape
 
-        # Create x-axis indices
+        # 创建 x 轴索引
         x_indices = np.arange(start_from, start_from + time_steps)
 
-        # Plot each dimension on its corresponding axis
+        # 在对应的坐标轴上绘制每个维度
         num_axes = len(axes) if hasattr(axes, "__len__") else 1
         for dim_idx in range(min(num_dims, num_axes)):
             ax = axes[dim_idx] if hasattr(axes, "__len__") else axes
 
-            # Plot the trajectory
+            # 绘制轨迹
             if marker:
                 ax.plot(
                     x_indices,
                     tensor_np[:, dim_idx],
                     color=color,
-                    label=label if dim_idx == 0 else "",  # Only show label once
+                    label=label if dim_idx == 0 else "",  # 标签只显示一次
                     alpha=alpha,
                     linewidth=linewidth,
                     marker=marker,
@@ -100,12 +100,12 @@ class RTCDebugVisualizer:
                     x_indices,
                     tensor_np[:, dim_idx],
                     color=color,
-                    label=label if dim_idx == 0 else "",  # Only show label once
+                    label=label if dim_idx == 0 else "",  # 标签只显示一次
                     alpha=alpha,
                     linewidth=linewidth,
                 )
 
-            # Add grid and labels if not already present
+            # 若网格和标签尚不存在，则添加
             if not ax.xaxis.get_label().get_text():
                 ax.set_xlabel("Step", fontsize=10)
             if not ax.yaxis.get_label().get_text():

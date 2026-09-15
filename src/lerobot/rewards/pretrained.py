@@ -37,7 +37,7 @@ T = TypeVar("T", bound="PreTrainedRewardModel")
 
 
 class PreTrainedRewardModel(nn.Module, HubMixin, abc.ABC):
-    """Base class for reward models."""
+    """奖励模型的基类。"""
 
     config_class: None
     name: None
@@ -60,20 +60,20 @@ class PreTrainedRewardModel(nn.Module, HubMixin, abc.ABC):
             raise TypeError(f"Class {cls.__name__} must define 'name'")
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Serialize this reward model's parameters (and config) into `save_directory`.
+        """将此奖励模型的参数（和配置）序列化到 `save_directory` 中。
 
-        Safe to call on every rank: replicas carry identical weights, so only the main process
-        writes (sharded reward models are rejected at config validation — no collective gather).
+        在每个 rank 上调用都是安全的：各副本携带相同的权重，因此只有主进程
+        会写入（分片奖励模型会在配置校验时被拒绝 —— 无需集合通信聚合）。
 
         Args:
-            save_directory (Path): Target directory for the reward model config (`config.json`)
-                and `model.safetensors`.
+            save_directory (Path): 奖励模型配置（`config.json`）和
+                `model.safetensors` 的目标目录。
         """
         from lerobot.distributed.utils import is_main_process
 
-        # save_checkpoint calls this on every rank; replicas carry identical
-        # weights, so the main process is the only writer. Sharded reward models are rejected
-        # at config validation, so no collective gather is needed here.
+        # save_checkpoint 会在每个 rank 上调用此方法；各副本携带相同的
+        # 权重，因此主进程是唯一的写入者。分片奖励模型会在配置校验时被拒绝，
+        # 所以这里不需要集合通信聚合。
         if not is_main_process():
             return
         self.config._save_pretrained(save_directory)
@@ -97,8 +97,8 @@ class PreTrainedRewardModel(nn.Module, HubMixin, abc.ABC):
         **kwargs,
     ) -> T:
         """
-        The reward model is set in evaluation mode by default using `reward.eval()` (dropout modules are
-        deactivated). To train it, you should first set it back in training mode with `reward.train()`.
+        奖励模型默认使用 `reward.eval()` 设置为评估模式（dropout 模块会被
+        停用）。若要训练它，应先用 `reward.train()` 将其切回训练模式。
         """
         if config is None:
             config = RewardModelConfig.from_pretrained(
@@ -154,50 +154,50 @@ class PreTrainedRewardModel(nn.Module, HubMixin, abc.ABC):
 
     def get_optim_params(self):
         """
-        Returns the reward-model-specific parameters dict to be passed on to the optimizer.
+        返回奖励模型特有的参数字典，该字典会被传给优化器。
         """
         return self.parameters()
 
     def reset(self) -> None:
-        """Reset any internal state."""
+        """重置所有内部状态。"""
         pass
 
     @abc.abstractmethod
     def compute_reward(self, batch: dict[str, Tensor]) -> Tensor:
-        """Compute a scalar reward signal for a batch of observations.
+        """为一批观测计算标量奖励信号。
 
         Args:
-            batch: Dictionary containing at minimum observation tensors.
-                   May also contain "action", "next_observation.*", etc.
+            batch: 至少包含观测张量的字典。
+                   还可能包含 "action"、"next_observation.*" 等。
 
         Returns:
-            Tensor of shape ``(batch_size,)`` with reward values.
+            形状为 ``(batch_size,)`` 的张量，包含奖励值。
         """
         ...
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict[str, Any]]:
-        """Training forward pass — override for trainable reward models."""
+        """训练前向传播 —— 可训练的奖励模型需重写此方法。"""
         raise NotImplementedError(
             f"{self.__class__.__name__} is not trainable. Only use compute_reward() for inference."
         )
 
     @property
     def is_trainable(self) -> bool:
-        """Whether this reward model can be trained via ``lerobot-train``.
+        """该奖励模型是否可以通过 ``lerobot-train`` 进行训练。
 
-        Trainable reward models override :meth:`forward`; zero-shot models
-        inherit the base implementation that raises ``NotImplementedError``.
+        可训练的奖励模型会重写 :meth:`forward`；零样本模型则
+        继承会抛出 ``NotImplementedError`` 的基类实现。
         """
         return type(self).forward is not PreTrainedRewardModel.forward
 
     def push_model_to_hub(self, cfg: "TrainPipelineConfig") -> None:
-        """Publish this reward model to the Hub.
+        """将此奖励模型发布到 Hub。
 
-        Deprecated: use :func:`lerobot.common.train_utils.publish_trained_model` instead.
+        已弃用：请改用 :func:`lerobot.common.train_utils.publish_trained_model`。
 
         Args:
-            cfg (TrainPipelineConfig): The training config; saved as `train_config.json` and
-                used to render the model card.
+            cfg (TrainPipelineConfig): 训练配置；会被保存为 `train_config.json`，
+                并用于渲染模型卡片。
         """
         from lerobot.common.train_utils import publish_trained_model
 

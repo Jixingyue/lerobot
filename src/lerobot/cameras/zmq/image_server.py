@@ -15,8 +15,8 @@
 # limitations under the License.
 
 """
-Streams camera images over ZMQ.
-Uses lerobot's OpenCVCamera for capture, encodes images to base64 and sends them over ZMQ.
+通过 ZMQ 流式传输相机图像。
+使用 lerobot 的 OpenCVCamera 进行捕获，将图像编码为 base64 并通过 ZMQ 发送。
 """
 
 import base64
@@ -38,42 +38,42 @@ logger = logging.getLogger(__name__)
 
 
 def encode_image(image: np.ndarray, quality: int = 80) -> str:
-    """Encode RGB image to base64 JPEG string."""
+    """将 RGB 图像编码为 base64 JPEG 字符串。"""
     _, buffer = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     return base64.b64encode(buffer).decode("utf-8")
 
 
 class CameraCaptureThread:
-    """Background thread that continuously captures and encodes frames from a camera."""
+    """持续从相机捕获并编码帧的后台线程。"""
 
     def __init__(self, camera: OpenCVCamera, name: str):
         self.camera = camera
         self.name = name
-        self.latest_encoded: str | None = None  # Pre-encoded JPEG as base64
+        self.latest_encoded: str | None = None  # 预编码的 base64 JPEG
         self.latest_timestamp: float = 0.0
         self.frame_lock = threading.Lock()
         self.running = False
         self.thread: threading.Thread | None = None
 
     def start(self):
-        """Start the capture thread."""
+        """启动捕获线程。"""
         self.running = True
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
 
     def stop(self):
-        """Stop the capture thread."""
+        """停止捕获线程。"""
         self.running = False
         if self.thread:
             self.thread.join(timeout=1.0)
 
     def _capture_loop(self):
-        """Continuously capture and encode frames at the camera's native rate."""
+        """以相机的原生速率持续捕获并编码帧。"""
         while self.running:
             try:
-                frame = self.camera.read()  # Blocks at camera's native rate
+                frame = self.camera.read()  # 以相机的原生速率阻塞
                 timestamp = time.time()
-                # Encode immediately in capture thread (this is the slow part)
+                # 在捕获线程中立即编码（这是耗时的部分）
                 encoded = encode_image(frame)
                 with self.frame_lock:
                     self.latest_encoded = encoded
@@ -83,14 +83,14 @@ class CameraCaptureThread:
                 time.sleep(0.01)
 
     def get_latest(self) -> tuple[str | None, float]:
-        """Get the latest encoded frame and its timestamp."""
+        """获取最新的编码帧及其时间戳。"""
         with self.frame_lock:
             return self.latest_encoded, self.latest_timestamp
 
 
 class ImageServer:
     def __init__(self, config: dict, port: int = 5555):
-        # fps controls the publish loop rate (how often frames are sent over ZMQ), not the camera capture rate
+        # fps 控制发布循环的速率（帧通过 ZMQ 发送的频率），而不是相机的捕获速率
         self.fps = config.get("fps", 30)
         self.cameras: dict[str, OpenCVCamera] = {}
         self.capture_threads: dict[str, CameraCaptureThread] = {}
@@ -110,11 +110,11 @@ class ImageServer:
             self.cameras[name] = camera
             logger.info(f"Camera {name}: {shape[1]}x{shape[0]}")
 
-            # Create capture thread for this camera
+            # 为该相机创建捕获线程
             capture_thread = CameraCaptureThread(camera, name)
             self.capture_threads[name] = capture_thread
 
-        # ZMQ PUB socket
+        # ZMQ PUB 套接字
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
         self.socket.setsockopt(zmq.SNDHWM, 20)
@@ -128,11 +128,11 @@ class ImageServer:
         frame_times = deque(maxlen=60)
         last_published_ts: dict[str, float] = {}
 
-        # Start all capture threads
+        # 启动所有捕获线程
         for capture_thread in self.capture_threads.values():
             capture_thread.start()
 
-        # Wait for first frames to be captured and encoded
+        # 等待首批帧被捕获并编码
         logger.info("Waiting for cameras to start capturing...")
         for name, capture_thread in self.capture_threads.items():
             while capture_thread.get_latest()[0] is None:
@@ -143,7 +143,7 @@ class ImageServer:
             while True:
                 t0 = time.time()
 
-                # Build message
+                # 构建消息
                 message = {"timestamps": {}, "images": {}}
                 for name, capture_thread in self.capture_threads.items():
                     encoded, timestamp = capture_thread.get_latest()
@@ -152,7 +152,7 @@ class ImageServer:
                         message["images"][name] = encoded
                         last_published_ts[name] = timestamp
 
-                # Send as JSON string (suppress if buffer full)
+                # 以 JSON 字符串发送（缓冲区满时抑制异常）
                 with contextlib.suppress(zmq.Again):
                     self.socket.send_string(json.dumps(message), zmq.NOBLOCK)
 

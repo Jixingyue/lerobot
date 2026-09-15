@@ -40,7 +40,7 @@ def _raise_if_placo_unusable() -> None:
 
 
 class RobotKinematics:
-    """Robot kinematics using placo library for forward and inverse kinematics."""
+    """使用 placo 库进行正运动学和逆运动学计算的机器人运动学。"""
 
     def __init__(
         self,
@@ -49,50 +49,50 @@ class RobotKinematics:
         joint_names: list[str] | None = None,
     ):
         """
-        Initialize placo-based kinematics solver.
+        初始化基于 placo 的运动学求解器。
 
         Args:
-            urdf_path (str): Path to the robot URDF file
-            target_frame_name (str): Name of the end-effector frame in the URDF
-            joint_names (list[str] | None): List of joint names to use for the kinematics solver
+            urdf_path (str): 机器人 URDF 文件的路径
+            target_frame_name (str): URDF 中末端执行器坐标系的名称
+            joint_names (list[str] | None): 运动学求解器使用的关节名称列表
         """
         require_package("placo", extra="placo-dep")
         _raise_if_placo_unusable()
 
         self.robot = placo.RobotWrapper(urdf_path)
         self.solver = placo.KinematicsSolver(self.robot)
-        self.solver.mask_fbase(True)  # Fix the base
+        self.solver.mask_fbase(True)  # 固定基座
 
         self.target_frame_name = target_frame_name
 
-        # Set joint names
+        # 设置关节名称
         self.joint_names = list(self.robot.joint_names()) if joint_names is None else joint_names
 
-        # Initialize frame task for IK
+        # 为逆运动学初始化坐标系任务
         self.tip_frame = self.solver.add_frame_task(self.target_frame_name, np.eye(4))
 
     def forward_kinematics(self, joint_pos_deg: np.ndarray) -> np.ndarray:
         """
-        Compute forward kinematics for given joint configuration given the target frame name in the constructor.
+        根据构造函数中给定的目标坐标系名称，为给定的关节配置计算正运动学。
 
         Args:
-            joint_pos_deg: Joint positions in degrees (numpy array)
+            joint_pos_deg: 以度为单位的关节位置（numpy 数组）
 
         Returns:
-            4x4 transformation matrix of the end-effector pose
+            末端执行器位姿的 4x4 变换矩阵
         """
 
-        # Convert degrees to radians
+        # 将角度转换为弧度
         joint_pos_rad = np.deg2rad(joint_pos_deg[: len(self.joint_names)])
 
-        # Update joint positions in placo robot
+        # 更新 placo 机器人中的关节位置
         for i, joint_name in enumerate(self.joint_names):
             self.robot.set_joint(joint_name, joint_pos_rad[i])
 
-        # Update kinematics
+        # 更新运动学
         self.robot.update_kinematics()
 
-        # Get the transformation matrix
+        # 获取变换矩阵
         return self.robot.get_T_world_frame(self.target_frame_name)
 
     def inverse_kinematics(
@@ -104,47 +104,47 @@ class RobotKinematics:
         max_iters: int = 8,
     ) -> np.ndarray:
         """
-        Compute inverse kinematics using placo solver.
+        使用 placo 求解器计算逆运动学。
 
         Args:
-            current_joint_pos: Current joint positions in degrees (used as initial guess)
-            desired_ee_pose: Target end-effector pose as a 4x4 transformation matrix
-            position_weight: Weight for position constraint in IK
-            orientation_weight: Weight for orientation constraint in IK, set to 0.0 to only constrain position
-            max_iters: Number of placo Newton steps to run.
+            current_joint_pos: 以度为单位的当前关节位置（用作初始猜测）
+            desired_ee_pose: 以 4x4 变换矩阵表示的目标末端执行器位姿
+            position_weight: 逆运动学中位置约束的权重
+            orientation_weight: 逆运动学中姿态约束的权重，设为 0.0 则仅约束位置
+            max_iters: 要运行的 placo 牛顿迭代步数。
 
         Returns:
-            Joint positions in degrees that achieve the desired end-effector pose
+            能达到期望末端执行器位姿的以度为单位的关节位置
         """
 
-        # Convert current joint positions to radians for initial guess
+        # 将当前关节位置转换为弧度作为初始猜测
         current_joint_rad = np.deg2rad(current_joint_pos[: len(self.joint_names)])
 
-        # Set current joint positions as initial guess
+        # 将当前关节位置设为初始猜测
         for i, joint_name in enumerate(self.joint_names):
             self.robot.set_joint(joint_name, current_joint_rad[i])
 
-        # Update the target pose for the frame task
+        # 更新坐标系任务的目标位姿
         self.tip_frame.T_world_frame = desired_ee_pose
 
-        # Configure the task based on position_only flag
+        # 根据 position_only 标志配置任务
         self.tip_frame.configure(self.target_frame_name, "soft", position_weight, orientation_weight)
 
-        # Solve IK.
+        # 求解逆运动学。
         for _ in range(max_iters):
             self.solver.solve(True)
             self.robot.update_kinematics()
 
-        # Extract joint positions
+        # 提取关节位置
         joint_pos_rad = []
         for joint_name in self.joint_names:
             joint = self.robot.get_joint(joint_name)
             joint_pos_rad.append(joint)
 
-        # Convert back to degrees
+        # 转换回角度
         joint_pos_deg = np.rad2deg(joint_pos_rad)
 
-        # Preserve gripper position if present in current_joint_pos
+        # 如果 current_joint_pos 中存在夹爪位置，则保留它
         if len(current_joint_pos) > len(self.joint_names):
             result = np.zeros_like(current_joint_pos)
             result[: len(self.joint_names)] = joint_pos_deg

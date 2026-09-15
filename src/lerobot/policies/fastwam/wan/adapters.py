@@ -23,14 +23,13 @@ if TYPE_CHECKING:
 
 
 class WanVideoVAE38(torch.nn.Module):
-    """FastWAM VAE contract over `diffusers.AutoencoderKLWan` (Wan2.2-TI2V-5B).
+    """基于 `diffusers.AutoencoderKLWan`（Wan2.2-TI2V-5B）的 FastWAM VAE 契约。
 
-    16x spatial / 4x temporal compression, 48 latent channels. diffusers'
-    `AutoencoderKLWan` returns *raw* latents (it does not apply `latents_mean`/
-    `latents_std`), so `encode`/`decode` here apply the same standardization the
-    Wan reference uses — `(latents - mean) / std` — done in fp32 for stability.
-    `encode` uses the deterministic posterior mode, matching the original VAE
-    which returned the latent mean `mu`.
+    空间 16 倍 / 时间 4 倍压缩，48 个 latent 通道。diffusers 的
+    `AutoencoderKLWan` 返回*原始* latents（不应用 `latents_mean`/
+    `latents_std`），因此这里的 `encode`/`decode` 应用与 Wan 参考实现相同的
+    标准化——`(latents - mean) / std`——为稳定性在 fp32 下完成。
+    `encode` 使用确定性的后验 mode，与返回 latent 均值 `mu` 的原始 VAE 保持一致。
     """
 
     upsampling_factor = 16
@@ -45,15 +44,15 @@ class WanVideoVAE38(torch.nn.Module):
         pretrained: AutoencoderKLWan,
     ) -> None:
         super().__init__()
-        # The Wan2.2 VAE is a fixed pretrained model — it is never trained from scratch,
-        # so a real `AutoencoderKLWan` (with weights) must always be supplied (loaded from
-        # the diffusers repo by `load_pretrained_wan_vae`). No random/offline build path.
+        # Wan2.2 VAE 是固定的预训练模型——它从不从头训练，因此必须始终提供一个
+        # 真实的 `AutoencoderKLWan`（带权重，由 `load_pretrained_wan_vae` 从
+        # diffusers 仓库加载）。不存在随机/离线构建路径。
         self.vae = pretrained.to(device=device, dtype=dtype)
 
-        # Read the standardization stats from the VAE's own config (diffusers populates
-        # these from vae/config.json) — single source of truth, no local copy. diffusers'
-        # encode/decode return *raw* latents, so we apply (latent - mean) / std ourselves.
-        # Non-persistent: kept out of state_dict.
+        # 从 VAE 自身的 config 中读取标准化统计量（diffusers 从 vae/config.json
+        # 填充这些值）——单一事实来源，不做本地拷贝。diffusers 的 encode/decode
+        # 返回*原始* latents，因此我们自己应用 (latent - mean) / std。
+        # 非持久化：不放入 state_dict。
         self.register_buffer(
             "latents_mean",
             torch.tensor(self.vae.config.latents_mean).view(1, self.z_dim, 1, 1, 1),

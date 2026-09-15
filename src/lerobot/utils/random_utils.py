@@ -29,8 +29,8 @@ from .utils import flatten_dict, unflatten_dict
 
 def serialize_python_rng_state() -> dict[str, torch.Tensor]:
     """
-    Returns the rng state for `random` in the form of a flat dict[str, torch.Tensor] to be saved using
-    `safetensors.save_file()` or `torch.save()`.
+    以扁平的 dict[str, torch.Tensor] 形式返回 `random` 的随机数状态，
+    便于使用 `safetensors.save_file()` 或 `torch.save()` 保存。
     """
     py_state = random.getstate()
     return {
@@ -41,7 +41,7 @@ def serialize_python_rng_state() -> dict[str, torch.Tensor]:
 
 def deserialize_python_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None:
     """
-    Restores the rng state for `random` from a dictionary produced by `serialize_python_rng_state()`.
+    从 `serialize_python_rng_state()` 生成的字典恢复 `random` 的随机数状态。
     """
     py_state = (rng_state_dict["py_rng_version"].item(), tuple(rng_state_dict["py_rng_state"].tolist()), None)
     random.setstate(py_state)
@@ -49,11 +49,11 @@ def deserialize_python_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> Non
 
 def serialize_numpy_rng_state() -> dict[str, torch.Tensor]:
     """
-    Returns the rng state for `numpy` in the form of a flat dict[str, torch.Tensor] to be saved using
-    `safetensors.save_file()` or `torch.save()`.
+    以扁平的 dict[str, torch.Tensor] 形式返回 `numpy` 的随机数状态，
+    便于使用 `safetensors.save_file()` 或 `torch.save()` 保存。
     """
     np_state = np.random.get_state()
-    # Ensure no breaking changes from numpy
+    # 确保 numpy 没有引入破坏性变更
     assert np_state[0] == "MT19937"
     return {
         "np_rng_state_values": torch.tensor(np_state[1], dtype=torch.int64),
@@ -65,7 +65,7 @@ def serialize_numpy_rng_state() -> dict[str, torch.Tensor]:
 
 def deserialize_numpy_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None:
     """
-    Restores the rng state for `numpy` from a dictionary produced by `serialize_numpy_rng_state()`.
+    从 `serialize_numpy_rng_state()` 生成的字典恢复 `numpy` 的随机数状态。
     """
     np_state = (
         "MT19937",
@@ -79,8 +79,8 @@ def deserialize_numpy_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None
 
 def serialize_torch_rng_state() -> dict[str, torch.Tensor]:
     """
-    Returns the rng state for `torch` in the form of a flat dict[str, torch.Tensor] to be saved using
-    `safetensors.save_file()` or `torch.save()`.
+    以扁平的 dict[str, torch.Tensor] 形式返回 `torch` 的随机数状态，
+    便于使用 `safetensors.save_file()` 或 `torch.save()` 保存。
     """
     torch_rng_state_dict = {"torch_rng_state": torch.get_rng_state()}
     if torch.cuda.is_available():
@@ -92,7 +92,7 @@ def serialize_torch_rng_state() -> dict[str, torch.Tensor]:
 
 def deserialize_torch_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None:
     """
-    Restores the rng state for `torch` from a dictionary produced by `serialize_torch_rng_state()`.
+    从 `serialize_torch_rng_state()` 生成的字典恢复 `torch` 的随机数状态。
     """
     torch.set_rng_state(rng_state_dict["torch_rng_state"])
     if torch.cuda.is_available() and "torch_cuda_rng_state" in rng_state_dict:
@@ -103,8 +103,8 @@ def deserialize_torch_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None
 
 def serialize_rng_state() -> dict[str, torch.Tensor]:
     """
-    Returns the rng state for `random`, `numpy`, and `torch`, in the form of a flat
-    dict[str, torch.Tensor] to be saved using `safetensors.save_file()` `torch.save()`.
+    以扁平的 dict[str, torch.Tensor] 形式返回 `random`、`numpy` 和 `torch` 的随机数状态，
+    便于使用 `safetensors.save_file()` 或 `torch.save()` 保存。
     """
     py_rng_state_dict = serialize_python_rng_state()
     np_rng_state_dict = serialize_numpy_rng_state()
@@ -119,8 +119,7 @@ def serialize_rng_state() -> dict[str, torch.Tensor]:
 
 def deserialize_rng_state(rng_state_dict: dict[str, torch.Tensor]) -> None:
     """
-    Restores the rng state for `random`, `numpy`, and `torch` from a dictionary produced by
-    `serialize_rng_state()`.
+    从 `serialize_rng_state()` 生成的字典恢复 `random`、`numpy` 和 `torch` 的随机数状态。
     """
     py_rng_state_dict = {k: v for k, v in rng_state_dict.items() if k.startswith("py")}
     np_rng_state_dict = {k: v for k, v in rng_state_dict.items() if k.startswith("np")}
@@ -144,7 +143,7 @@ def load_rng_state(save_dir: Path) -> None:
 
 
 def get_rng_state() -> dict[str, Any]:
-    """Get the random state for `random`, `numpy`, and `torch`."""
+    """获取 `random`、`numpy` 和 `torch` 的随机状态。"""
     random_state_dict = {
         "random_state": random.getstate(),
         "numpy_random_state": np.random.get_state(),
@@ -156,10 +155,10 @@ def get_rng_state() -> dict[str, Any]:
 
 
 def set_rng_state(random_state_dict: dict[str, Any]):
-    """Set the random state for `random`, `numpy`, and `torch`.
+    """设置 `random`、`numpy` 和 `torch` 的随机状态。
 
-    Args:
-        random_state_dict: A dictionary of the form returned by `get_rng_state`.
+    参数：
+        random_state_dict：`get_rng_state` 返回形式的字典。
     """
     random.setstate(random_state_dict["random_state"])
     np.random.set_state(random_state_dict["numpy_random_state"])
@@ -169,7 +168,7 @@ def set_rng_state(random_state_dict: dict[str, Any]):
 
 
 def set_seed(seed, accelerator: Callable | None = None) -> None:
-    """Set seed for reproducibility."""
+    """设置随机种子以保证可复现性。"""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -185,15 +184,15 @@ def set_seed(seed, accelerator: Callable | None = None) -> None:
 
 @contextmanager
 def seeded_context(seed: int) -> Generator[None, None, None]:
-    """Set the seed when entering a context, and restore the prior random state at exit.
+    """进入上下文时设置种子，退出时恢复之前的随机状态。
 
-    Example usage:
+    用法示例：
 
     ```
-    a = random.random()  # produces some random number
+    a = random.random()  # 产生某个随机数
     with seeded_context(1337):
-        b = random.random()  # produces some other random number
-    c = random.random()  # produces yet another random number, but the same it would have if we never made `b`
+        b = random.random()  # 产生另一个随机数
+    c = random.random()  # 产生又一个随机数，但与从未生成过 `b` 时得到的值相同
     ```
     """
     random_state_dict = get_rng_state()

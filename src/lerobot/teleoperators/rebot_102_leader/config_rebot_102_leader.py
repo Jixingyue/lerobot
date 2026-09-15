@@ -21,18 +21,18 @@ from ..config import TeleoperatorConfig
 
 @dataclass
 class RebotArm102LeaderConfig:
-    """Base configuration class for the Seeed Studio StarArm102 / reBot Arm 102 leader.
+    """Seeed Studio StarArm102 / reBot Arm 102 主臂的基础配置类。
 
-    The reBot Arm 102 is a 7-joint (incl. gripper) leader arm driven by FashionStar
-    UART smart servos. Servo communication goes through ``motorbridge-smart-servo``.
+    reBot Arm 102 是一条 7 关节（含夹爪）的主臂，由 FashionStar UART 智能舵机驱动。
+    舵机通信通过 ``motorbridge-smart-servo`` 进行。
     """
 
-    # USB-to-UART device the leader arm is connected to (e.g. "/dev/ttyUSB0").
+    # 主臂所连接的 USB 转 UART 设备（例如 "/dev/ttyUSB0"）。
     port: str
 
     baudrate: int = 1_000_000
 
-    # Servo id of each joint on the UART bus.
+    # UART 总线上每个关节的舵机 id。
     joint_ids: dict[str, int] = field(
         default_factory=lambda: {
             "shoulder_pan": 0,
@@ -45,9 +45,9 @@ class RebotArm102LeaderConfig:
         }
     )
 
-    # Per-joint sign applied to raw servo angles so the leader matches the follower
-    # convention. The gripper additionally carries a scale (e.g. -6) to widen its
-    # range to the reBot B601 follower's gripper travel.
+    # 应用于原始舵机角度的逐关节符号，使主臂与从动臂的约定保持一致。
+    # 夹爪还额外带有一个缩放系数（例如 -6），以将其范围扩展到
+    # reBot B601 从动臂夹爪的行程。
     joint_directions: dict[str, int] = field(
         default_factory=lambda: {
             "shoulder_pan": -1,
@@ -60,8 +60,8 @@ class RebotArm102LeaderConfig:
         }
     )
 
-    # Per-joint [min, max] output range in degrees. Matches the reBot B601 follower
-    # joint limits so leader actions can drive the follower key-for-key.
+    # 以角度表示的逐关节 [min, max] 输出范围。与 reBot B601 从动臂的关节限位
+    # 相匹配，使主臂动作可以逐键驱动从动臂。
     joint_ranges: dict[str, list[int]] = field(
         default_factory=lambda: {
             "shoulder_pan": [-150, 150],
@@ -78,6 +78,6 @@ class RebotArm102LeaderConfig:
 @TeleoperatorConfig.register_subclass("rebot_102_leader")
 @dataclass
 class RebotArm102LeaderTeleopConfig(TeleoperatorConfig, RebotArm102LeaderConfig):
-    """Registered configuration for the reBot Arm 102 leader teleoperator."""
+    """reBot Arm 102 主臂遥操作设备的注册配置。"""
 
     pass

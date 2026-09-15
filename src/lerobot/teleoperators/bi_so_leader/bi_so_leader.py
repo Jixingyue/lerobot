@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class BiSOLeader(BimanualMixin, Teleoperator):
     """
-    [Bimanual SO Leader Arms](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio
+    由 TheRobotStudio 设计的[双臂 SO Leader 机械臂](https://github.com/TheRobotStudio/SO-ARM100)
     """
 
     config_class = BiSOLeaderConfig
@@ -71,8 +71,8 @@ class BiSOLeader(BimanualMixin, Teleoperator):
 
     @cached_property
     def feedback_features(self) -> dict[str, type]:
-        # Bimanual teleop has feedback (can be actuated for handover).
-        # Return the same structure as action_features for consistency with left/right arms.
+        # 双臂遥操作具有反馈（可被驱动以实现交接）。
+        # 返回与 action_features 相同的结构，以保持与左右臂的一致性。
         left_arm_features = self.left_arm.feedback_features
         right_arm_features = self.right_arm.feedback_features
 
@@ -89,52 +89,51 @@ class BiSOLeader(BimanualMixin, Teleoperator):
     def get_action(self) -> RobotAction:
         action_dict = {}
 
-        # Add "left_" prefix
+        # 添加 "left_" 前缀
         left_action = self.left_arm.get_action()
         action_dict.update({f"left_{key}": value for key, value in left_action.items()})
 
-        # Add "right_" prefix
+        # 添加 "right_" 前缀
         right_action = self.right_arm.get_action()
         action_dict.update({f"right_{key}": value for key, value in right_action.items()})
 
         return action_dict
 
     def enable_torque(self) -> None:
-        """Enable torque on both leader arms for smooth handover."""
+        """启用两个主手臂的扭矩以实现平滑交接。"""
         self.left_arm.enable_torque()
         self.right_arm.enable_torque()
 
     def disable_torque(self) -> None:
-        """Disable torque on both leader arms to allow human control."""
+        """禁用两个主手臂的扭矩以允许人工控制。"""
         self.left_arm.disable_torque()
         self.right_arm.disable_torque()
 
     @check_if_not_connected
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        """Route bimanual feedback to left and right arms with proper prefix stripping.
+        """将双臂反馈通过正确的前缀剥离路由到左右臂。
 
-        Receives feedback dict with keys like: left_shoulder_pan.pos, right_shoulder_pan.pos, ...
-        Splits and routes to each arm by removing the prefix.
+        接收形如以下键的反馈字典：left_shoulder_pan.pos、right_shoulder_pan.pos 等。
+        通过移除前缀将其拆分并路由到每个臂。
 
-        This enables DAgger smooth handover: when transitioning from policy control to human
-        intervention, both leader arms are commanded to the follower's current pose to avoid
-        discontinuities.
+        这使得 DAgger 平滑交接成为可能：当从策略控制过渡到人工干预时，
+        两个主手臂会被指令到从手的当前位姿，以避免不连续。
         """
-        # Split feedback by arm prefix
+        # 按臂前缀拆分反馈
         left_feedback = {}
         right_feedback = {}
 
         for key, value in feedback.items():
             if key.startswith("left_"):
-                # Strip "left_" prefix and pass to left arm
+                # 剥离 "left_" 前缀并传递给左臂
                 stripped_key = key[5:]  # len("left_") == 5
                 left_feedback[stripped_key] = value
             elif key.startswith("right_"):
-                # Strip "right_" prefix and pass to right arm
+                # 剥离 "right_" 前缀并传递给右臂
                 stripped_key = key[6:]  # len("right_") == 6
                 right_feedback[stripped_key] = value
 
-        # Send to each arm
+        # 发送到每个臂
         if left_feedback:
             self.left_arm.send_feedback(left_feedback)
         if right_feedback:

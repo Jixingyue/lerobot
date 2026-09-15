@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-Replays the actions of an episode from a dataset on a robot.
+在机器人上回放数据集中某个 episode 的动作。
 
-Requires: pip install 'lerobot[core_scripts]'  (includes dataset + hardware + viz extras)
+需要安装：pip install 'lerobot[core_scripts]'  （包含 dataset + hardware + viz 附加依赖）
 
-Examples:
+示例：
 
 ```shell
 lerobot-replay \
@@ -28,7 +28,7 @@ lerobot-replay \
     --dataset.episode=0
 ```
 
-Example replay with bimanual so100:
+双臂 so100 的回放示例：
 ```shell
 lerobot-replay \
   --robot.type=bi_so_follower \
@@ -80,13 +80,13 @@ from lerobot.utils.utils import (
 
 @dataclass
 class DatasetReplayConfig:
-    # Dataset identifier. By convention it should match '{hf_username}/{dataset_name}' (e.g. `lerobot/test`).
+    # 数据集标识。按约定应为 '{hf_username}/{dataset_name}' 格式（例如 `lerobot/test`）。
     repo_id: str
-    # Episode to replay.
+    # 要回放的 episode。
     episode: int
-    # Root directory where the dataset will be stored (e.g. 'dataset/path'). If None, defaults to $HF_LEROBOT_HOME/repo_id.
+    # 数据集存储的根目录（例如 'dataset/path'）。若为 None，默认为 $HF_LEROBOT_HOME/repo_id。
     root: str | Path | None = None
-    # Limit the frames per second. By default, uses the policy fps.
+    # 限制每秒帧数。默认使用策略的 fps。
     fps: int = 30
 
 
@@ -94,7 +94,7 @@ class DatasetReplayConfig:
 class ReplayConfig:
     robot: RobotConfig
     dataset: DatasetReplayConfig
-    # Use vocal synthesis to read events.
+    # 使用语音合成朗读事件。
     play_sounds: bool = True
 
 
@@ -112,9 +112,8 @@ def replay(cfg: ReplayConfig):
 
     robot.connect()
 
-    # Replay must hit the dataset's own frame rate, or the trajectory plays back at the
-    # wrong speed.  It writes nothing, so a missed deadline is a control-stability
-    # problem only.
+    # 回放必须达到数据集自身的帧率，否则轨迹会以错误的速度回放。
+    # 它不写入任何内容，因此错过截止时间只是一个控制稳定性问题。
     timer = CycleTimer(dataset.fps, records_data=False)
 
     try:

@@ -13,20 +13,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Datatrove-shaped reader.
+"""Datatrove 形状的读取器。
 
-The reader walks ``data/chunk-*/file-*.parquet`` and yields one record per
-episode containing:
+读取器遍历 ``data/chunk-*/file-*.parquet`` 并为每个回合产生一条记录，包含：
 
-- ``episode_index``: int
-- ``frame_timestamps``: tuple[float, ...]
-- ``frame_indices``: tuple[int, ...]
-- ``episode_task``: str (canonical task from ``meta/tasks.parquet``)
-- ``data_path``: pathlib.Path of the source parquet shard
-- ``frames_df``: pandas.DataFrame slice for the episode (only loaded on demand)
+- ``episode_index``：int
+- ``frame_timestamps``：tuple[float, ...]
+- ``frame_indices``：tuple[int, ...]
+- ``episode_task``：str（来自 ``meta/tasks.parquet`` 的规范任务）
+- ``data_path``：源 parquet 分片的 pathlib.Path
+- ``frames_df``：回合的 pandas.DataFrame 切片（仅按需加载）
 
-This shape lets each module operate per-episode without loading all parquet
-rows into memory at once.
+这种形状让每个模块可以按回合操作，而无需一次将所有 parquet 行加载到内存中。
 """
 
 from __future__ import annotations
@@ -44,24 +42,24 @@ from lerobot.datasets.utils import DEFAULT_TASKS_PATH
 
 @dataclass
 class EpisodeRecord:
-    """Per-episode record yielded by the reader."""
+    """读取器产生的按回合记录。"""
 
     episode_index: int
     episode_task: str
     frame_timestamps: tuple[float, ...]
     frame_indices: tuple[int, ...]
     data_path: Path
-    row_offset: int  # row offset within the parquet file where this episode starts
-    row_count: int  # number of rows for this episode
+    row_offset: int  # 此回合在 parquet 文件中开始的行偏移量
+    row_count: int  # 此回合的行数
 
-    # Memoized parquet slice — populated on first ``frames_df()`` call so
-    # repeat queries from different modules don't re-read the whole shard.
+    # 记忆化的 parquet 切片——在第一次 ``frames_df()`` 调用时填充，
+    # 以便来自不同模块的重复查询不会重新读取整个分片。
     _frames_df_cache: Any = field(default=None, init=False, repr=False, compare=False)
 
     def frames_df(self):  # type: ignore[no-untyped-def]
-        """Lazy-load the pandas slice for this episode (memoized)."""
+        """懒加载此回合的 pandas 切片（记忆化）。"""
         if self._frames_df_cache is None:
-            import pandas as pd  # noqa: PLC0415  - deferred for optional dataset extra
+            import pandas as pd  # noqa: PLC0415  - 延迟导入可选的 dataset 扩展
 
             table = pq.read_table(self.data_path)
             df: pd.DataFrame = table.to_pandas()
@@ -76,17 +74,15 @@ def reconstruct_subtask_spans(
     *,
     episode_end_t: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Turn ``style="subtask"`` rows into ``{text, start, end}`` spans.
+    """将 ``style="subtask"`` 行转换为 ``{text, start, end}`` 跨度。
 
-    Each span's ``end`` is the next span's ``start``. The final span's
-    ``end`` defaults to its own ``start`` (zero-duration) — pass
-    ``episode_end_t`` to extend it to the episode's last frame instead,
-    which is what downstream consumers (memory, interjection boundary
-    selection) expect.
+    每个跨度的 ``end`` 是下一个跨度的 ``start``。最后一个跨度的
+    ``end`` 默认为其自身的 ``start``（零持续时间）——改为传递
+    ``episode_end_t`` 以将其扩展到回合的最后一帧，
+    这是下游消费者（记忆、插入语边界选择）所期望的。
 
-    Used by the ``plan`` module (plan-update pass) and the
-    ``interjections`` module (interjection anchoring), which both need the
-    same span shape.
+    由 ``plan`` 模块（计划更新阶段）和 ``interjections`` 模块（插入语锚定）使用，
+    它们都需要相同的跨度形状。
     """
     sorted_rows = sorted(
         (r for r in rows if r.get("style") == "subtask"),
@@ -104,12 +100,10 @@ def reconstruct_subtask_spans(
 
 
 def snap_to_frame(t: float, frame_timestamps: Sequence[float]) -> float:
-    """Snap an arbitrary float to the nearest exact source frame timestamp.
+    """将任意浮点数对齐到最近的确切源帧时间戳。
 
-    Modules use this when emitting event-style rows so the row's
-    timestamp matches a real parquet frame: event rows must land on an
-    exact frame, otherwise the per-frame event lookup the writer does
-    would never match them.
+    模块在发射事件样式行时使用此函数，以便行的时间戳与真实的 parquet 帧匹配：
+    事件行必须落在确切的帧上，否则写入器执行的逐帧事件查找永远不会匹配它们。
     """
     if not frame_timestamps:
         return float(t)
@@ -118,12 +112,11 @@ def snap_to_frame(t: float, frame_timestamps: Sequence[float]) -> float:
 
 
 def _load_tasks_lookup(root: Path) -> dict[int, str]:
-    """Map ``task_index -> task`` from ``meta/tasks.parquet``.
+    """从 ``meta/tasks.parquet`` 映射 ``task_index -> task``。
 
-    Returns an empty dict when the file is absent — the task description is
-    derived later from the video if needed. Reuses the library-level
-    :func:`lerobot.datasets.io_utils.load_tasks`, which returns the tasks
-    frame indexed by task string with a ``task_index`` column.
+    当文件不存在时返回空字典——如果需要，任务描述稍后从视频推导。
+    重用库级别的 :func:`lerobot.datasets.io_utils.load_tasks`，
+    它返回由任务字符串索引的任务帧，带有 ``task_index`` 列。
     """
     if not (root / DEFAULT_TASKS_PATH).exists():
         return {}
@@ -132,11 +125,10 @@ def _load_tasks_lookup(root: Path) -> dict[int, str]:
 
 
 def iter_episodes(root: Path, *, only_episodes: tuple[int, ...] | None = None) -> Iterator[EpisodeRecord]:
-    """Yield :class:`EpisodeRecord` for every episode under ``root/data/``.
+    """为 ``root/data/`` 下的每个回合产生 :class:`EpisodeRecord`。
 
-    Episodes are yielded in ascending ``episode_index`` order. The reader does
-    not assume a specific chunk/file layout: it scans every ``*.parquet``
-    under ``data/`` and groups by ``episode_index``.
+    回合按 ``episode_index`` 升序产生。读取器不假设特定的分块/文件布局：
+    它扫描 ``data/`` 下的每个 ``*.parquet`` 并按 ``episode_index`` 分组。
     """
     tasks = _load_tasks_lookup(root)
     data_dir = root / "data"

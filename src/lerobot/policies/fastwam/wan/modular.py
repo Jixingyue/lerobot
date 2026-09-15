@@ -242,16 +242,16 @@ class ActionDiT(nn.Module):
 
 
 class MoTLayer(nn.Module):
-    """A single MoT layer: owns one transformer block per expert and runs the cross-expert
-    mixed-attention step for that layer.
+    """单个 MoT 层：为每个专家拥有一个 transformer 块，并执行该层的跨专家
+    混合注意力步骤。
 
-    This exists as a module — rather than the per-layer work being inlined in ``MoT``'s loop —
-    so FSDP can wrap each layer as its own unit. FSDP all-gathers a wrapped module's sharded
-    parameters via a hook on that module's ``forward``/``__call__``. ``MoT`` drives block
-    submodules directly (the joint mixed attention concatenates Q/K/V across experts, so no
-    single block's ``forward`` is ever called), so ``MoTLayer.forward`` is the only call
-    boundary FSDP can hook. All three per-layer paths therefore dispatch through
-    ``forward(mode=...)`` so each enters via ``__call__``.
+    之所以将其实现为一个模块——而不是把每层的工作内联在 ``MoT`` 的循环中——
+    是为了让 FSDP 能把每一层作为独立单元进行封装。FSDP 通过在被封装模块的
+    ``forward``/``__call__`` 上挂钩子，来 all-gather 该模块的分片参数。
+    ``MoT`` 直接驱动块子模块（联合混合注意力会把各专家的 Q/K/V 拼接起来，
+    因此任何单个块的 ``forward`` 都不会被调用），所以 ``MoTLayer.forward``
+    是 FSDP 唯一可以挂钩的调用边界。因此三条逐层路径都通过
+    ``forward(mode=...)`` 分发，使每条路径都经由 ``__call__`` 进入。
     """
 
     def __init__(
@@ -264,11 +264,11 @@ class MoTLayer(nn.Module):
         mot_checkpoint_mixed_attn: bool,
     ):
         super().__init__()
-        # Registered owner of this layer's blocks (one per expert) — the FSDP wrap unit.
+        # 本层各块（每个专家一个）的注册持有者——即 FSDP 封装单元。
         self.blocks = nn.ModuleDict(blocks)
         self.expert_order = list(blocks.keys())
-        # Unregistered back-references to the experts: used only to read the live
-        # `use_gradient_checkpointing` flag, kept out of parameters()/state_dict().
+        # 对专家的未注册反向引用：仅用于读取实时的
+        # `use_gradient_checkpointing` 标志，使其不进入 parameters()/state_dict()。
         object.__setattr__(self, "_experts", dict(experts))
         self.num_heads = num_heads
         self.attn_head_dim = attn_head_dim
@@ -285,7 +285,7 @@ class MoTLayer(nn.Module):
             6, dim=chunk_dim
         )
         if has_seq:
-            # means t_mod has separate modulation for each token, otherwise same modulation for all tokens in the block
+            # 表示 t_mod 为每个 token 提供了独立的调制量，否则块内所有 token 使用相同的调制量
             shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
                 shift_msa.squeeze(2),
                 scale_msa.squeeze(2),
@@ -365,9 +365,9 @@ class MoTLayer(nn.Module):
         freqs: torch.Tensor | dict[str, torch.Tensor],
         t_mod: torch.Tensor,
     ):
-        """Build this expert's attention tensors and post-block states for the layer.
+        """为该层构建此专家的注意力张量与块后状态。
 
-        Returns (q, k, v, residual_x, gate_msa, shift_mlp, scale_mlp, gate_mlp, use_gc).
+        返回 (q, k, v, residual_x, gate_msa, shift_mlp, scale_mlp, gate_mlp, use_gc)。
         """
         block = self.blocks[name]
         expert = self._experts[name]
@@ -542,7 +542,7 @@ class MoTLayer(nn.Module):
             gate_mlp,
             use_gradient_checkpointing,
         ) = self._build_expert_attention_io("video", x, freqs, t_mod)
-        # Video prefill uses only video self-attention mask.
+        # 视频预填充仅使用视频自注意力掩码。
         mixed = self._mixed_attention(q_cat=q, k_cat=k, v_cat=v, attention_mask=video_attention_mask)
         x_out = self._apply_post_with_optional_checkpoint(
             block=self.blocks["video"],
@@ -578,7 +578,7 @@ class MoTLayer(nn.Module):
             gate_mlp,
             use_gradient_checkpointing,
         ) = self._build_expert_attention_io("action", x, freqs, t_mod)
-        # Mixed attention: action queries attend to cached video K/V plus current action K/V.
+        # 混合注意力：动作查询同时关注缓存的视频 K/V 与当前的动作 K/V。
         k_cat = torch.cat([k_video, k_action], dim=1)
         v_cat = torch.cat([v_video, v_action], dim=1)
         mixed = self._mixed_attention(
@@ -648,12 +648,11 @@ class MoT(nn.Module):
                 f"  Expert '{name}': num_params={sum(p.numel() for p in expert.parameters()) / 1e9:.2f} B"
             )
 
-        # One MoTLayer per layer, each owning that layer's block from every expert. This is the
-        # FSDP wrap unit: only MoTLayer.forward is ever called (MoT drives block submodules
-        # directly for the cross-expert mixed attention), so it is the boundary at which FSDP can
-        # all-gather a layer's params. The blocks are RE-PARENTED into the layers — removed from
-        # each expert's module registry — so they have a single owner; leaving them registered
-        # under both the expert and the layer would make FSDP try to manage the same params twice.
+        # 每层一个 MoTLayer，各自持有该层在所有专家中的块。这就是 FSDP 封装单元：
+        # 只有 MoTLayer.forward 会被调用（MoT 为跨专家混合注意力直接驱动块子模块），
+        # 因此它是 FSDP 能够 all-gather 某层参数的边界。这些块被重新挂到各层之下——
+        # 从每个专家的模块注册表中移除——使其只有唯一持有者；如果让它们同时注册在
+        # 专家和层之下，FSDP 会尝试对同一批参数管理两次。
         self.layers = nn.ModuleList(
             [
                 MoTLayer(
@@ -671,17 +670,17 @@ class MoT(nn.Module):
             expert = self.mixtures[name]
             kept_blocks = list(expert.blocks)
             del expert._modules["blocks"]
-            # Keep an UNREGISTERED reference so the (unused) standalone `expert.forward` and any
-            # `len(expert.blocks)` still work, without re-adding the params to the expert's
-            # parameters()/state_dict() (which would double-register them with the MoTLayer owner).
+            # 保留一个未注册的引用，使（未使用的）独立 `expert.forward` 以及
+            # `len(expert.blocks)` 仍然可用，同时不会把这些参数重新加回专家的
+            # parameters()/state_dict()（否则会与 MoTLayer 持有者重复注册）。
             object.__setattr__(expert, "blocks", kept_blocks)
 
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
-        # Backward-compat for checkpoints saved before the MoTLayer refactor. Then the per-layer
-        # blocks were keyed under the experts (`{prefix}mixtures.<name>.blocks.<i>.<rest>`, e.g.
-        # the released `ZibinDong/fastwam_libero_uncond_2cam224`); now they are owned by the layers
-        # (`{prefix}layers.<i>.blocks.<name>.<rest>`). Remap legacy keys in place so the recursion
-        # into `self.layers` finds them and the (now block-less) `self.mixtures` does not flag them.
+        # 向后兼容 MoTLayer 重构之前保存的检查点。当时逐层的块以专家为键前缀
+        # （`{prefix}mixtures.<name>.blocks.<i>.<rest>`，例如已发布的
+        # `ZibinDong/fastwam_libero_uncond_2cam224`）；现在它们由各层持有
+        # （`{prefix}layers.<i>.blocks.<name>.<rest>`）。就地重映射旧键，使递归进入
+        # `self.layers` 时能找到它们，而（现已不含块的）`self.mixtures` 不会对其报错。
         legacy = re.compile(re.escape(prefix) + r"mixtures\.([^.]+)\.blocks\.(\d+)\.(.+)$")
         moved = {}
         for key in list(state_dict.keys()):
@@ -700,9 +699,9 @@ class MoT(nn.Module):
         video_context_payload: dict | None,
         video_attention_mask: torch.Tensor,
     ) -> list[dict[str, torch.Tensor]]:
-        """Prefill video branch once and cache per-layer K/V for action denoising.
+        """对视频分支做一次预填充，并为动作去噪缓存逐层的 K/V。
 
-        Returns a list of length ``num_layers``, each entry ``{"k": ..., "v": ...}``.
+        返回长度为 ``num_layers`` 的列表，每个元素为 ``{"k": ..., "v": ...}``。
         """
         if "video" not in self.mixtures:
             raise ValueError("MoT requires `video` expert for `prefill_video_cache`.")
@@ -744,7 +743,7 @@ class MoT(nn.Module):
         attention_mask: torch.Tensor,
         video_seq_len: int,
     ) -> torch.Tensor:
-        """Run action branch with cached video K/V instead of recomputing video tokens."""
+        """使用缓存的视频 K/V 运行动作分支，而不是重新计算视频 token。"""
         if "action" not in self.mixtures:
             raise ValueError("MoT requires `action` expert for `forward_action_with_video_cache`.")
         if len(video_kv_cache) != self.num_layers:
@@ -763,7 +762,7 @@ class MoT(nn.Module):
                 "`attention_mask` seq length mismatch: "
                 f"mask={attention_mask.shape[0]} vs expected_total={total_seq_len}"
             )
-        # Use the action query rows from the joint [video+action] mask.
+        # 从联合的 [video+action] 掩码中取出动作查询对应的行。
         action_attention_mask = attention_mask[video_seq_len:total_seq_len, :total_seq_len]
 
         x = action_tokens
@@ -810,8 +809,8 @@ class MoT(nn.Module):
         if attention_mask.shape[0] != attention_mask.shape[1]:
             raise ValueError(f"`attention_mask` must be square, got shape {tuple(attention_mask.shape)}")
 
-        # Each layer is a MoTLayer module; entering via __call__ lets FSDP all-gather that
-        # layer's params (the whole point of the per-layer split).
+        # 每一层都是一个 MoTLayer 模块；经由 __call__ 进入可让 FSDP all-gather
+        # 该层的参数（这正是逐层拆分的意义所在）。
         tokens_all = dict(embeds_all)
         for layer in self.layers:
             tokens_all = layer(
@@ -826,7 +825,7 @@ class MoT(nn.Module):
 
 
 class FastWAM(torch.nn.Module):
-    """MoT world model with video/action experts."""
+    """带有视频/动作专家的 MoT 世界模型。"""
 
     def __init__(
         self,
@@ -851,25 +850,24 @@ class FastWAM(torch.nn.Module):
     ):
         super().__init__()
         self.mot = mot
-        # `video_expert` / `action_expert` are the very same module objects as
-        # `mot.mixtures["video"]` / `["action"]`, and `dit` is an alias of `mot`. Registering
-        # them as submodules too would give every expert tensor three names in `state_dict()`
-        # (`video_expert.*`, `mot.mixtures.video.*`, `dit.mixtures.video.*`) — a 3x-bloated
-        # gathered FSDP checkpoint and a doubled module tree for FSDP to traverse. Hold them as
-        # plain (unregistered) attributes instead — bypassing `nn.Module.__setattr__`, like the
-        # frozen vae/text_encoder below — so `mot` is the single registered owner and each tensor
-        # has one canonical name (`mot.mixtures.*` / `mot.layers.*`, matching the base checkpoint).
-        # Forward / freeze / optimizer code still reaches them by attribute, and device/dtype moves
-        # still apply via `mot`. (optimizer + freeze logic use `model.dit`.)
+        # `video_expert` / `action_expert` 与 `mot.mixtures["video"]` / `["action"]`
+        # 是完全相同的模块对象，而 `dit` 是 `mot` 的别名。如果把它们也注册为子模块，
+        # 每个专家张量在 `state_dict()` 中就会有三个名字
+        # （`video_expert.*`、`mot.mixtures.video.*`、`dit.mixtures.video.*`）——
+        # 使聚合后的 FSDP 检查点膨胀 3 倍，并让 FSDP 遍历双倍的模块树。
+        # 因此改为以普通（未注册）属性持有——绕过 `nn.Module.__setattr__`，
+        # 与下面冻结的 vae/text_encoder 一样——使 `mot` 成为唯一的注册持有者，
+        # 每个张量只有一个规范名字（`mot.mixtures.*` / `mot.layers.*`，与基础检查点一致）。
+        # Forward / 冻结 / 优化器代码仍可通过属性访问它们，设备/数据类型迁移
+        # 也仍通过 `mot` 生效。（优化器 + 冻结逻辑使用 `model.dit`。）
         object.__setattr__(self, "video_expert", video_expert)
         object.__setattr__(self, "action_expert", action_expert)
         object.__setattr__(self, "dit", self.mot)
 
-        # Frozen Wan2.2 components: bypass `nn.Module.__setattr__` so they are NOT
-        # registered as submodules. They are therefore excluded from `state_dict()`
-        # (lean checkpoints), `parameters()`, and DDP gradient sync, and are loaded
-        # with their real weights from the diffusers/transformers repos at construction.
-        # Device/dtype moves still reach them via the `_apply` override below.
+        # 冻结的 Wan2.2 组件：绕过 `nn.Module.__setattr__`，使其不被注册为子模块。
+        # 因此它们不会出现在 `state_dict()`（精简检查点）、`parameters()` 以及
+        # DDP 梯度同步中，并在构造时从 diffusers/transformers 仓库加载真实权重。
+        # 设备/数据类型迁移仍通过下面重写的 `_apply` 作用于它们。
         object.__setattr__(self, "vae", vae)
         object.__setattr__(self, "text_encoder", text_encoder)
         self.tokenizer = tokenizer
@@ -903,7 +901,7 @@ class FastWAM(torch.nn.Module):
             num_train_timesteps=action_num_train_timesteps,
             shift=action_infer_shift,
         )
-        # Optional aliases for consistency with Wan22Core naming.
+        # 可选别名，以便与 Wan22Core 的命名保持一致。
         self.train_scheduler = self.train_video_scheduler
         self.infer_scheduler = self.infer_video_scheduler
 
@@ -942,9 +940,9 @@ class FastWAM(torch.nn.Module):
         if "text_dim" not in video_dit_config:
             raise ValueError("`video_dit_config['text_dim']` is required for FastWAM.")
 
-        # Custom MoT video DiT from the original Wan2.2 repo; frozen VAE / UMT5 from
-        # the diffusers conversion. This is the offline base-creation path; the
-        # weights it loads are then bundled into the FastWAM `model.safetensors`.
+        # 来自原始 Wan2.2 仓库的自定义 MoT 视频 DiT；冻结的 VAE / UMT5 来自
+        # diffusers 转换版本。这是离线的基础模型创建路径；它加载的权重
+        # 随后会被打包进 FastWAM 的 `model.safetensors`。
         video_expert = load_wan_video_dit(
             resolve_wan_dit_paths(model_id),
             dit_config=video_dit_config,
@@ -996,11 +994,10 @@ class FastWAM(torch.nn.Module):
         )
 
     def _apply(self, fn, *args, **kwargs):
-        # `.to()` / `.cuda()` / `.cpu()` and accelerate/DDP device moves all funnel
-        # through `_apply`, and the parent policy reaches us via `child._apply(fn)`
-        # (not `child.to()`). Propagate `fn` to the *unregistered* frozen VAE / text
-        # encoder here so they follow the rest of the model onto the right device,
-        # while staying out of `state_dict()` / `parameters()`.
+        # `.to()` / `.cuda()` / `.cpu()` 以及 accelerate/DDP 的设备迁移都会汇聚到
+        # `_apply`，而父策略通过 `child._apply(fn)`（而非 `child.to()`）到达我们这里。
+        # 在此把 `fn` 传播给*未注册*的冻结 VAE / 文本编码器，使它们随模型其余部分
+        # 一起迁移到正确的设备，同时不进入 `state_dict()` / `parameters()`。
         super()._apply(fn, *args, **kwargs)
         self.vae._apply(fn)
         if self.text_encoder is not None:
@@ -1031,8 +1028,8 @@ class FastWAM(torch.nn.Module):
         seq_lens = mask.gt(0).sum(dim=1).long()
         for i, v in enumerate(seq_lens):
             prompt_emb[i, v:] = 0
-        # Match FastWAM/Wan2.2 context semantics: padding embeddings are zeroed,
-        # while cross-attention still sees a fixed-length context.
+        # 与 FastWAM/Wan2.2 的上下文语义保持一致：填充位置的嵌入被置零，
+        # 而交叉注意力看到的仍是固定长度的上下文。
         mask = torch.ones_like(mask)
         return prompt_emb.to(device=self.device), mask
 
@@ -1059,9 +1056,9 @@ class FastWAM(torch.nn.Module):
 
     @torch.no_grad()
     def _encode_video_latents(self, video_tensor, tiled=False, tile_size=(30, 52), tile_stride=(15, 26)):
-        # The Wan VAE expects pixels in [-1, 1]; model inputs arrive in [0, 1] (VISUAL is IDENTITY in
-        # the preprocessor — see configuration_fastwam.normalization_mapping). Map here, at the single
-        # video-encode boundary, so it is applied exactly once on every path.
+        # Wan VAE 期望像素位于 [-1, 1]；而模型输入的取值范围是 [0, 1]
+        # （预处理器中 VISUAL 为 IDENTITY——见 configuration_fastwam.normalization_mapping）。
+        # 在这里——即唯一的视频编码边界——做映射，保证每条路径上恰好应用一次。
         video_tensor = video_tensor * 2.0 - 1.0
         z = self.vae.encode(
             video_tensor,
@@ -1082,7 +1079,7 @@ class FastWAM(torch.nn.Module):
             raise ValueError(
                 f"`input_image` must have shape [1,3,H,W] or [3,H,W], got {tuple(input_image.shape)}"
             )
-        # [0, 1] -> [-1, 1] for the Wan VAE (mirrors `_encode_video_latents`); single image-encode boundary.
+        # 为 Wan VAE 做 [0, 1] -> [-1, 1] 映射（与 `_encode_video_latents` 一致）；唯一的图像编码边界。
         input_image = input_image * 2.0 - 1.0
         image = input_image.to(device=self.device)[0].unsqueeze(1)
         z = self.vae.encode(
@@ -1229,7 +1226,7 @@ class FastWAM(torch.nn.Module):
         )
         # action -> action
         mask[video_seq_len:, video_seq_len:] = True
-        # action -> first-frame video only
+        # action -> 仅关注首帧视频
         first_frame_tokens = min(video_tokens_per_frame, video_seq_len)
         mask[video_seq_len:, :first_frame_tokens] = True
         return mask
@@ -1681,7 +1678,7 @@ class FastWAM(torch.nn.Module):
         num_video_frames: int,
         action_horizon: int,
         action: torch.Tensor
-        | None = None,  # NOTE: this is gt action for conditioning videos, not for action expert
+        | None = None,  # 注意：这是用于视频条件化的 gt action，而不是给动作专家使用的
         proprio: torch.Tensor | None = None,
         context: torch.Tensor | None = None,
         context_mask: torch.Tensor | None = None,
@@ -1717,7 +1714,7 @@ class FastWAM(torch.nn.Module):
             if action.ndim == 2:
                 action = action.unsqueeze(0)
             if action.ndim != 3 or action.shape[0] != 1 or action.shape[1] != action_horizon:
-                # NOTE: This enforces action condition to have the same shape as action horizon to predict, which may be unnecessary
+                # 注意：这里强制动作条件与待预测的动作范围具有相同的形状，这可能并非必要
                 raise ValueError(
                     f"`action` must have shape [1, T, a_dim] or [T, a_dim], got {tuple(action.shape)} with action_horizon={action_horizon}"
                 )
@@ -1866,9 +1863,9 @@ class FastWAM(torch.nn.Module):
             video_attention_mask=attention_mask[:video_seq_len, :video_seq_len],
         )
         if compile_action_infer:
-            # Inductor's reduce-overhead mode can return CUDA Graph-owned output
-            # buffers. The denoising graph replays repeatedly, so keep stable cache
-            # tensors that cannot be overwritten by a later graph replay.
+            # Inductor 的 reduce-overhead 模式可能返回由 CUDA Graph 持有的输出
+            # 缓冲区。去噪图会被反复重放，因此这里保留稳定的缓存张量，
+            # 使其不会被后续的图重放覆盖。
             video_kv_cache = [
                 {"k": layer_cache["k"].clone(), "v": layer_cache["v"].clone()}
                 for layer_cache in video_kv_cache

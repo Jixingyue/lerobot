@@ -24,7 +24,7 @@ from ..rtc.configuration_rtc import RTCConfig
 @PreTrainedConfig.register_subclass("smolvla")
 @dataclass
 class SmolVLAConfig(PreTrainedConfig):
-    # Input / output structure.
+    # 输入 / 输出结构。
     n_obs_steps: int = 1
     chunk_size: int = 50
     n_action_steps: int = 50
@@ -37,40 +37,40 @@ class SmolVLAConfig(PreTrainedConfig):
         }
     )
 
-    # Shorter state and action vectors will be padded
+    # 较短的状态和动作向量将被填充
     max_state_dim: int = 32
     max_action_dim: int = 32
 
-    # Image preprocessing
+    # 图像预处理
     resize_imgs_with_padding: tuple[int, int] = (512, 512)
 
-    # Add empty images. Used by smolvla_aloha_sim which adds the empty
-    # left and right wrist cameras in addition to the top camera.
+    # 添加空图像。供 smolvla_aloha_sim 使用，它在顶部相机之外
+    # 还会添加空的左腕和右腕相机。
     empty_cameras: int = 0
 
-    # Converts the joint and gripper values from the standard Aloha space to
-    # the space used by the pi internal runtime which was used to train the base model.
+    # 将关节和夹爪值从标准 Aloha 空间转换为
+    # 用于训练基础模型的 pi 内部运行时所使用的空间。
     adapt_to_pi_aloha: bool = False
 
-    # Converts joint dimensions to relative values with respect to the current state before passing to the model.
-    # Gripper dimensions will remain in absolute values.
+    # 在传递给模型之前，将关节维度转换为相对于当前状态的相对值。
+    # 夹爪维度将保持为绝对值。
     use_delta_joint_actions_aloha: bool = False
 
-    # Tokenizer
+    # 分词器
     tokenizer_max_length: int = 48
 
-    # Decoding
+    # 解码
     num_steps: int = 10
 
-    # Attention utils
+    # 注意力工具
     use_cache: bool = True
 
-    # Finetuning settings
+    # 微调设置
     freeze_vision_encoder: bool = True
     train_expert_only: bool = True
     train_state_proj: bool = True
 
-    # Training presets
+    # 训练预设
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple[float, float] = (0.9, 0.95)
     optimizer_eps: float = 1e-8
@@ -81,10 +81,10 @@ class SmolVLAConfig(PreTrainedConfig):
     scheduler_decay_steps: int = 30_000
     scheduler_decay_lr: float = 2.5e-6
 
-    vlm_model_name: str = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"  # Select the VLM backbone.
-    load_vlm_weights: bool = False  # Set to False in case of training the expert from scratch. True when init from pretrained SmolVLA weights
+    vlm_model_name: str = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"  # 选择 VLM 主干网络。
+    load_vlm_weights: bool = False  # 从头训练专家时设为 False。从预训练 SmolVLA 权重初始化时设为 True
 
-    add_image_special_tokens: bool = False  # Whether to use special image tokens around image features.
+    add_image_special_tokens: bool = False  # 是否在图像特征周围使用特殊图像 token。
 
     attention_mode: str = "cross_attn"
 
@@ -92,24 +92,24 @@ class SmolVLAConfig(PreTrainedConfig):
 
     pad_language_to: str = "longest"  # "max_length"
 
-    num_expert_layers: int = -1  # Less or equal to 0 is the default where the action expert has the same number of layers of VLM. Otherwise the expert have less layers.
-    num_vlm_layers: int = 16  # Number of layers used in the VLM (first num_vlm_layers layers)
-    self_attn_every_n_layers: int = 2  # Interleave SA layers each self_attn_every_n_layers
-    expert_width_multiplier: float = 0.75  # The action expert hidden size (wrt to the VLM)
+    num_expert_layers: int = -1  # 小于等于 0 为默认值，此时动作专家与 VLM 层数相同；否则专家层数更少。
+    num_vlm_layers: int = 16  # VLM 中使用的层数（前 num_vlm_layers 层）
+    self_attn_every_n_layers: int = 2  # 每隔 self_attn_every_n_layers 层插入一个自注意力层
+    expert_width_multiplier: float = 0.75  # 动作专家隐藏层大小（相对于 VLM）
 
-    min_period: float = 4e-3  # sensitivity range for the timestep used in sine-cosine positional encoding
+    min_period: float = 4e-3  # 正弦余弦位置编码中时间步的灵敏度范围
     max_period: float = 4.0
 
-    # Real-Time Chunking (RTC) configuration
+    # 实时分块（RTC）配置
     rtc_config: RTCConfig | None = None
 
-    compile_model: bool = False  # Whether to use torch.compile for model optimization
-    compile_mode: str = "max-autotune"  # Torch compile mode
+    compile_model: bool = False  # 是否使用 torch.compile 进行模型优化
+    compile_mode: str = "max-autotune"  # Torch 编译模式
 
     def __post_init__(self):
         super().__post_init__()
 
-        """Input validation (not exhaustive)."""
+        """输入校验（非穷举）。"""
         if self.n_action_steps > self.chunk_size:
             raise ValueError(
                 f"The chunk size is the upper bound for the number of action steps per model invocation. Got "

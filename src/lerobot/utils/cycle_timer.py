@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cadence pacing and reporting for real-time control loops.
+"""实时控制循环的节拍控制与报告。
 
-Every loop in LeRobot that drives hardware at a fixed rate — teleoperation,
-recording, replay, policy rollout — has the same two jobs beyond its own body:
-sleep the right amount so the next iteration starts on time, and tell the user
-when it could not keep up.  :class:`CycleTimer` owns both, so those loops share
-one pacing rule, one slow-loop warning, and one end-of-run report.
+LeRobot 中每一个以固定频率驱动硬件的循环——遥操作、
+录制、回放、策略 rollout——除了自身的循环体之外，都有同样两项职责：
+睡眠适当的时间，使下一次迭代准时开始；以及在无法跟上节奏时
+告知用户。:class:`CycleTimer` 同时负责这两件事，因此这些循环共用
+同一套节拍规则、同一条慢循环警告和同一份运行结束报告。
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class _SectionStat:
-    """Call count and timings for one named loop-body step."""
+    """一个具名循环体步骤的调用次数与计时信息。"""
 
     calls: int = 0
     total: float = 0.0
@@ -45,16 +45,16 @@ class _SectionStat:
 
 @dataclasses.dataclass
 class _CadenceStats:
-    """Cadence counters accumulated over one reporting window.
+    """在一个报告窗口内累积的节拍计数器。
 
-    A window is the stretch of loop between two episode boundaries; the run-level
-    instance is every closed window folded together.  Every field is additive so
-    both share one formatter.
+    一个窗口是两个 episode 边界之间的循环区段；运行级别的
+    实例则是所有已关闭窗口折叠在一起的结果。每个字段都是可加的，因此
+    两者可以共用同一个格式化器。
 
-    Elapsed time is accumulated as a **sum of tick-to-tick gaps** rather than a
-    first/last timestamp pair, which keeps the effective cadence free of stretches
-    the loop was not running: the untimed reset phase between episodic's episodes,
-    and the one-off blocking work that :meth:`CycleTimer.restart` drops.
+    耗时以**逐 tick 间隔之和**的形式累积，而不是取首/末
+    时间戳之差，这使得有效节拍不会混入循环并未运行的区段：
+    即各 episode 之间不计时的重置阶段，以及
+    :meth:`CycleTimer.restart` 所丢弃的一次性阻塞工作。
     """
 
     ticks: int = 0
@@ -73,14 +73,14 @@ class _CadenceStats:
     sections: dict[str, _SectionStat] = dataclasses.field(default_factory=dict)
 
     def record_section(self, name: str, elapsed: float) -> None:
-        """Accumulate one timed run of the *name* step."""
+        """累积一次 *name* 步骤的计时运行结果。"""
         stat = self.sections.setdefault(name, _SectionStat())
         stat.calls += 1
         stat.total += elapsed
         stat.worst = max(stat.worst, elapsed)
 
     def fold(self, other: _CadenceStats) -> None:
-        """Merge a finished window into this cumulative one."""
+        """将一个已结束的窗口合并到此累积窗口中。"""
         self.ticks += other.ticks
         self.work += other.work
         self.span += other.span
@@ -102,76 +102,76 @@ class _CadenceStats:
 
 
 class CycleTimer:
-    """Paces control-loop ticks and reports timing against the loop's target cadence.
+    """控制控制循环 tick 的节拍，并对照循环的目标节奏报告计时情况。
 
-    At the default ``multiplier == 1`` every tick is one cycle, and that is the whole
-    contract: the timer sleeps so each iteration takes ``1/fps``, warns when the loop
-    body alone cannot fit that budget, and accumulates the statistics that
-    :meth:`log_episode_summary` and :meth:`log_run_summary` report.  Teleoperation,
-    recording and replay use it exactly that way — ``tick()``, sections, ``wait()``.
+    在默认的 ``multiplier == 1`` 下，每个 tick 就是一个周期，约定仅此而已：
+    计时器会睡眠，使每次迭代耗时 ``1/fps``；当循环体本身无法
+    放进该预算时发出警告；并累积 :meth:`log_episode_summary` 和
+    :meth:`log_run_summary` 所报告的统计信息。遥操作、
+    录制和回放都正是以这种方式使用它——``tick()``、各个 section、``wait()``。
 
-    Policy rollout is what the rest of this docstring is about, because it adds
-    action interpolation.  With ``interpolation_multiplier == N`` the control loop runs
-    ``N`` ticks per
-    policy cycle: robot commands go out every tick at ``fps × N`` Hz, while
-    policy inference and dataset recording advance once per cycle at ``fps`` Hz.
-    Inference runs on the tick that refills the interpolator; strategies record
-    their frame on the tick that emits the policy's own end-point action (the
-    last tick of the cycle), pairing it with the observation that produced it.
-    That tick is identified by
-    :attr:`~lerobot.utils.action_interpolator.ActionInterpolator.emitted_policy_action`,
-    so recording carries no phase state of its own.
+    本 docstring 的其余部分讨论的是策略 rollout，因为它引入了
+    动作插值。当 ``interpolation_multiplier == N`` 时，控制循环每个
+    策略周期运行
+    ``N`` 个 tick：机器人指令以 ``fps × N`` Hz 的频率每个 tick 发出，
+    而策略推理和数据集录制以 ``fps`` Hz 的频率每个周期推进一步。
+    推理运行在为插值器补充数据的那个 tick 上；各策略在发出
+    策略自身端点动作（即周期的最后一个 tick）的那个 tick 上录制
+    帧，并将其与产生该动作的观测配对。该 tick 由
+    :attr:`~lerobot.utils.action_interpolator.ActionInterpolator.emitted_policy_action`
+    标识，因此录制过程自身不携带任何相位状态。
 
-    The timer keeps two independent notions of time, because pacing and
-    reporting want different anchors:
+    计时器维护两套相互独立的时间概念，因为节拍控制和
+    报告需要不同的锚点：
 
-    **Pacing** uses ``_cycle_start``, re-anchored whenever the caller reports a
-    new cycle, so each tick's deadline is an absolute offset from the tick that
-    produced the current policy action.  A slow tick therefore borrows budget
-    from the ticks that follow it instead of pushing the whole cycle back.  At
-    30 FPS with multiplier 2, a 25 ms policy tick followed by a 5 ms
-    interpolated tick still fits the 33.3 ms cycle.
+    **节拍控制**使用 ``_cycle_start``，每当调用方报告一个
+    新周期时就重新锚定，因此每个 tick 的截止时间都是相对于产生当前
+    策略动作的那个 tick 的绝对偏移。这样，一个缓慢的 tick 会
+    向其后的 tick 借用预算，而不是把整个周期向后推。在
+    multiplier 为 2 的 30 FPS 下，一个 25 ms 的策略 tick 后接一个 5 ms
+    的插值 tick，仍然能够放进 33.3 ms 的周期内。
 
-    **Reporting** sums the *work* of ``N`` consecutive ticks — the time the loop
-    body actually spends, excluding the pacing sleeps — and warns when that sum
-    exceeds the ``1/fps`` budget, which is what makes the loop unable to hold
-    the frame rate.  The 25 ms + 5 ms cycle above sums to 30 ms and stays
-    silent.
+    **报告**将连续 ``N`` 个 tick 的*工作量*相加——即循环体
+    实际花费的时间，不含节拍睡眠——并在该总和超过
+    ``1/fps`` 预算时发出警告，因为正是这种情况导致循环无法维持
+    帧率。上面 25 ms + 5 ms 的周期总和为 30 ms，因此保持
+    静默。
 
-    Two properties make this measure the right one, and both are load-bearing:
+    有两个特性使这一度量成为正确的选择，而且两者都至关重要：
 
-    - It is **phase-invariant**.  Groups are counted per tick and never
-      re-anchored, so they drift out of step with cycles: the interpolator's
-      first buffer holds a single action, which permanently offsets the two by
-      one tick.  Summed work is the same whichever tick a group starts on,
-      whereas a wall-clock span over an offset group would swallow a full
-      pacing sleep and report a healthy loop as slow.
-    - It stays meaningful when the interpolator is **starved or frozen** (an
-      async backend yielding no action, or DAgger's paused and correcting
-      phases), where every tick reports ``new_cycle=True``.  Tying the
-      measurement to cycle completion would make the warning unreachable
-      exactly when the loop is slow.
+    - 它**与相位无关**。分组按 tick 计数且从不
+      重新锚定，因此它们会与周期逐渐错位：插值器的
+      第一个缓冲区只含一个动作，这使两者永久相差
+      一个 tick。无论一个分组从哪个 tick 开始，工作量总和都相同，
+      而对一个错位分组求挂钟时间跨度则会把一整段
+      节拍睡眠吞进去，把一个健康的循环误报为缓慢。
+    - 当插值器**缺数据或冻结**时（异步后端没有产生动作，
+      或 DAgger 的暂停与纠偏阶段），它仍然有意义，此时
+      每个 tick 都报告 ``new_cycle=True``。若把
+      度量绑定到周期完成上，警告就会恰好在循环缓慢时
+      永远无法触发。
 
-    Time lost to the OS *during* a pacing sleep is deliberately outside the
-    warning, matching the pre-interpolation behaviour of these loops, which also
-    measured only the work between the top of the loop body and its sleep: it is
-    not something the caller can act on, and on a loaded machine it would fire
-    constantly.  It is not invisible, though — the achieved start-of-group to
-    start-of-group cadence, sleeps included, is logged at DEBUG whenever it
-    misses the budget that the work sum met.  An individual tick overrun only
-    costs interpolation smoothness, and is likewise a DEBUG note.
+    节拍睡眠*期间*损失给操作系统的时间被有意排除在
+    警告之外，这与这些循环在引入插值之前的行为一致，当时
+    也只测量循环体开头到其睡眠之间的工作量：这不是
+    调用方能够处理的事情，而且在负载较高的机器上它会
+    不停地触发。不过它并非完全不可见——每当实际达到的
+    组起始到组起始节奏（含睡眠）未能满足工作量总和已满足的
+    预算时，都会以 DEBUG 级别记录。单个 tick 超时只会
+    损失插值平滑度，同样只是一条 DEBUG 记录。
 
-    Alongside that per-tick telemetry the timer accumulates cadence statistics —
-    effective frame rate, how often the budget was missed, where the loop-body
-    work went — and reports them twice: a one-line summary per episode
-    (:meth:`log_episode_summary`) and a full block for the whole run
-    (:meth:`log_run_summary`, called from the loop's ``finally`` so a
-    ``KeyboardInterrupt`` still produces it).  Both go to ``logger.info``, or to the
-    ``report`` sink when one is given — for callers that mute the logger.  Only the
-    summaries are routed; the slow-loop warning and the DEBUG telemetry stay on the
-    logger.
+    除了逐 tick 的遥测信息，计时器还会累积节拍统计——
+    有效帧率、超出预算的频率、循环体工作量的去向——并分两次
+    报告：每个 episode 一行摘要
+    （:meth:`log_episode_summary`），以及整个运行的完整报告块
+    （:meth:`log_run_summary`，在循环的 ``finally`` 中调用，因此
+    即使遇到 ``KeyboardInterrupt`` 也仍会产生报告）。两者都发送到
+    ``logger.info``，或者在提供了 ``report`` 接收函数时发送到该接收处
+    ——供静音 logger 的调用方使用。只有
+    摘要会被路由；慢循环警告和 DEBUG 遥测仍保留在
+    logger 上。
 
-    Usage::
+    用法::
 
         timer = CycleTimer(cfg.fps, interpolator.multiplier)
         try:
@@ -185,20 +185,20 @@ class CycleTimer:
         finally:
             timer.log_run_summary()
 
-    Loops with no interpolator just call ``timer.tick()``: at multiplier 1 the
-    anchor is re-taken every tick either way, so the flag makes no difference.
+    没有插值器的循环只需调用 ``timer.tick()``：在 multiplier 为 1 时
+    锚点无论如何都会在每个 tick 重新取定，因此该标志没有影响。
 
-    ``new_cycle=True`` marks the ticks where the interpolator requests a fresh
-    policy action, keeping the pacing anchor aligned with the actual inference
-    cadence (the interpolator's first, single-action buffer would otherwise
-    phase-shift every later cycle by one tick).
+    ``new_cycle=True`` 标记插值器请求全新
+    策略动作的那些 tick，使节拍锚点与实际推理
+    节奏保持对齐（否则插值器第一个只含单动作的缓冲区会使
+    之后每个周期都产生一个 tick 的相位偏移）。
     """
 
-    #: Fraction of the cycle budget a group's wall-clock span may overshoot before
-    #: :meth:`_report_achieved_cadence` speaks up.  ``precise_sleep`` spins to its
-    #: deadline, but scheduler jitter still costs tens of microseconds per tick, so
-    #: with no tolerance the note fires on nearly every group — a healthy 30 Hz run
-    #: logged it for 556 groups out of 576.
+    #: 一个分组的挂钟时间跨度在 :meth:`_report_achieved_cadence` 发出提示之前
+    #: 允许超出周期预算的比例。``precise_sleep`` 会自旋到其
+    #: 截止时间，但调度器抖动每个 tick 仍会耗费数十微秒，因此
+    #: 若没有任何容差，该提示几乎会在每个分组上触发——一次健康的 30 Hz
+    #: 运行在 576 个分组中有 556 个都记录了它。
     SPAN_TOLERANCE = 0.01
 
     def __init__(
@@ -218,43 +218,43 @@ class CycleTimer:
         self.cycle_interval = 1.0 / fps
         self.records_data = records_data
         self._report = report if report is not None else logger.info
-        # Pacing anchor — re-anchored by ``new_cycle``.
+        # 节拍锚点——由 ``new_cycle`` 重新锚定。
         self._cycle_start: float | None = None
         self._tick_start: float | None = None
         self._ticks_done = 0
-        # Reporting accumulator — advanced strictly per tick, never re-anchored.
+        # 报告累加器——严格按 tick 推进，从不重新锚定。
         self._group_ticks = 0
         self._group_work = 0.0
         self._groups_closed = 0
-        # Wall-clock anchor + last closed group's work, for the achieved-cadence
-        # telemetry that covers what the work sum cannot see.
+        # 挂钟锚点 + 上一个已关闭分组的工作量，用于覆盖工作量总和
+        # 所看不到内容的实际节奏遥测。
         self._group_start: float | None = None
         self._last_group_work = 0.0
-        # Statistics: ``_window`` is the episode in progress, ``_run`` every window
-        # closed so far.  Only ``_window`` is touched per tick, so the per-tick
-        # bookkeeping stays on one object; boundaries fold it into ``_run``.
+        # 统计信息：``_window`` 是当前进行中的 episode，``_run`` 是迄今
+        # 已关闭的每个窗口。每个 tick 只触碰 ``_window``，因此逐 tick
+        # 的记账始终集中在一个对象上；边界处会将其折叠进 ``_run``。
         self._window = _CadenceStats()
         self._run = _CadenceStats()
         self._windows_closed = 0
         self._prev_tick_start: float | None = None
-        # Boundary effects take hold at the next ``tick()`` — see :meth:`tick`.
+        # 边界效果在下一次 ``tick()`` 时生效——参见 :meth:`tick`。
         self._pending_close: str | None = None
         self._drop_next_gap = False
 
     def restart(self) -> None:
-        """Re-arm the start-up exemption after control state was reset mid-run.
+        """在控制状态于运行中途被重置后，重新启用启动豁免。
 
-        Call wherever the interpolator is reset while the loop keeps running
-        (the warm-up flush, DAgger returning to autonomous): it re-primes with a
-        single-action buffer, so inference runs on two consecutive ticks again
-        and the group spanning them legitimately exceeds budget.  Also call it
-        after any other one-off blocking work inside the loop body (DAgger's
-        smooth-handover ramps), whose cost is not the steady-state cadence.
-        Only the reporting accumulator is cleared — pacing state is left alone so
-        a restart between ``tick()`` and ``wait()`` cannot skip a pacing sleep.
-        Statistics describe the whole run and deliberately survive; the one thing
-        dropped is the elapsed gap that *ends at the next tick*, which is the one
-        containing the blocking work, so it is not billed to the effective cadence.
+        当插值器在循环继续运行期间被重置时调用（预热刷新、
+        DAgger 切回自主模式）：此时它会用单动作缓冲区重新预置，
+        于是推理又一次发生在两个连续的 tick 上，而横跨这两个
+        tick 的分组超出预算是合理的。在循环体内任何其他一次性
+        阻塞工作之后（例如 DAgger 的平滑交接爬坡）也应调用它，
+        因为这类耗时不属于稳态节奏。
+        只有报告累加器会被清空——节拍状态保持不动，因此
+        ``tick()`` 与 ``wait()`` 之间的 restart 不会跳过任何一次节拍睡眠。
+        统计信息描述整个运行并有意保留；唯一被丢弃的
+        是*在下一个 tick 处结束*的那一段耗时，也就是包含
+        阻塞工作的那一段，因此它不会被计入有效节奏。
         """
         self._group_ticks = 0
         self._group_work = 0.0
@@ -265,14 +265,14 @@ class CycleTimer:
 
     @contextlib.contextmanager
     def section(self, name: str) -> Iterator[None]:
-        """Time one big step of the loop body for the cadence summaries.
+        """为节拍摘要计时循环体的一个大步骤。
 
-        Wrap the coarse steps between :meth:`tick` and :meth:`wait` — observing,
-        processing, inference, actuation, recording — so the summary can say where
-        the loop-body work went.  Keep the sections **flat and disjoint**: shares
-        are reported against the total measured work, so nesting one inside another
-        double-counts.  Steps that only run on some ticks (recording, the engine
-        pull) simply report fewer calls.
+        用它包裹 :meth:`tick` 与 :meth:`wait` 之间的粗粒度步骤——观测、
+        处理、推理、执行、录制——以便摘要能够说明循环体工作量花在了
+        哪里。请保持各个 section **扁平且互不重叠**：占比是相对于
+        所测总工作量报告的，因此相互嵌套会导致
+        重复计数。只在部分 tick 上运行的步骤（录制、引擎
+        拉取）只会报告更少的调用次数。
         """
         start = time.perf_counter()
         try:
@@ -281,25 +281,25 @@ class CycleTimer:
             self._window.record_section(name, time.perf_counter() - start)
 
     def note_starved_tick(self) -> None:
-        """Record a tick that had no action to send because the engine yielded none.
+        """记录一个因为引擎未产生动作而没有动作可发送的 tick。
 
-        Called by :func:`send_next_action`.  Such a tick commands nothing and
-        records nothing, so a run with many of them writes a dataset *shorter* than
-        the wall clock it was captured over — invisible in the dataset itself, whose
-        timestamps are synthesised from the frame index.  Surfacing the count is the
-        only warning a user gets.
+        由 :func:`send_next_action` 调用。这样的 tick 既不发出指令也不
+        录制任何内容，因此包含大量此类 tick 的运行写出的数据集会
+        *短于*采集所经历的挂钟时间——这在数据集自身中不可见，因为其
+        时间戳是由帧索引合成的。把计数呈现出来是
+        用户能得到的唯一警告。
         """
         self._window.starved_ticks += 1
 
     def _report_achieved_cadence(self, group_start: float) -> None:
-        """Log the cadence a closed group actually achieved, sleeps included.
+        """记录一个已关闭分组实际达到的节奏（含睡眠）。
 
-        Measured start-of-group to start-of-group, so unlike the work sum this
-        span covers the pacing sleeps.  When it misses the budget but the work
-        did not, the time went missing *outside* the loop body — an oversleeping
-        timer, or the OS descheduling the process mid-sleep — which is the one
-        shortfall :meth:`wait`'s warning cannot see.  It is not the loop's own
-        fault and not actionable in the same way, so it stays at DEBUG.
+        按组起始到组起始来测量，因此与工作量总和不同，这一
+        跨度包含节拍睡眠。当它未达到预算而工作量
+        并未超限时，说明时间丢失在循环体*之外*——计时器
+        睡过头，或操作系统在睡眠中途将进程调度走——这正是
+        :meth:`wait` 的警告所看不到的那一类
+        不足。这不是循环自身的问题，也无法以同样方式处理，因此保持在 DEBUG 级别。
         """
         if self._group_start is None:
             return
@@ -322,25 +322,25 @@ class CycleTimer:
         )
 
     def tick(self, new_cycle: bool = False) -> None:
-        """Mark the start of a control tick.  Call at the top of the loop body.
+        """标记一个控制 tick 的开始。在循环体开头调用。
 
-        This is also where episode boundaries and :meth:`restart` take effect, and
-        where elapsed time is accumulated — both for the same reason.  Callers reach
-        both from *inside* a loop body: a rotation happens after the blocking
-        ``save_episode`` and before :meth:`wait`.  The tick in progress is therefore
-        the closing episode's last tick and its cost belongs there, while the gap
-        that must be dropped is the one *ending at the next tick* (the one that
-        contains the blocking work), not the healthy gap already behind us.
-        Deferring to here gets both right whether the caller was mid-body or between
-        ticks.
+        episode 边界和 :meth:`restart` 也都在这里生效，
+        耗时同样在这里累积——两者出于同一个原因。调用方是从
+        循环体*内部*到达这两处的：轮换发生在阻塞的
+        ``save_episode`` 之后、:meth:`wait` 之前。因此进行中的
+        tick 是正在结束的 episode 的最后一个 tick，其耗时应归属该
+        episode，而必须丢弃的间隔是*在下一个 tick 处结束*的那一段
+        （即包含阻塞工作的那一段），而不是我们身后已经过去的健康
+        间隔。推迟到此处处理，无论调用方当时位于循环体中间还是
+        两个 tick 之间，都能把两者处理正确。
         """
         self._tick_start = time.perf_counter()
         if self._pending_close is not None:
             self._close_window(self._pending_close)
             self._pending_close = None
             self._drop_next_gap = True
-        # Elapsed time is measured tick-start to tick-start, summed per gap rather
-        # than taken from a first/last pair so that dropping one is possible at all.
+        # 耗时按 tick 起始到 tick 起始测量，逐段相加以求和，而不是
+        # 取首/末一对时间戳，这样才有可能丢弃其中某一段。
         if self._prev_tick_start is not None and not self._drop_next_gap:
             self._window.span += self._tick_start - self._prev_tick_start
             self._window.span_ticks += 1
@@ -351,11 +351,11 @@ class CycleTimer:
             self._ticks_done = 0
 
     def wait(self) -> None:
-        """Sleep until this tick's deadline.  Call at the bottom of the loop body.
+        """睡眠直到本 tick 的截止时间。在循环体末尾调用。
 
-        A group of ``multiplier`` ticks whose work exceeds the ``1/fps`` budget
-        means the policy/recording cadence cannot be held — the only case that
-        warns.
+        若一组 ``multiplier`` 个 tick 的工作量超过 ``1/fps`` 预算，
+        就意味着无法维持策略/录制节奏——这是唯一会
+        发出警告的情况。
         """
         now = time.perf_counter()
         if self._cycle_start is None or self._tick_start is None:
@@ -387,11 +387,11 @@ class CycleTimer:
             self._group_work = 0.0
             self._last_group_work = group_work
             self._groups_closed += 1
-            # The first group is start-up, not steady state: the interpolator
-            # primes its buffer with a single action, so inference runs on two
-            # consecutive ticks, and one-off costs (lazy device init, camera
-            # ramp-up) land here too.  Reporting it would warn on every healthy
-            # launch, and averaging it in would skew the run summary.
+            # 第一个分组属于启动阶段，而非稳态：插值器用单个动作
+            # 预置其缓冲区，因此推理发生在两个连续的 tick 上，而且一次性
+            # 开销（惰性设备初始化、相机
+            # 预热）也落在这里。报告它会导致每次健康的
+            # 启动都发出警告，而把它计入平均则会使运行摘要产生偏差。
             if self._groups_closed > 1:
                 stats.groups_judged += 1
                 stats.group_work += group_work
@@ -409,11 +409,11 @@ class CycleTimer:
                         f"({self.fps:g} Hz). {consequence} Common causes are: 1) Camera FPS not keeping up "
                         "2) Policy inference (action or text) taking too long 3) CPU starvation"
                     )
-        # A late tick that did not blow the cycle budget costs only interpolation
-        # smoothness, so it is a DEBUG note — and at multiplier 1 there is no
-        # smoothness to lose, the warning above is the whole story.  Group-closing
-        # ticks are included unless they already warned; an ``elif`` here used to
-        # swallow every multiplier-th tick's overrun.
+        # 一个未突破周期预算的迟到 tick 只会损失插值
+        # 平滑度，因此只是一条 DEBUG 记录——而在 multiplier 为 1 时本就
+        # 没有平滑度可损失，上面的警告已说明全部情况。关闭分组的
+        # tick 也包含在内，除非它已经发出过警告；这里曾使用 ``elif``，
+        # 结果吞掉了每个第 multiplier 个 tick 的超时。
         if self.multiplier > 1 and not warned and now > deadline and tick_dt > self.tick_interval:
             logger.debug(
                 "Control tick overran its %.1f ms slot (took %.1f ms). Interpolated commands are sent "
@@ -432,29 +432,28 @@ class CycleTimer:
             stats.sleep_worst = max(stats.sleep_worst, slept)
 
     # ------------------------------------------------------------------
-    # Cadence summaries
+    # 节拍摘要
     # ------------------------------------------------------------------
 
     def _effective_hz(self, stats: _CadenceStats) -> float | None:
-        """Achieved *command* rate in Hz, or ``None`` when too little was measured."""
+        """实际达到的*指令*速率（Hz）；测量数据过少时为 ``None``。"""
         if stats.span_ticks == 0 or stats.span <= 0:
             return None
         return stats.span_ticks / stats.span
 
     @property
     def _judged(self) -> str:
-        """What one judged group of ``multiplier`` ticks is called in the reports.
+        """在报告中如何称呼一个由 ``multiplier`` 个 tick 组成的受评判分组。
 
-        Groups of more than one tick are *cycles*.  They are phase-shifted from the
-        interpolator's actual policy cycles by one tick (see the class docstring), but
-        there is exactly one per policy action either way, so the counts a reader cares
-        about are the same.  At multiplier 1 a group *is* a tick, and calling it a cycle
-        would invent a concept the loop does not have.
+        多于一个 tick 的分组是*周期*。它们与插值器实际的策略周期
+        相差一个 tick 的相位（参见类 docstring），但无论如何每个策略动作
+        恰好对应一个分组，因此读者关心的计数是相同的。在 multiplier 为 1 时，
+        一个分组*就是*一个 tick，称之为周期会凭空造出一个该循环并不具备的概念。
         """
         return "cycle" if self.multiplier > 1 else "tick"
 
     def _summary_line(self, stats: _CadenceStats) -> str:
-        """One-line digest of a window: cadence held, budget missed, elapsed."""
+        """一个窗口的一行摘要：维持的节奏、超出预算的次数、耗时。"""
         ms = 1e3
         parts: list[str] = []
         hz = self._effective_hz(stats)
@@ -462,7 +461,7 @@ class CycleTimer:
         if hz is None:
             parts.append(f"{ticks}, too short to measure a rate")
         else:
-            # Only an interpolating loop has two rates to tell apart.
+            # 只有带插值的循环才有两个需要区分的速率。
             rate = f"{hz / self.multiplier:.2f} Hz policy" if self.multiplier > 1 else f"{hz:.2f} Hz"
             parts.append(f"{rate} vs {self.fps:g} Hz target")
             parts.append(f"{ticks}, {stats.span:.1f} s measured")
@@ -478,10 +477,10 @@ class CycleTimer:
         return " · ".join(parts)
 
     def _summary_lines(self, stats: _CadenceStats, heading: str) -> list[str]:
-        """Full multi-line report for a window (see :meth:`_judged` on *cycles* vs *ticks*)."""
+        """一个窗口的完整多行报告（关于 *cycles* 与 *ticks* 参见 :meth:`_judged`）。"""
         ms = 1e3
-        # An interpolating loop has two budgets to state, a plain one has a single
-        # per-tick budget and no second rate anywhere in the block.
+        # 带插值的循环需要说明两个预算，普通循环只有单个
+        # 逐 tick 预算，整个报告块中不存在第二个速率。
         if self.multiplier > 1:
             target = (
                 f"target {self.fps:g} Hz × {self.multiplier} ({self.tick_interval * ms:.1f} ms tick "
@@ -491,10 +490,10 @@ class CycleTimer:
         else:
             target = f"target {self.fps:g} Hz ({self.cycle_interval * ms:.1f} ms budget per tick)"
             judged = f"{stats.groups_judged} judged"
-        # Sample size goes in the heading, unconditionally: every other number here is
-        # a rate or an average over it, so a reader needs it to judge any of them —
-        # and the effective-cadence line below is skipped when a window is too short
-        # to have measured a rate at all.
+        # 样本量无条件放入标题：这里的其他每个数字都是
+        # 基于它的速率或平均值，因此读者需要它来评判其中任何一项——
+        # 而当窗口短到根本无法测量速率时，下面的有效节奏行
+        # 会被跳过。
         lines = [
             f"Cadence summary — {heading} · {target}: "
             f"{stats.ticks} tick{'s' if stats.ticks != 1 else ''}, {judged}"
@@ -506,8 +505,8 @@ class CycleTimer:
                 if self.multiplier > 1
                 else f"{hz:.2f} Hz"
             )
-            # The span is not ticks/rate: it sums tick-to-tick gaps, so it is short by
-            # one gap per window boundary and per ``restart()``.
+            # 该跨度并非 ticks/rate：它是逐 tick 间隔之和，因此每个窗口边界
+            # 和每次 ``restart()`` 都会使它少算一个间隔。
             lines.append(f"  effective cadence: {rate} over {stats.span:.1f} s measured")
         if stats.groups_judged:
             lines.append(
@@ -551,7 +550,7 @@ class CycleTimer:
         return lines
 
     def _close_window(self, label: str) -> None:
-        """Report the finished window's digest and fold it into the run total."""
+        """报告已结束窗口的摘要，并将其折叠进运行总量。"""
         stats = self._window
         if stats.ticks == 0:
             return
@@ -561,34 +560,35 @@ class CycleTimer:
         self._window = _CadenceStats()
 
     def log_episode_summary(self, label: str | None = None) -> None:
-        """Mark an episode boundary; its one-line cadence digest goes to the report sink.
+        """标记一个 episode 边界；其一行节拍摘要会发送到报告接收处。
 
-        Call at each episode boundary, right after ``save_episode``.  The digest is
-        emitted when the *next* tick starts — or by :meth:`log_run_summary` if the
-        loop ends first — because callers are mid-tick here: the tick in progress is
-        the closing episode's last one, and its ``save_episode`` cost belongs to that
-        episode rather than to the one about to begin.  See :meth:`tick`.
+        在每个 episode 边界、紧跟 ``save_episode`` 之后调用。摘要会在
+        *下一个* tick 开始时发出——或者在循环先行结束时由
+        :meth:`log_run_summary` 发出——因为调用方此时正处于 tick 中间：
+        进行中的 tick 是正在结束的 episode 的最后一个 tick，其
+        ``save_episode`` 耗时应归属该 episode，而不是即将开始的下一个。
+        参见 :meth:`tick`。
 
-        Once the boundary lands, the window is folded into the run total and a fresh
-        one begins, so every episode is measured on its own while
-        :meth:`log_run_summary` still covers the lot.  A boundary on an empty window
-        reports nothing, so it is safe to call on a rotation that recorded nothing.
+        边界一旦落地，该窗口就被折叠进运行总量，并开启一个全新的
+        窗口，因此每个 episode 都被单独测量，而
+        :meth:`log_run_summary` 仍能覆盖全部。在空窗口上标记边界
+        不会报告任何内容，因此在没有录制任何内容的轮换上调用也是安全的。
 
-        Args:
-            label: How to name this window in the log.  Defaults to the count of
-                windows closed so far; strategies that track episodes should pass
-                the dataset's own numbering instead.
+        参数:
+            label: 在日志中如何命名此窗口。默认为迄今
+                已关闭窗口的计数；跟踪 episode 的策略应传入
+                数据集自身的编号。
         """
         self._pending_close = label or f"episode {self._windows_closed + 1}"
 
     def log_run_summary(self) -> None:
-        """Report the whole-run cadence summary.  Call once, from the loop's ``finally``.
+        """报告整个运行的节拍摘要。在循环的 ``finally`` 中调用一次。
 
-        Being in ``finally`` is the point: a duration limit, a ``KeyboardInterrupt``
-        and a crash all still produce the summary.  A boundary still pending, and any
-        window still open, are closed first — reported on their own line when the run
-        had episode boundaries, folded in silently when it had none, since a
-        boundary-less loop's single window *is* the run.
+        放在 ``finally`` 中正是关键所在：时长限制、``KeyboardInterrupt``
+        和崩溃都仍会产生该摘要。任何尚未处理的待决边界和任何
+        仍打开的窗口都会先关闭——当运行存在 episode 边界时单独成行
+        报告，当不存在时静默折叠，因为无边界
+        循环的单个窗口*就是*整个运行。
         """
         if self._pending_close is not None:
             self._close_window(self._pending_close)

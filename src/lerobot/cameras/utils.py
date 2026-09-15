@@ -26,7 +26,7 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
     cameras: dict[str, Camera] = {}
 
     for key, cfg in camera_configs.items():
-        # TODO(Steven): Consider just using the make_device_from_device_class for all types
+        # TODO(Steven): 考虑对所有类型直接使用 make_device_from_device_class
         if cfg.type == "opencv":
             from .opencv import OpenCVCamera
 
@@ -57,7 +57,7 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
 
 
 def get_cv2_rotation(rotation: Cv2Rotation) -> int | None:
-    import cv2  # type: ignore  # TODO: add type stubs for OpenCV
+    import cv2  # type: ignore  # TODO: 为 OpenCV 添加类型存根
 
     if rotation == Cv2Rotation.ROTATE_90:
         return int(cv2.ROTATE_90_CLOCKWISE)

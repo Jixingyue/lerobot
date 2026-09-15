@@ -25,9 +25,9 @@ from .data_sources.data_mixer import DataMixer
 
 
 class RLTrainer:
-    """Unified training step orchestrator.
+    """统一的训练步编排器。
 
-    Holds the algorithm, a DataMixer, and an optional preprocessor.
+    持有算法、一个 DataMixer 以及一个可选的预处理器。
     """
 
     def __init__(
@@ -48,7 +48,7 @@ class RLTrainer:
         self.algorithm.make_optimizers_and_scheduler()
 
     def _build_data_iterator(self) -> Iterator[BatchType]:
-        """Create a fresh algorithm-configured iterator (optionally preprocessed)."""
+        """创建一个全新的、由算法配置的迭代器（可选地经过预处理）。"""
         raw = self.algorithm.configure_data_iterator(
             data_mixer=self.data_mixer,
             batch_size=self.batch_size,
@@ -58,24 +58,24 @@ class RLTrainer:
         return raw
 
     def reset_data_iterator(self) -> None:
-        """Discard the current iterator so it will be rebuilt lazily next step."""
+        """丢弃当前迭代器，使其在下一个训练步时被惰性重建。"""
         self._iterator = None
 
     def set_data_mixer(self, data_mixer: DataMixer, *, reset: bool = True) -> None:
-        """Swap the active data mixer, optionally resetting the iterator."""
+        """替换当前使用的数据混合器，并可选择重置迭代器。"""
         self.data_mixer = data_mixer
         if reset:
             self.reset_data_iterator()
 
     def training_step(self) -> TrainingStats:
-        """Run one training step (algorithm-agnostic)."""
+        """执行一个训练步（与具体算法无关）。"""
         if self._iterator is None:
             self._iterator = self._build_data_iterator()
         return self.algorithm.update(self._iterator)
 
 
 def preprocess_rl_batch(preprocessor: Any, batch: BatchType) -> BatchType:
-    """Apply policy preprocessing to RL observations only."""
+    """仅对 RL 观测应用策略预处理。"""
     observations = batch["state"]
     next_observations = batch["next_state"]
     batch["state"] = preprocessor.process_observation(observations)
@@ -85,7 +85,7 @@ def preprocess_rl_batch(preprocessor: Any, batch: BatchType) -> BatchType:
 
 
 class _PreprocessedIterator:
-    """Iterator wrapper that preprocesses each sampled RL batch."""
+    """对每个采样出的 RL 批次进行预处理的迭代器包装器。"""
 
     __slots__ = ("_raw", "_preprocessor")
 

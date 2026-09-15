@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-"""Modeling code for MolmoAct2"""
+"""MolmoAct2 的建模代码"""
 
 # ruff: noqa: N806
 
@@ -76,7 +76,7 @@ logger = logging.get_logger(__name__)
 
 
 def _cast_to_autocast_dtype(tensor: torch.Tensor) -> torch.Tensor:
-    """Cast non-autocast ops, such as embedding lookup, to the active AMP dtype."""
+    """将非 autocast 操作（如嵌入查找）转换为当前的 AMP 数据类型。"""
     device_type = tensor.device.type
     if torch.is_autocast_enabled(device_type):
         return tensor.to(dtype=torch.get_autocast_dtype(device_type))
@@ -90,11 +90,11 @@ def _next_decode_position_ids(
     batch_size: int,
     device: torch.device,
 ) -> torch.Tensor:
-    """Return the logical RoPE position of the next token in each row.
+    """返回每一行中下一个 token 的逻辑 RoPE 位置。
 
-    KV caches use physical tensor offsets, including left padding. RoPE must use
-    the count of valid tokens instead so a shorter prompt has the same positions
-    whether it is decoded alone or in a padded batch.
+    KV 缓存使用物理张量偏移量，包括左侧填充。RoPE 必须使用
+    有效 token 的计数，这样无论较短的提示是单独解码还是在填充批次中
+    解码，都具有相同的位置。
     """
     if attention_mask is None:
         return torch.full((batch_size, 1), int(past_length), device=device, dtype=torch.long)
@@ -566,7 +566,7 @@ class SinusoidalTimeEmbedding(nn.Module):
 
 
 class ActionExpert(nn.Module):
-    """Modern MolmoAct2 action expert embedded in the local LeRobot implementation."""
+    """嵌入在本地 LeRobot 实现中的现代 MolmoAct2 动作专家。"""
 
     def __init__(
         self,
@@ -738,9 +738,9 @@ class ActionExpert(nn.Module):
                 "Continuous state embeddings are not supported."
             )
         kv_contexts = self._prepare_kv_context(encoder_kv_states)
-        # Parameter storage dtype is not necessarily the runtime attention
-        # dtype under autocast. Build masks and RoPE from an actual projected
-        # activation, matching the native ActionExpert behavior.
+        # 参数存储的数据类型不一定是 autocast 下运行时注意力的
+        # 数据类型。从实际投影后的激活构建掩码和 RoPE，
+        # 以匹配原生 ActionExpert 的行为。
         runtime_dtype = kv_contexts[0][0].dtype if kv_contexts else dtype
         valid_action = None
         if action_attention_mask is not None:
@@ -1377,21 +1377,21 @@ class _DepthPrefix:
 @dataclass
 class MolmoAct2CausalLMOutputWithPast(ModelOutput):
     """
-    Base class for MolmoAct2 causal language model (or autoregressive) outputs.
+    MolmoAct2 因果语言模型（或自回归）输出的基类。
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
+            语言建模损失（用于下一 token 预测）。
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+            语言建模头的预测分数（SoftMax 之前每个词汇表 token 的分数）。
         past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            它是一个 [`~cache_utils.Cache`] 实例。更多详情请参见我们的 [kv cache 指南](https://huggingface.co/docs/transformers/en/kv_cache)。
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            包含预计算的隐藏状态（自注意力块中的键和值），可用于（参见
+            `past_key_values` 输入）加速顺序解码。
         image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+            大小为 `(batch_size, num_images, sequence_length, hidden_size)` 的 `torch.FloatTensor`。
+            由视觉编码器生成并在投影最后一个隐藏状态后得到的模型 image_hidden_states。
     """
 
     loss: torch.FloatTensor | None = None
@@ -1405,12 +1405,12 @@ class MolmoAct2CausalLMOutputWithPast(ModelOutput):
 @dataclass
 class MolmoAct2ModelOutputWithPast(BaseModelOutputWithPast):
     """
-    Base class for MolmoAct2 outputs, with hidden states and attentions.
+    MolmoAct2 输出的基类，包含隐藏状态和注意力。
 
     Args:
         image_hidden_states (`torch.FloatTensor`, *optional*):
-            A `torch.FloatTensor` of size `(batch_num_patches, hidden_size)`.
-            image_hidden_states of the model produced by the vision backbone
+            大小为 `(batch_num_patches, hidden_size)` 的 `torch.FloatTensor`。
+            由视觉骨干网络生成的模型 image_hidden_states。
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -1646,9 +1646,9 @@ class MolmoAct2VisionTransformer(nn.Module):
         super().__init__()
         self.config = config
 
-        # positional embeddings
+        # 位置嵌入
         self.scale = config.hidden_size**-0.5
-        self.num_prefix_tokens: int = 0  # no class embeddings
+        self.num_prefix_tokens: int = 0  # 无类别嵌入
         self.positional_embedding = nn.Parameter(
             torch.zeros(config.image_num_pos, config.hidden_size, device=device),
         )
@@ -1677,8 +1677,8 @@ class MolmoAct2VisionTransformer(nn.Module):
         (patch_num_0, patch_num_1) = patch_num
 
         if pos_emb.shape[0] != patch_num_0 or pos_emb.shape[1] != patch_num_1:
-            # Derived from https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
-            # antialias: default True in jax.image.resize
+            # 源自 https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
+            # antialias：jax.image.resize 中默认为 True
             pos_emb = pos_emb.unsqueeze(0).permute(0, 3, 1, 2)
             pos_emb = F.interpolate(
                 pos_emb,
@@ -1704,7 +1704,7 @@ class MolmoAct2VisionTransformer(nn.Module):
 
         x = self.patch_embedding(x)
 
-        # class embeddings and positional embeddings
+        # 类别嵌入和位置嵌入
         x = self.add_pos_emb(x, patch_num)
 
         hidden_states = self.transformer(x)
@@ -1828,8 +1828,8 @@ class MolmoAct2VisionBackbone(nn.Module):
             images = images.to(dtype=torch.float32) / 255.0
             images = images * 2.0 - 1.0
         elif torch.is_floating_point(images):
-            # Native MolmoAct2 eval keeps resized SigLIP pixels as uint8 and normalizes
-            # on device. Canonicalize HF processor floats to that exact grid.
+            # 原生 MolmoAct2 评估将调整大小后的 SigLIP 像素保持为 uint8 并在设备上
+            # 归一化。将 HF 处理器的浮点数规范化为该精确网格。
             images = torch.round(((images.to(dtype=torch.float32) + 1.0) * 0.5) * 255.0)
             images = torch.clamp(images, 0.0, 255.0) / 255.0
             images = images * 2.0 - 1.0
@@ -1841,7 +1841,7 @@ class MolmoAct2VisionBackbone(nn.Module):
         valid = pooled_patches_idx >= 0
         valid_token = torch.any(valid, -1)
 
-        # Use `pooled_patches_idx` to arrange the features for image pooling
+        # 使用 `pooled_patches_idx` 排列特征以进行图像池化
         batch_idx = torch.arange(
             pooled_patches_idx.shape[0],
             dtype=torch.long,
@@ -1852,7 +1852,7 @@ class MolmoAct2VisionBackbone(nn.Module):
             [1, pooled_patches_idx.shape[1], pooled_patches_idx.shape[2]],
         )
 
-        # Now [batch, num_high_res_features, pool_dim, dim]
+        # 现在为 [batch, num_high_res_features, pool_dim, dim]
         to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(pooled_patches_idx, 0)]
         to_pool = to_pool * valid.to(self.dtype)[:, :, :, None]
         to_pool = to_pool.reshape([-1, pooled_patches_idx.shape[-1], dim])
@@ -1867,7 +1867,7 @@ class MolmoAct2VisionBackbone(nn.Module):
         pooled_features = self.image_pooling_2d(query, to_pool, attn_mask=attn_mask)
         pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
-        # MLP layer to map the feature.
+        # 用于映射特征的 MLP 层。
         pooled_features = self.image_projector(pooled_features)
         return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
 
@@ -1876,7 +1876,7 @@ class MolmoAct2VisionBackbone(nn.Module):
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
+    """旋转输入的一半隐藏维度。"""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
@@ -1884,24 +1884,26 @@ def rotate_half(x):
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
+    """对查询和键张量应用旋转位置嵌入。
 
     Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        q (`torch.Tensor`): 查询张量。
+        k (`torch.Tensor`): 键张量。
+        cos (`torch.Tensor`): 旋转嵌入的余弦部分。
+        sin (`torch.Tensor`): 旋转嵌入的正弦部分。
         position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
+            已弃用且未使用。
         unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+            'unsqueeze_dim' 参数指定沿哪个维度对 cos[position_ids] 和
+            sin[position_ids] 进行 unsqueeze，以便它们能正确广播到 q 和 k 的维度。
+            例如，注意 cos[position_ids] 和 sin[position_ids] 的形状为
+            [batch_size, seq_len, head_dim]。然后，如果 q 和 k 的形状为
+            [batch_size, heads, seq_len, head_dim]，则设置 unsqueeze_dim=1 可使
+            cos[position_ids] 和 sin[position_ids] 可广播到 q 和 k 的形状。
+            类似地，如果 q 和 k 的形状为 [batch_size, seq_len, heads, head_dim]，
+            则设置 unsqueeze_dim=2。
     Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+        `tuple(torch.Tensor)`，包含使用旋转位置嵌入旋转后的查询和键张量。
     """
     del position_ids
     q_dtype = q.dtype
@@ -1929,7 +1931,7 @@ class MolmoAct2RotaryEmbedding(nn.Module):
         if rope_type is not None:
             self.rope_type = rope_type
         elif hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            # BC: "rope_type" was originally "type"
+            # 向后兼容："rope_type" 原本是 "type"
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
@@ -2078,8 +2080,9 @@ class MolmoAct2RMSNorm(nn.Module):
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    等价于 torch.repeat_interleave(x, dim=1, repeats=n_rep)。隐藏状态从
+    (batch, num_key_value_heads, seqlen, head_dim) 变为
+    (batch, num_attention_heads, seqlen, head_dim)。
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
@@ -2102,8 +2105,8 @@ def eager_attention_forward(
     value_states = repeat_kv(value, module.num_key_value_groups)
     output_dtype = query.dtype
 
-    # Native MolmoAct2 keeps QK scores and softmax in fp32, then returns to the
-    # value/residual dtype for the weighted-value matmul and layer output.
+    # 原生 MolmoAct2 保持 QK 分数和 softmax 在 fp32 中，然后在加权值矩阵乘法
+    # 和层输出时返回 value/residual 数据类型。
     with torch.autocast(device_type=query.device.type, enabled=False):
         query_float = query.to(dtype=torch.float32)
         key_float = key_states.to(dtype=torch.float32)
@@ -4582,8 +4585,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
 
         >>> inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True)
 
-        >>> # Generate
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> #  生成        >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
         >>> generated_tokens = generated_ids[:, inputs['input_ids'].size(1):]
         >>> processor.post_process_image_text_to_text(generated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "The image shows a bustling street scene in what appears to be a Chinatown area. There's ..."

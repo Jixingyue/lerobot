@@ -39,11 +39,11 @@ def make_env_pre_post_processors(
     policy_cfg: Any,
 ) -> tuple[Any, Any]:
     """
-    Create preprocessor and postprocessor pipelines for environment observations.
+    为环境观测创建预处理器和后处理器流水线。
 
-    Returns a tuple of (preprocessor, postprocessor). By default, delegates to
-    ``env_cfg.get_env_processors()``.  The XVLAConfig policy-specific override
-    stays here because it depends on the *policy* config, not the env config.
+    返回一个 (preprocessor, postprocessor) 元组。默认情况下委托给
+    ``env_cfg.get_env_processors()``。XVLAConfig 的策略特定重写
+    保留在这里，因为它依赖的是*策略*配置，而不是环境配置。
     """
     from lerobot.policies.xvla.configuration_xvla import XVLAConfig
 
@@ -62,32 +62,32 @@ def make_env(
     hub_cache_dir: str | None = None,
     trust_remote_code: bool = False,
 ) -> dict[str, dict[int, gym.vector.VectorEnv]]:
-    """Makes a gym vector environment according to the config or Hub reference.
+    """根据配置或 Hub 引用创建 gym 向量化环境。
 
     Args:
-        cfg (EnvConfig | str): Either an `EnvConfig` object describing the environment to build locally,
-            or a Hugging Face Hub repository identifier (e.g. `"username/repo"`). In the latter case,
-            the repo must include a Python file (usually `env.py`).
-        n_envs (int, optional): The number of parallelized env to return. Defaults to 1.
-        use_async_envs (bool, optional): Whether to return an AsyncVectorEnv or a SyncVectorEnv. Defaults to
-            False.
-        hub_cache_dir (str | None): Optional cache path for downloaded hub files.
-        trust_remote_code (bool): **Explicit consent** to execute remote code from the Hub.
-            Default False — must be set to True to import/exec hub `env.py`.
+        cfg (EnvConfig | str): 可以是一个描述要在本地构建的环境的 `EnvConfig` 对象，
+            也可以是一个 Hugging Face Hub 仓库标识符（例如 `"username/repo"`）。在后一种情况下，
+            该仓库必须包含一个 Python 文件（通常是 `env.py`）。
+        n_envs (int, optional): 要返回的并行环境数量。默认为 1。
+        use_async_envs (bool, optional): 返回 AsyncVectorEnv 还是 SyncVectorEnv。默认为
+            False。
+        hub_cache_dir (str | None): 已下载 hub 文件的可选缓存路径。
+        trust_remote_code (bool): **明确同意**执行来自 Hub 的远程代码。
+            默认 False —— 必须设为 True 才能导入/执行 hub 的 `env.py`。
     Raises:
-        ValueError: if n_envs < 1
-        ModuleNotFoundError: If the requested env package is not installed
+        ValueError: 当 n_envs < 1 时
+        ModuleNotFoundError: 当所请求的 env 包未安装时
 
     Returns:
         dict[str, dict[int, gym.vector.VectorEnv]]:
-            A mapping from suite name to indexed vectorized environments.
-            - For multi-task benchmarks (e.g., LIBERO): one entry per suite, and one vec env per task_id.
-            - For single-task environments: a single suite entry (cfg.type) with task_id=0.
+            从套件名称到按索引排列的向量化环境的映射。
+            - 对于多任务基准（例如 LIBERO）：每个套件一个条目，每个 task_id 一个向量化环境。
+            - 对于单任务环境：单个套件条目（cfg.type），task_id=0。
 
     """
-    # if user passed a hub id string (e.g., "username/repo", "username/repo@main:env.py")
-    # simplified: only support hub-provided `make_env`
-    # TODO: (jadechoghari): deprecate string API and remove this check
+    # 如果用户传入的是 hub id 字符串（例如 "username/repo"、"username/repo@main:env.py"）
+    # 简化处理：仅支持 hub 提供的 `make_env`
+    # TODO: (jadechoghari): 弃用字符串 API 并移除此检查
     if isinstance(cfg, str):
         hub_path: str | None = cfg
     elif isinstance(cfg, HubEnvConfig):
@@ -95,24 +95,24 @@ def make_env(
     else:
         hub_path = None
 
-    # If hub_path is set, download and call hub-provided `make_env`
+    # 如果设置了 hub_path，则下载并调用 hub 提供的 `make_env`
     if hub_path:
-        # _download_hub_file will raise the same RuntimeError if trust_remote_code is False
+        # 当 trust_remote_code 为 False 时，_download_hub_file 会抛出同样的 RuntimeError
         repo_id, file_path, local_file, revision = _download_hub_file(
             hub_path, trust_remote_code, hub_cache_dir
         )
 
-        # import and surface clear import errors
+        # 导入并呈现清晰的导入错误
         module = _import_hub_module(local_file, repo_id)
 
-        # call the hub-provided make_env
+        # 调用 hub 提供的 make_env
         env_cfg = None if isinstance(cfg, str) else cfg
         raw_result = _call_make_env(module, n_envs=n_envs, use_async_envs=use_async_envs, cfg=env_cfg)
 
-        # normalize the return into {suite: {task_id: vec_env}}
+        # 将返回值规范化为 {suite: {task_id: vec_env}}
         return _normalize_hub_result(raw_result)
 
-    # At this point, cfg must be an EnvConfig (not a string) since hub_path would have been set otherwise
+    # 此时 cfg 必须是 EnvConfig（而不是字符串），否则 hub_path 早已被设置
     if isinstance(cfg, str):
         raise TypeError("cfg should be an EnvConfig at this point")
 

@@ -45,7 +45,7 @@ from .configuration_sac import SACAlgorithmConfig
 
 
 class SACAlgorithm(RLAlgorithm):
-    """Soft Actor-Critic. Owns critics, targets, temperature, and loss computation."""
+    """Soft Actor-Critic。持有 critic、目标网络、温度参数，并负责损失计算。"""
 
     config_class = SACAlgorithmConfig
     name = "sac"
@@ -69,7 +69,7 @@ class SACAlgorithm(RLAlgorithm):
         self._move_to_device()
 
     def _init_critics(self, action_dim) -> None:
-        """Build critic ensemble, targets."""
+        """构建 critic 集成和目标网络。"""
         encoder = self.policy.encoder_critic
 
         heads = [
@@ -90,8 +90,8 @@ class SACAlgorithm(RLAlgorithm):
         self.critic_target = CriticEnsemble(encoder=encoder, ensemble=target_heads)
         self.critic_target.load_state_dict(self.critic_ensemble.state_dict())
 
-        # TODO(Khalil): Investigate and fix torch.compile
-        # NOTE: torch.compile is disabled, policy does not converge when enabled.
+        # TODO(Khalil): 调查并修复 torch.compile
+        # 注意：torch.compile 已被禁用，启用时策略无法收敛。
         if self.config.use_torch_compile:
             self.critic_ensemble = torch.compile(self.critic_ensemble)
             self.critic_target = torch.compile(self.critic_target)
@@ -101,19 +101,19 @@ class SACAlgorithm(RLAlgorithm):
             self.discrete_critic_target = self._init_discrete_critic_target(encoder)
 
     def _init_discrete_critic_target(self, encoder: GaussianActorObservationEncoder) -> DiscreteCritic:
-        """Build target discrete critic (main network is owned by the policy)."""
+        """构建离散 critic 的目标网络（主网络由策略持有）。"""
         discrete_critic_target = DiscreteCritic(
             encoder=encoder,
             input_dim=encoder.output_dim,
             output_dim=self.policy_config.num_discrete_actions,
             **asdict(self.config.discrete_critic_network_kwargs),
         )
-        # TODO(Khalil): Compile the discrete critic
+        # TODO(Khalil): 对离散 critic 进行编译（torch.compile）
         discrete_critic_target.load_state_dict(self.policy.discrete_critic.state_dict())
         return discrete_critic_target
 
     def _init_temperature(self, continuous_action_dim: int) -> None:
-        """Set up temperature parameter (log_alpha) and target entropy."""
+        """设置温度参数（log_alpha）和目标熵。"""
         temp_init = self.config.temperature_init
         self.log_alpha = nn.Parameter(torch.tensor([math.log(temp_init)]))
 
@@ -134,7 +134,7 @@ class SACAlgorithm(RLAlgorithm):
 
     @property
     def temperature(self) -> float:
-        """Return the current temperature value, always in sync with log_alpha."""
+        """返回当前温度值，始终与 log_alpha 保持同步。"""
         return self.log_alpha.exp().item()
 
     def _critic_forward(
@@ -144,15 +144,15 @@ class SACAlgorithm(RLAlgorithm):
         use_target: bool = False,
         observation_features: Tensor | None = None,
     ) -> Tensor:
-        """Forward pass through a critic network ensemble
+        """对 critic 网络集成进行前向传播
 
         Args:
-            observations: Dictionary of observations
-            actions: Action tensor
-            use_target: If True, use target critics, otherwise use ensemble critics
+            observations: 观测字典
+            actions: 动作张量
+            use_target: 若为 True，使用目标 critic；否则使用集成 critic
 
         Returns:
-            Tensor of Q-values from all critics
+            所有 critic 输出的 Q 值张量
         """
 
         critics = self.critic_target if use_target else self.critic_ensemble
@@ -162,39 +162,39 @@ class SACAlgorithm(RLAlgorithm):
     def _discrete_critic_forward(
         self, observations, use_target=False, observation_features=None
     ) -> torch.Tensor:
-        """Forward pass through a discrete critic network
+        """对离散 critic 网络进行前向传播
 
         Args:
-            observations: Dictionary of observations
-            use_target: If True, use target critics, otherwise use ensemble critics
-            observation_features: Optional pre-computed observation features to avoid recomputing encoder output
+            observations: 观测字典
+            use_target: 若为 True，使用目标 critic；否则使用集成 critic
+            observation_features: 可选的预计算观测特征，以避免重复计算编码器输出
 
         Returns:
-            Tensor of Q-values from the discrete critic network
+            离散 critic 网络输出的 Q 值张量
         """
         discrete_critic = self.discrete_critic_target if use_target else self.policy.discrete_critic
         q_values = discrete_critic(observations, observation_features)
         return q_values
 
     def update(self, batch_iterator: Iterator[BatchType]) -> TrainingStats:
-        """Run one SAC training step (critic / discrete-critic / actor / temperature).
+        """执行一次 SAC 训练步骤（critic / 离散 critic / actor / 温度）。
 
-        Pulls ``utd_ratio`` batches from ``batch_iterator``, computes the relevant
-        losses, backpropagates each, and updates target networks.
+        从 ``batch_iterator`` 中取出 ``utd_ratio`` 个批次，计算相应的
+        损失，对每个损失进行反向传播，并更新目标网络。
 
         Args:
-            batch_iterator: yields batches each containing
-                - ``action``: Action tensor
-                - ``reward``: Reward tensor
-                - ``state``: Observations tensor dict
-                - ``next_state``: Next observations tensor dict
-                - ``done``: Done mask tensor
-                - ``observation_feature``: Optional pre-computed observation features
-                - ``next_observation_feature``: Optional pre-computed next observation features
-                - ``complementary_info`` (optional): per-step extras like discrete penalties
+            batch_iterator: 生成的每个批次包含
+                - ``action``：动作张量
+                - ``reward``：奖励张量
+                - ``state``：观测张量字典
+                - ``next_state``：下一观测张量字典
+                - ``done``：完成掩码张量
+                - ``observation_feature``：可选的预计算观测特征
+                - ``next_observation_feature``：可选的预计算下一观测特征
+                - ``complementary_info``（可选）：每步附加信息，如离散惩罚项
 
         Returns:
-            TrainingStats with per-component losses and grad norms.
+            包含各组件损失和梯度范数的 TrainingStats。
         """
         clip = self.config.grad_clip_norm
 
@@ -269,11 +269,11 @@ class SACAlgorithm(RLAlgorithm):
         return stats
 
     def _compute_loss_critic(self, batch: dict[str, Any]) -> Tensor:
-        # Extract common components from batch
+        # 从批次中提取公共组件
         observations = batch["state"]
         actions = batch[ACTION]
         observation_features = batch.get("observation_feature")
-        # Extract critic-specific components
+        # 提取 critic 专用的组件
         rewards = batch["reward"]
         next_observations = batch["next_state"]
         done = batch["done"]
@@ -284,7 +284,7 @@ class SACAlgorithm(RLAlgorithm):
                 next_observations, next_observation_features
             )
 
-            # 2- compute q targets
+            # 2- 计算 q 目标
             q_targets = self._critic_forward(
                 observations=next_observations,
                 actions=next_action_preds,
@@ -292,25 +292,25 @@ class SACAlgorithm(RLAlgorithm):
                 observation_features=next_observation_features,
             )
 
-            # subsample critics to prevent overfitting if use high UTD (update to date)
-            # TODO: Get indices before forward pass to avoid unnecessary computation
+            # 在使用高 UTD（更新-数据比）时对 critic 进行子采样，以防止过拟合
+            # TODO: 在前向传播之前获取索引，以避免不必要的计算
             if self.config.num_subsample_critics is not None:
                 indices = torch.randperm(self.config.num_critics)
                 indices = indices[: self.config.num_subsample_critics]
                 q_targets = q_targets[indices]
 
-            # critics subsample size
-            min_q, _ = q_targets.min(dim=0)  # Get values from min operation
+            # critic 子采样大小
+            min_q, _ = q_targets.min(dim=0)  # 从 min 操作中获取值
             if self.config.use_backup_entropy:
                 min_q = min_q - (self.temperature * next_log_probs)
 
             td_target = rewards + (1 - done) * self.config.discount * min_q
 
-        # 3- compute predicted qs
+        # 3- 计算预测的 q 值
         if self.policy_config.num_discrete_actions is not None:
-            # NOTE: We only want to keep the continuous action part
-            # In the buffer we have the full action space (continuous + discrete)
-            # We need to split them before concatenating them in the critic forward
+            # 注意：我们只想保留连续动作部分
+            # 在缓冲区中我们拥有完整的动作空间（连续 + 离散）
+            # 在将它们拼接进 critic 前向传播之前，需要先进行拆分
             actions: Tensor = actions[:, :DISCRETE_DIMENSION_INDEX]
         q_preds = self._critic_forward(
             observations=observations,
@@ -319,10 +319,10 @@ class SACAlgorithm(RLAlgorithm):
             observation_features=observation_features,
         )
 
-        # 4- Calculate loss
-        # Compute state-action value loss (TD loss) for all of the Q functions in the ensemble.
+        # 4- 计算损失
+        # 为集成中的所有 Q 函数计算状态-动作值损失（TD 损失）。
         td_target_duplicate = einops.repeat(td_target, "b -> e b", e=q_preds.shape[0])
-        # You compute the mean loss of the batch for each critic and then to compute the final loss you sum them up
+        # 先计算每个 critic 的批次平均损失，然后将它们求和得到最终损失
         critics_loss = (
             F.mse_loss(
                 input=q_preds,
@@ -342,9 +342,9 @@ class SACAlgorithm(RLAlgorithm):
         next_observation_features = batch.get("next_observation_feature")
         complementary_info = batch.get("complementary_info")
 
-        # NOTE: We only want to keep the discrete action part
-        # In the buffer we have the full action space (continuous + discrete)
-        # We need to split them before concatenating them in the critic forward
+        # 注意：我们只想保留离散动作部分
+        # 在缓冲区中我们拥有完整的动作空间（连续 + 离散）
+        # 在将它们拼接进 critic 前向传播之前，需要先进行拆分
         actions_discrete: Tensor = actions[:, DISCRETE_DIMENSION_INDEX:].clone()
         actions_discrete = torch.round(actions_discrete)
         actions_discrete = actions_discrete.long()
@@ -354,39 +354,39 @@ class SACAlgorithm(RLAlgorithm):
             discrete_penalties = complementary_info.get("discrete_penalty")
 
         with torch.no_grad():
-            # For DQN, select actions using online network, evaluate with target network
+            # 对于 DQN，使用在线网络选择动作，使用目标网络进行评估
             next_discrete_qs = self._discrete_critic_forward(
                 next_observations, use_target=False, observation_features=next_observation_features
             )
             best_next_discrete_action = torch.argmax(next_discrete_qs, dim=-1, keepdim=True)
 
-            # Get target Q-values from target network
+            # 从目标网络获取目标 Q 值
             target_next_discrete_qs = self._discrete_critic_forward(
                 observations=next_observations,
                 use_target=True,
                 observation_features=next_observation_features,
             )
 
-            # Use gather to select Q-values for best actions
+            # 使用 gather 选出最优动作对应的 Q 值
             target_next_discrete_q = torch.gather(
                 target_next_discrete_qs, dim=1, index=best_next_discrete_action
             ).squeeze(-1)
 
-            # Compute target Q-value with Bellman equation
+            # 使用 Bellman 方程计算目标 Q 值
             rewards_discrete = rewards
             if discrete_penalties is not None:
                 rewards_discrete = rewards + discrete_penalties
             target_discrete_q = rewards_discrete + (1 - done) * self.config.discount * target_next_discrete_q
 
-        # Get predicted Q-values for current observations
+        # 获取当前观测的预测 Q 值
         predicted_discrete_qs = self._discrete_critic_forward(
             observations=observations, use_target=False, observation_features=observation_features
         )
 
-        # Use gather to select Q-values for taken actions
+        # 使用 gather 选出所执行动作对应的 Q 值
         predicted_discrete_q = torch.gather(predicted_discrete_qs, dim=1, index=actions_discrete).squeeze(-1)
 
-        # Compute MSE loss between predicted and target Q-values
+        # 计算预测 Q 值与目标 Q 值之间的 MSE 损失
         discrete_critic_loss = F.mse_loss(input=predicted_discrete_q, target=target_discrete_q)
         return discrete_critic_loss
 
@@ -408,11 +408,11 @@ class SACAlgorithm(RLAlgorithm):
         return actor_loss
 
     def _compute_loss_temperature(self, batch: dict[str, Any]) -> Tensor:
-        """Compute the temperature loss"""
+        """计算温度损失"""
         observations = batch["state"]
         observation_features = batch.get("observation_feature")
 
-        # calculate temperature loss
+        # 计算温度损失
         with torch.no_grad():
             _, log_probs, _ = self.policy.actor(observations, observation_features)
 
@@ -420,7 +420,7 @@ class SACAlgorithm(RLAlgorithm):
         return temperature_loss
 
     def _update_target_networks(self) -> None:
-        """Update target networks with exponential moving average"""
+        """使用指数移动平均更新目标网络"""
         for target_p, p in zip(
             self.critic_target.parameters(), self.critic_ensemble.parameters(), strict=True
         ):
@@ -462,26 +462,26 @@ class SACAlgorithm(RLAlgorithm):
 
     def make_optimizers_and_scheduler(self) -> dict[str, Optimizer]:
         """
-        Creates and returns optimizers for the actor, critic, and temperature components of a reinforcement learning policy.
+        为强化学习策略的 actor、critic 和温度组件创建并返回优化器。
 
-        This function sets up Adam optimizers for:
-        - The **actor network**, ensuring that only relevant parameters are optimized.
-        - The **critic ensemble**, which evaluates the value function.
-        - The **temperature parameter**, which controls the entropy in soft actor-critic (SAC)-like methods.
+        该函数为以下组件设置 Adam 优化器：
+        - **actor 网络**，确保只优化相关的参数。
+        - **critic 集成**，用于评估价值函数。
+        - **温度参数**，用于控制 soft actor-critic（SAC）类方法中的熵。
 
-        It also initializes a learning rate scheduler, though currently, it is set to `None`.
+        它还会初始化一个学习率调度器，不过目前设为 `None`。
 
-        NOTE:
-        - If the encoder is shared, its parameters are excluded from the actor's optimization process.
-        - The policy's log temperature (`log_alpha`) is wrapped in a list to ensure proper optimization as a standalone tensor.
+        注意：
+        - 如果编码器是共享的，其参数会被排除在 actor 的优化过程之外。
+        - 策略的对数温度（`log_alpha`）被包装在列表中，以确保作为独立张量被正确优化。
 
         Args:
-            cfg: Configuration object containing hyperparameters.
-            policy (nn.Module): The policy model containing the actor, critic, and temperature components.
+            cfg: 包含超参数的配置对象。
+            policy (nn.Module): 包含 actor、critic 和温度组件的策略模型。
 
         Returns:
-            A dictionary mapping component names ("actor", "critic", "temperature")
-            to their respective Adam optimizers.
+            将组件名称（"actor"、"critic"、"temperature"）映射到
+            各自 Adam 优化器的字典。
         """
         actor_params = self.policy.get_optim_params()["actor"]
         self.optimizers = {
@@ -499,7 +499,7 @@ class SACAlgorithm(RLAlgorithm):
         return self.optimizers
 
     def get_weights(self) -> dict[str, Any]:
-        """Send actor + discrete-critic state dicts."""
+        """发送 actor + 离散 critic 的 state dict。"""
         state_dicts: dict[str, Any] = {
             "policy": move_state_dict_to_device(self.policy.actor.state_dict(), device="cpu"),
         }
@@ -510,7 +510,7 @@ class SACAlgorithm(RLAlgorithm):
         return state_dicts
 
     def load_weights(self, weights: dict[str, Any], device: str | torch.device = "cpu") -> None:
-        """Load actor + discrete-critic weights into the policy."""
+        """将 actor + 离散 critic 的权重加载到策略中。"""
         actor_sd = move_state_dict_to_device(weights["policy"], device=device)
         self.policy.actor.load_state_dict(actor_sd)
         if "discrete_critic" in weights and self.policy.discrete_critic is not None:
@@ -518,10 +518,10 @@ class SACAlgorithm(RLAlgorithm):
             self.policy.discrete_critic.load_state_dict(discrete_sd)
 
     def state_dict(self) -> dict[str, torch.Tensor]:
-        """Algorithm-owned trainable tensors.
+        """算法持有的可训练张量。
 
-        Encoder weights are stripped because they are owned by the policy
-        (``policy.encoder_critic``) and already saved via ``policy.save_pretrained``.
+        编码器权重会被剔除，因为它们由策略持有
+        （``policy.encoder_critic``），并且已通过 ``policy.save_pretrained`` 保存。
         """
         bundle: dict[str, torch.Tensor] = {}
         for k, v in _strip_encoder_keys(self.critic_ensemble.state_dict()).items():
@@ -539,11 +539,11 @@ class SACAlgorithm(RLAlgorithm):
         state_dict: dict[str, torch.Tensor],
         device: str | torch.device = "cpu",
     ) -> None:
-        """In-place load of algorithm-owned tensors.
+        """原地加载算法持有的张量。
 
-        ``log_alpha`` is restored via ``Parameter.data.copy_`` so the
-        ``temperature`` optimizer's reference to the parameter object stays
-        valid after resume.
+        ``log_alpha`` 通过 ``Parameter.data.copy_`` 恢复，以确保
+        ``temperature`` 优化器对该参数对象的引用在恢复之后
+        仍然有效。
         """
         critic_ensemble_state = _split_prefix(state_dict, "critic_ensemble.")
         critic_target_state = _split_prefix(state_dict, "critic_target.")
@@ -561,14 +561,14 @@ class SACAlgorithm(RLAlgorithm):
         self, observations: Tensor, next_observations: Tensor
     ) -> tuple[Tensor | None, Tensor | None]:
         """
-        Get observation features from the policy encoder. It act as cache for the observation features.
-        when the encoder is frozen, the observation features are not updated.
-        We can save compute by caching the observation features.
+        从策略编码器获取观测特征。它充当观测特征的缓存。
+        当编码器被冻结时，观测特征不会更新。
+        通过缓存观测特征可以节省计算量。
 
         Args:
-            policy: The policy model
-            observations: The current observations
-            next_observations: The next observations
+            policy: 策略模型
+            observations: 当前观测
+            next_observations: 下一观测
 
         Returns:
             tuple: observation_features, next_observation_features
@@ -585,12 +585,12 @@ class SACAlgorithm(RLAlgorithm):
 
 
 def _strip_encoder_keys(state: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Drop ``encoder.*`` keys from a critic-module state dict."""
+    """从 critic 模块的 state dict 中剔除 ``encoder.*`` 键。"""
     return {k: v for k, v in state.items() if not k.startswith("encoder.")}
 
 
 def _split_prefix(state: dict[str, torch.Tensor], prefix: str) -> dict[str, torch.Tensor]:
-    """Return the subset of ``state`` whose keys start with ``prefix``, prefix-stripped."""
+    """返回 ``state`` 中键以 ``prefix`` 开头的子集，并去除前缀。"""
     return {k.removeprefix(prefix): v for k, v in state.items() if k.startswith(prefix)}
 
 
@@ -627,14 +627,14 @@ class CriticHead(nn.Module):
 
 class CriticEnsemble(nn.Module):
     """
-    CriticEnsemble wraps multiple CriticHead modules into an ensemble.
+    CriticEnsemble 将多个 CriticHead 模块包装成一个集成。
 
     Args:
-        encoder (GaussianActorObservationEncoder): encoder for observations.
-        ensemble (List[CriticHead]): list of critic heads.
-        init_final (float | None): optional initializer scale for final layers.
+        encoder (GaussianActorObservationEncoder): 观测的编码器。
+        ensemble (List[CriticHead]): critic 头列表。
+        init_final (float | None): 可选的最后一层初始化器缩放系数。
 
-    Forward returns a tensor of shape (num_critics, batch_size) containing Q-values.
+    前向传播返回形状为 (num_critics, batch_size) 的张量，其中包含 Q 值。
     """
 
     def __init__(
@@ -655,18 +655,18 @@ class CriticEnsemble(nn.Module):
         observation_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
         device = get_device_from_parameters(self)
-        # Move each tensor in observations to device
+        # 将 observations 中的每个张量移动到设备上
         observations = {k: v.to(device) for k, v in observations.items()}
 
         obs_enc = self.encoder(observations, cache=observation_features)
 
         inputs = torch.cat([obs_enc, actions], dim=-1)
 
-        # Loop through critics and collect outputs
+        # 遍历各个 critic 并收集输出
         q_values = []
         for critic in self.critics:
             q_values.append(critic(inputs))
 
-        # Stack outputs to match expected shape [num_critics, batch_size]
+        # 堆叠输出以匹配期望的形状 [num_critics, batch_size]
         q_values = torch.stack([q.squeeze(-1) for q in q_values], dim=0)
         return q_values

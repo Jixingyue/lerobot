@@ -15,43 +15,43 @@
 # limitations under the License.
 
 """
-SARM Subtask Annotation using local GPU (Qwen3-VL).
+使用本地 GPU（Qwen3-VL）进行 SARM 子任务标注。
 
-This script implements the annotation approach from the SARM paper using local GPU inference:
+本脚本使用本地 GPU 推理实现了 SARM 论文中的标注方法：
 "SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation"
-Paper: https://arxiv.org/pdf/2509.25358
+论文：https://arxiv.org/pdf/2509.25358
 
-What it does:
-1. Takes videos from a LeRobot dataset
-2. Uses Qwen3-VL running locally on GPU to identify when subtasks occur
-3. Saves subtask timestamps to the dataset metadata
-4. Optionally pushes the annotated dataset to HuggingFace Hub
+功能：
+1. 从 LeRobot 数据集中获取视频
+2. 使用本地 GPU 上运行的 Qwen3-VL 识别子任务发生的时间
+3. 将子任务时间戳保存到数据集元数据中
+4. 可选地将标注后的数据集推送到 HuggingFace Hub
 
-SARM trains reward models that predict:
-  - Stage: Which subtask is currently being executed (discrete classification)
-  - Progress: How far along the subtask we are (continuous 0-1)
+SARM 训练奖励模型来预测：
+  - 阶段（Stage）：当前正在执行哪个子任务（离散分类）
+  - 进度（Progress）：子任务执行到什么程度（连续 0-1）
 
-Supports three annotation modes:
-  1. No annotations (no args): Auto-creates single sparse "task" stage covering full episode.
-     Use with SARM config annotation_mode="single_stage" for simple tasks.
+支持三种标注模式：
+  1. 无标注（无参数）：自动创建覆盖整个 episode 的单个稀疏 "task" 阶段。
+     配合 SARM 配置 annotation_mode="single_stage" 用于简单任务。
 
-  2. Dense-only (--dense-only --dense-subtasks): Dense annotations from VLM, auto-generated
-     single sparse "task" stage. Use with annotation_mode="dense_only".
+  2. 仅密集（--dense-only --dense-subtasks）：来自 VLM 的密集标注，
+     自动生成单个稀疏 "task" 阶段。配合 annotation_mode="dense_only" 使用。
 
-  3. Dual mode (--sparse-subtasks + --dense-subtasks): Both sparse and dense annotations
-     from VLM. Use with annotation_mode="dual".
+  3. 双模式（--sparse-subtasks + --dense-subtasks）：来自 VLM 的稀疏和密集标注。
+     配合 annotation_mode="dual" 使用。
 
-Requirements:
-  - GPU with sufficient VRAM (16GB+ recommended for 30B model)
-  - `pip install transformers, torch, qwen-vl-utils`
+依赖：
+  - 具有足够显存的 GPU（30B 模型推荐 16GB+）
+  - ``pip install transformers, torch, qwen-vl-utils``
 
-Run with:
+运行方式：
 ```bash
-python examples/dataset_annotation/subtask_annotation.py \
-  --repo-id your-username/your-dataset \
-  --sparse-subtasks "Do ..." \
-  --dense-subtasks "Do task 1, Do task 2, Do task 3" \
-  --video-key observation.images.base \
+python examples/dataset_annotation/subtask_annotation.py \\
+  --repo-id your-username/your-dataset \\
+  --sparse-subtasks "Do ..." \\
+  --dense-subtasks "Do task 1, Do task 2, Do task 3" \\
+  --video-key observation.images.base \\
   --push-to-hub
 ```
 """
@@ -79,23 +79,23 @@ from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
 from lerobot.datasets import LeRobotDataset, resolve_episode_indices
 
 
-# Pydantic Models for SARM Subtask Annotation
+# 用于 SARM 子任务标注的 Pydantic 模型
 class Timestamp(BaseModel):
-    """Timestamp in MM:SS or SS format"""
+    """MM:SS 或 SS 格式的时间戳"""
 
     start: str = Field(description="Start timestamp (MM:SS or just seconds)")
     end: str = Field(description="End timestamp (MM:SS or just seconds)")
 
 
 class Subtask(BaseModel):
-    """Individual subtask/stage - must use EXACT names from provided list"""
+    """单个子任务/阶段——必须使用所提供列表中的精确名称"""
 
     name: str = Field(description="Subtask name - MUST match one from the predefined list exactly")
     timestamps: Timestamp
 
 
 class SubtaskAnnotation(BaseModel):
-    """Complete annotation for a robot manipulation episode"""
+    """机器人操作 episode 的完整标注"""
 
     subtasks: list[Subtask] = Field(description="List of all subtasks in temporal order")
 
@@ -104,17 +104,17 @@ def compute_temporal_proportions(
     annotations: dict[int, Any], fps: int = 30, subtask_order: list[str] | None = None
 ) -> dict[str, float]:
     """
-    Compute dataset-level temporal proportions (priors) for each subtask.
+    计算每个子任务在数据集层面的时间占比（先验）。
 
-    Implements SARM Paper Formula (1): ᾱ_k = (1/M) × Σ_i (L_{i,k} / T_i)
+    实现 SARM 论文公式 (1)：ᾱ_k = (1/M) × Σ_i (L_{i,k} / T_i)
 
     Args:
-        annotations: Dict mapping episode index to SubtaskAnnotation object.
-        fps: Frames per second (unused, kept for API compatibility)
-        subtask_order: Optional list defining the output order of subtasks.
+        annotations: 将 episode 索引映射到 SubtaskAnnotation 对象的字典。
+        fps: 每秒帧数（未使用，保留以保持 API 兼容性）
+        subtask_order: 可选的列表，定义子任务的输出顺序。
 
     Returns:
-        Dict mapping subtask name to its temporal proportion (ᾱ_k), ordered by subtask_order if provided.
+        将子任务名称映射到其时间占比（ᾱ_k）的字典，若提供 subtask_order 则按其排序。
     """
     subtask_proportions: dict[str, list[float]] = {}
 
@@ -154,7 +154,7 @@ def compute_temporal_proportions(
     if total > 0:
         avg_proportions = {name: prop / total for name, prop in avg_proportions.items()}
 
-    # Reorder according to subtask_order if provided
+    # 若提供了 subtask_order，则按其重新排序
     if subtask_order:
         avg_proportions = {
             name: avg_proportions.get(name, 0.0) for name in subtask_order if name in avg_proportions
@@ -249,7 +249,7 @@ def create_sarm_prompt(subtask_list: list[str]) -> str:
 
 
 class VideoAnnotator:
-    """Annotates robot manipulation videos using local Qwen3-VL model on GPU"""
+    """使用本地 GPU 上的 Qwen3-VL 模型对机器人操作视频进行标注"""
 
     def __init__(
         self,
@@ -261,21 +261,21 @@ class VideoAnnotator:
         processor: AutoProcessor | None = None,  # noqa: F821
     ):
         """
-        Initialize the video annotator with local model.
+        使用本地模型初始化视频标注器。
 
         Args:
-            subtask_list: List of allowed subtask names (for consistency)
-            model_name: Hugging Face model name (default: Qwen/Qwen3-VL-30B-A3B-Instruct)
-            device: Device to use (cuda, cpu)
-            torch_dtype: Data type for model (bfloat16, float16, float32)
-            model: Pre-loaded model instance (optional, to share between annotators)
-            processor: Pre-loaded processor instance (optional, to share between annotators)
+            subtask_list: 允许的子任务名称列表（用于保持一致性）
+            model_name: Hugging Face 模型名称（默认：Qwen/Qwen3-VL-30B-A3B-Instruct）
+            device: 使用的设备（cuda、cpu）
+            torch_dtype: 模型的数据类型（bfloat16、float16、float32）
+            model: 预加载的模型实例（可选，用于在标注器之间共享）
+            processor: 预加载的处理器实例（可选，用于在标注器之间共享）
         """
         self.subtask_list = subtask_list
         self.prompt = create_sarm_prompt(subtask_list)
         self.device = device
 
-        # Use provided model/processor or load new ones
+        # 使用提供的 model/processor 或加载新的
         if model is not None and processor is not None:
             self.model = model
             self.processor = processor
@@ -297,24 +297,24 @@ class VideoAnnotator:
         self, file_path: Path, start_timestamp: float, end_timestamp: float, target_fps: int = 1
     ) -> Path:
         """
-        Extract a specific episode segment from concatenated video.
-        Uses minimal compression to preserve quality for local inference.
+        从拼接后的视频中提取指定的 episode 片段。
+        使用最小压缩以保留本地推理的质量。
 
         Args:
-            file_path: Path to the concatenated video file
-            start_timestamp: Starting timestamp in seconds (within this video file)
-            end_timestamp: Ending timestamp in seconds (within this video file)
-            target_fps: Target FPS (default: 1 for faster processing)
+            file_path: 拼接后视频文件的路径
+            start_timestamp: 起始时间戳（秒）（在此视频文件内）
+            end_timestamp: 结束时间戳（秒）（在此视频文件内）
+            target_fps: 目标帧率（默认：1，以加快处理速度）
 
         Returns:
-            Path to extracted video file
+            提取出的视频文件路径
         """
-        # Create temporary file for extracted video
+        # 为提取的视频创建临时文件
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
             tmp_path = Path(tmp_file.name)
 
         try:
-            # Check if ffmpeg is available
+            # 检查 ffmpeg 是否可用
             subprocess.run(  # nosec B607
                 ["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
             )
@@ -322,12 +322,12 @@ class VideoAnnotator:
             raise RuntimeError("ffmpeg not found, cannot extract episode segment") from err
 
         try:
-            # Calculate duration
+            # 计算时长
             duration = end_timestamp - start_timestamp
 
             print(f"Extracting episode: {start_timestamp:.1f}s-{end_timestamp:.1f}s ({duration:.1f}s)")
 
-            # Use ffmpeg to extract segment with minimal quality loss
+            # 使用 ffmpeg 以最小质量损失提取片段
             cmd = [
                 "ffmpeg",
                 "-i",
@@ -351,17 +351,17 @@ class VideoAnnotator:
 
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-            # Verify the output file was created and is not empty
+            # 验证输出文件已创建且非空
             if not tmp_path.exists() or tmp_path.stat().st_size == 0:
                 print("Video extraction failed (0 bytes) - skipping episode")
                 if tmp_path.exists():
                     tmp_path.unlink()
                 raise RuntimeError("FFmpeg produced empty video file")
 
-            # Show extraction results
+            # 显示提取结果
             file_size_mb = tmp_path.stat().st_size / (1024 * 1024)
 
-            # Fail if file is too small (< 100KB likely means extraction failed)
+            # 如果文件太小则失败（< 100KB 很可能意味着提取失败）
             if file_size_mb < 0.1:
                 print(f"Extracted video too small ({file_size_mb:.2f}MB) - skipping episode")
                 tmp_path.unlink()
@@ -382,7 +382,7 @@ class VideoAnnotator:
         end_timestamp: float | None = None,
         max_retries: int = 3,
     ) -> SubtaskAnnotation:
-        """Annotate a video segment using local GPU."""
+        """使用本地 GPU 标注视频片段。"""
         from qwen_vl_utils import process_vision_info
 
         file_path = Path(file_path)
@@ -437,7 +437,7 @@ class VideoAnnotator:
                         skip_special_tokens=True,
                     )[0].strip()
 
-                    # Extract JSON
+                    # 提取 JSON
                     if "```json" in response:
                         response = response.split("```json")[1].split("```")[0]
                     elif "```" in response:
@@ -460,7 +460,7 @@ class VideoAnnotator:
 
 
 def display_annotation(annotation: SubtaskAnnotation, episode_idx: int, fps: int, prefix: str = ""):
-    """Display annotation summary."""
+    """显示标注摘要。"""
     subtask_summary = ", ".join(
         f"{s.name}({s.timestamps.start}-{s.timestamps.end})" for s in annotation.subtasks
     )
@@ -468,7 +468,7 @@ def display_annotation(annotation: SubtaskAnnotation, episode_idx: int, fps: int
 
 
 def timestamp_to_seconds(timestamp: str) -> float:
-    """Convert MM:SS or SS timestamp to seconds"""
+    """将 MM:SS 或 SS 格式的时间戳转换为秒数"""
     parts = timestamp.split(":")
     if len(parts) == 2:
         return int(parts[0]) * 60 + int(parts[1])
@@ -477,7 +477,7 @@ def timestamp_to_seconds(timestamp: str) -> float:
 
 
 def extract_frame(video_path: Path, timestamp: float) -> np.ndarray | None:
-    """Extract a single frame from video at given timestamp."""
+    """从视频中提取给定时间戳的单帧。"""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -488,7 +488,7 @@ def extract_frame(video_path: Path, timestamp: float) -> np.ndarray | None:
 
 
 def draw_timeline(ax, subtasks, total_duration, colors):
-    """Draw a timeline with color-coded subtask segments."""
+    """绘制带有颜色编码子任务片段的时间轴。"""
     import matplotlib.patches as mpatches
 
     bar_height, bar_y = 0.6, 0.5
@@ -510,7 +510,7 @@ def draw_timeline(ax, subtasks, total_duration, colors):
         )
         ax.add_patch(rect)
 
-        # Add label if segment is wide enough
+        # 若片段足够宽，则添加标签
         duration = end - start
         if duration > total_duration * 0.06:
             ax.text(
@@ -560,7 +560,7 @@ def visualize_episode(
     video_key: str,
     ann_type: str,
 ):
-    """Create visualization for a single episode with frames and timeline."""
+    """为单个 episode 创建包含帧和时间轴的可视化。"""
     import matplotlib.pyplot as plt
 
     if annotation is None:
@@ -575,7 +575,7 @@ def visualize_episode(
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(subtasks), 10)))
     total_duration = timestamp_to_seconds(subtasks[-1].timestamps.end)
 
-    # Extract middle frame from each subtask
+    # 从每个子任务中提取中间帧
     sample_frames, frame_times = [], []
     for subtask in subtasks:
         start = timestamp_to_seconds(subtask.timestamps.start)
@@ -584,7 +584,7 @@ def visualize_episode(
         frame_times.append(mid)
         sample_frames.append(extract_frame(video_path, video_start + mid))
 
-    # Create figure
+    # 创建画布
     fig_width = max(16, len(subtasks) * 2.5)
     fig = plt.figure(figsize=(fig_width, 10))
     fig.patch.set_facecolor("#1a1a2e")
@@ -617,7 +617,7 @@ def visualize_episode(
         color="#888888",
     )
 
-    # Plot frames
+    # 绘制帧
     for i, (frame, subtask) in enumerate(zip(sample_frames, subtasks, strict=True)):
         ax = fig.add_subplot(gs[0, i])
         ax.set_facecolor("#16213e")
@@ -639,7 +639,7 @@ def visualize_episode(
             transform=ax.transAxes,
         )
 
-    # Plot timeline
+    # 绘制时间轴
     ax_timeline = fig.add_subplot(gs[1, :])
     ax_timeline.set_facecolor("#16213e")
     draw_timeline(ax_timeline, subtasks, total_duration, colors)
@@ -661,24 +661,24 @@ def visualize_annotations(
     episode_indices: list[int] | None = None,
 ):
     """
-    Visualize subtask annotations for a set of episodes.
+    可视化一组 episode 的子任务标注。
 
     Args:
-        dataset: LeRobotDataset instance
-        sparse_annotations: Dict mapping episode index to sparse annotations
-        dense_annotations: Dict mapping episode index to dense annotations (or None)
-        video_key: Camera/video key to use
-        output_dir: Directory to save visualization images
-        num_episodes: Number of episodes to visualize (ignored if episode_indices provided)
-        annotation_type: "sparse", "dense", or "both"
-        episode_indices: Specific episode indices to visualize (optional)
+        dataset: LeRobotDataset 实例
+        sparse_annotations: 将 episode 索引映射到稀疏标注的字典
+        dense_annotations: 将 episode 索引映射到密集标注的字典（或 None）
+        video_key: 使用的相机/视频键
+        output_dir: 保存可视化图像的目录
+        num_episodes: 可视化的 episode 数（若提供 episode_indices 则忽略）
+        annotation_type: "sparse"、"dense" 或 "both"
+        episode_indices: 要可视化的特定 episode 索引（可选）
     """
-    # Determine available episodes based on annotation type
+    # 根据标注类型确定可用的 episode
     if annotation_type == "sparse":
         available = set(sparse_annotations.keys())
     elif annotation_type == "dense":
         available = set(dense_annotations.keys()) if dense_annotations else set()
-    else:  # both
+    else:  # 两者
         sparse_set = set(sparse_annotations.keys())
         dense_set = set(dense_annotations.keys()) if dense_annotations else set()
         available = sparse_set | dense_set
@@ -687,7 +687,7 @@ def visualize_annotations(
         print("Error: No annotations found to visualize.")
         return
 
-    # Select episodes to visualize
+    # 选择要可视化的 episode
     if episode_indices:
         episodes = sorted([e for e in episode_indices if e in available])
         missing = set(episode_indices) - available
@@ -698,7 +698,7 @@ def visualize_annotations(
     print(f"Visualizing {len(episodes)} episodes: {episodes}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate visualizations
+    # 生成可视化
     for i, ep_idx in enumerate(episodes, 1):
         print(f"Processing episode {ep_idx} ({i}/{len(episodes)})")
         video_path = dataset.root / dataset.meta.get_video_file_path(ep_idx, video_key)
@@ -710,7 +710,7 @@ def visualize_annotations(
         video_end = float(dataset.meta.episodes[f"videos/{video_key}/to_timestamp"][ep_idx])
 
         if annotation_type == "both":
-            # Visualize both sparse and dense
+            # 同时可视化稀疏和密集标注
             for ann_type, annotations in [("sparse", sparse_annotations), ("dense", dense_annotations)]:
                 if annotations and ep_idx in annotations:
                     output_path = output_dir / f"episode_{ep_idx:04d}_{ann_type}.png"
@@ -745,7 +745,7 @@ def visualize_annotations(
 def save_annotations_to_dataset(
     dataset_path: Path, annotations: dict[int, SubtaskAnnotation], fps: int, prefix: str = "sparse"
 ):
-    """Save annotations to LeRobot dataset parquet format."""
+    """将标注保存为 LeRobot 数据集 parquet 格式。"""
     from lerobot.datasets import DEFAULT_EPISODES_PATH, load_episodes
 
     episodes_dataset = load_episodes(dataset_path)

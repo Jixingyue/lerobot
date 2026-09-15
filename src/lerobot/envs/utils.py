@@ -35,12 +35,12 @@ from .configs import EnvConfig
 
 
 def parse_camera_names(camera_name: str | Sequence[str]) -> list[str]:
-    """Normalize ``camera_name`` into a non-empty list of strings.
+    """将 ``camera_name`` 规范化为非空的字符串列表。
 
-    Accepts a comma-separated string (``"cam_a,cam_b"``) or a sequence of
-    strings (tuples/lists). Whitespace is stripped; empty entries are
-    dropped. Raises ``TypeError`` for unsupported input types and
-    ``ValueError`` when the normalized list is empty.
+    接受逗号分隔的字符串（``"cam_a,cam_b"``）或字符串序列
+    （元组/列表）。会去除空白；空条目会被丢弃。
+    对于不支持的输入类型抛出 ``TypeError``，
+    当规范化后的列表为空时抛出 ``ValueError``。
     """
     if isinstance(camera_name, str):
         cams = [c.strip() for c in camera_name.split(",") if c.strip()]
@@ -66,14 +66,14 @@ def _convert_nested_dict(d):
 
 
 def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Tensor]:
-    # TODO(jadechoghari, imstevenpmwork): refactor this to use features from the environment (no hardcoding)
-    """Convert environment observation to LeRobot format observation.
+    # TODO(jadechoghari, imstevenpmwork): 重构此处以使用环境提供的 features（不要硬编码）
+    """将环境观测转换为 LeRobot 格式的观测。
     Args:
-        observation: Dictionary of observation batches from a Gym vector environment.
+        observation: 来自 Gym 向量化环境的观测批次字典。
     Returns:
-        Dictionary of observation batches with keys renamed to LeRobot format and values as tensors.
+        观测批次字典，其键已重命名为 LeRobot 格式，值为张量。
     """
-    # map to expected inputs for the policy
+    # 映射为策略所期望的输入
     return_observations = {}
     if "pixels" in observations:
         if isinstance(observations["pixels"], dict):
@@ -82,21 +82,21 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
             imgs = {OBS_IMAGE: observations["pixels"]}
 
         for imgkey, img in imgs.items():
-            # TODO(aliberts, rcadene): use transforms.ToTensor()?
+            # TODO(aliberts, rcadene): 使用 transforms.ToTensor()？
             img_tensor = torch.from_numpy(img)
 
-            # When preprocessing observations in a non-vectorized environment, we need to add a batch dimension.
-            # This is the case for human-in-the-loop RL where there is only one environment.
+            # 在非向量化环境中预处理观测时，我们需要添加一个批次维度。
+            # human-in-the-loop RL 就是这种情况，那里只有一个环境。
             if img_tensor.ndim == 3:
                 img_tensor = img_tensor.unsqueeze(0)
-            # sanity check that images are channel last
+            # 合理性检查：图像是通道在最后（channel last）
             _, h, w, c = img_tensor.shape
             assert c < h and c < w, f"expect channel last images, but instead got {img_tensor.shape=}"
 
-            # sanity check that images are uint8
+            # 合理性检查：图像是 uint8
             assert img_tensor.dtype == torch.uint8, f"expect torch.uint8, but instead {img_tensor.dtype=}"
 
-            # convert to channel first of type float32 in range [0,1]
+            # 转换为通道在前（channel first）、float32 类型、范围 [0,1]
             img_tensor = einops.rearrange(img_tensor, "b h w c -> b c h w").contiguous()
             img_tensor = img_tensor.type(torch.float32)
             img_tensor /= 255
@@ -119,15 +119,15 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
     if "robot_state" in observations:
         return_observations[f"{OBS_STR}.robot_state"] = _convert_nested_dict(observations["robot_state"])
 
-    # Handle IsaacLab Arena format: observations have 'policy' and 'camera_obs' keys
+    # 处理 IsaacLab Arena 格式：观测包含 'policy' 和 'camera_obs' 键
     if "policy" in observations:
         return_observations[f"{OBS_STR}.policy"] = observations["policy"]
 
     if "camera_obs" in observations:
         return_observations[f"{OBS_STR}.camera_obs"] = observations["camera_obs"]
 
-    # Pass through any remaining ndarray/tensor keys not already handled above,
-    # so env plugins can expose extra observation keys via get_env_processors().
+    # 透传上面尚未处理的任何剩余 ndarray/tensor 键，
+    # 这样环境插件就可以通过 get_env_processors() 暴露额外的观测键。
     _handled = {"pixels", "environment_state", "agent_pos", "robot_state", "policy", "camera_obs"}
     for key, value in observations.items():
         if key in _handled:
@@ -150,8 +150,8 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
 
 
 def env_to_policy_features(env_cfg: EnvConfig) -> dict[str, PolicyFeature]:
-    # TODO(jadechoghari, imstevenpmwork): remove this hardcoding of keys and just use the nested keys as is
-    # (need to also refactor preprocess_observation and externalize normalization from policies)
+    # TODO(jadechoghari, imstevenpmwork): 移除这种键的硬编码，直接使用嵌套键原样传递
+    # （还需要重构 preprocess_observation，并将归一化从策略中外置出来）
     policy_features = {}
     for key, ft in env_cfg.features.items():
         if ft.type is FeatureType.VISUAL:
@@ -177,37 +177,37 @@ def _sub_env_has_attr(env: gym.vector.VectorEnv, attr: str) -> bool:
         return False
 
 
-# Passed in `reset(options=...)` by `rollout()` to mark the start of a new rollout.
-# FreezeAfterEpisodeEnd thaws only on this, so Gymnasium's argument-less autoreset
-# cannot be mistaken for a genuine new episode.
+# 由 `rollout()` 在 `reset(options=...)` 中传入，用于标记新 rollout 的开始。
+# FreezeAfterEpisodeEnd 仅在收到此选项时解冻，因此 Gymnasium 无参数的自动重置
+# 不会被误认为真正的新 episode。
 NEW_ROLLOUT_OPTION = "lerobot_new_rollout"
 
 
 class FreezeAfterEpisodeEnd(gym.Wrapper):
-    """Stop doing simulator work once a sub-env's episode has ended.
+    """一旦某个子环境的 episode 结束，就停止执行模拟器工作。
 
-    `rollout()` runs `while not np.all(done)` with `done` latched, so a sub-env that
-    terminates early keeps being stepped -- physics and offscreen rendering included --
-    until the slowest sub-env in the batch finishes. The batch runs for
-    `max(episode_lengths)` iterations to complete work that only needs
-    `mean(episode_lengths)`.
+    `rollout()` 在 `done` 被锁存的情况下运行 `while not np.all(done)`，因此提前
+    终止的子环境仍会持续被 step —— 包括物理模拟和离屏渲染 ——
+    直到批次中最慢的子环境结束。批次会运行
+    `max(episode_lengths)` 次迭代，去完成只需要
+    `mean(episode_lengths)` 的工作。
 
-    This caches the terminal transition and replays it for any further `step()` or
-    autoreset, so a finished sub-env costs nothing. The rollout already ignores those
-    transitions.
+    本包装器缓存终止时的 transition，并在后续任何 `step()` 或自动重置时
+    重放它，因此已完成的子环境不再产生任何开销。rollout 本来就会忽略
+    这些 transition。
 
-    The freeze survives Gymnasium's autoreset deliberately. Under
-    `AutoresetMode.NEXT_STEP` the vector env resets a terminated sub-env on the
-    following step and runs it through an entire extra episode that the rollout
-    discards, because `done` stays latched. Absorbing that reset is most of the saving.
+    冻结状态特意在 Gymnasium 的自动重置后依然保持。在
+    `AutoresetMode.NEXT_STEP` 下，向量化环境会在下一步重置已终止的子环境，
+    并让它跑完整个额外的 episode —— 由于 `done` 保持锁存，
+    rollout 会丢弃这个 episode。吸收掉那次重置是节省开销的大头。
 
-    Only an explicit reset carrying `NEW_ROLLOUT_OPTION` thaws it, so the signal is
-    explicit rather than inferred: Gymnasium's autoreset calls `reset()` with no
-    arguments, but so would a caller passing `seeds=None`, and confusing the two would
-    strand an env frozen for a whole rollout.
+    只有携带 `NEW_ROLLOUT_OPTION` 的显式重置才能解冻，因此该信号是
+    显式的而非推断出来的：Gymnasium 的自动重置调用 `reset()` 时不带
+    参数，但传入 `seeds=None` 的调用者也是如此，若混淆两者会导致
+    某个环境在整个 rollout 期间一直处于冻结状态。
 
-    `AutoresetMode.DISABLED` is not an alternative here — Gymnasium asserts that no
-    terminated env is ever stepped in that mode, so the wrapper is never reached.
+    `AutoresetMode.DISABLED` 在这里不是替代方案 —— Gymnasium 断言在该模式下
+    已终止的环境绝不会被 step，因此这个包装器永远不会被触发。
     """
 
     def __init__(self, env: gym.Env):
@@ -216,8 +216,8 @@ class FreezeAfterEpisodeEnd(gym.Wrapper):
 
     def reset(self, *, seed=None, options=None):
         if self._frozen is not None and not (options or {}).get(NEW_ROLLOUT_OPTION):
-            # Gymnasium's autoreset for a sub-env the rollout has already finished with.
-            # Replay the terminal observation instead of rebuilding the simulation.
+            # Gymnasium 对 rollout 已经完成的子环境进行自动重置。
+            # 重放终止时的观测，而不是重建模拟。
             obs, _, _, _, info = self._frozen
             return obs, info
         self._frozen = None
@@ -228,8 +228,8 @@ class FreezeAfterEpisodeEnd(gym.Wrapper):
             return self._frozen
         obs, reward, terminated, truncated, info = self.env.step(action)
         if terminated or truncated:
-            # Zero the reward on replay so a frozen sub-env cannot inflate a return if a
-            # caller sums rewards over the padded tail.
+            # 重放时将奖励置零，这样即使调用者对填充的尾部累加奖励，
+            # 冻结的子环境也不会虚增回报。
             self._frozen = (obs, 0.0, terminated, truncated, info)
         return obs, reward, terminated, truncated, info
 
@@ -239,7 +239,7 @@ class FreezeAfterEpisodeEnd(gym.Wrapper):
 
 
 def freeze_after_episode_end(env_fn: Callable[[], gym.Env]) -> Callable[[], gym.Env]:
-    """Wrap an env factory so the built env freezes once its episode ends."""
+    """包装一个环境工厂，使构建出的环境在其 episode 结束后冻结。"""
 
     def _fn() -> gym.Env:
         return FreezeAfterEpisodeEnd(env_fn())
@@ -248,13 +248,13 @@ def freeze_after_episode_end(env_fn: Callable[[], gym.Env]) -> Callable[[], gym.
 
 
 class _LazyAsyncVectorEnv:
-    """Defers AsyncVectorEnv creation until first use.
+    """将 AsyncVectorEnv 的创建推迟到首次使用时。
 
-    Creating all tasks' AsyncVectorEnvs upfront spawns N_tasks × n_envs worker
-    processes, all of which allocate EGL/GPU resources immediately. Since tasks
-    are evaluated sequentially, only one task's workers need to be alive at a
-    time. This wrapper stores the factory functions and creates the real
-    AsyncVectorEnv on first reset()/step()/call(), keeping peak process count = n_envs.
+    预先创建所有任务的 AsyncVectorEnv 会派生 N_tasks × n_envs 个 worker
+    进程，它们全都会立即分配 EGL/GPU 资源。由于任务是
+    顺序评估的，同一时间只需要一个任务的 worker 存活。
+    本包装器保存工厂函数，并在首次 reset()/step()/call() 时创建真正的
+    AsyncVectorEnv，使进程数峰值保持为 n_envs。
     """
 
     def __init__(
@@ -336,7 +336,7 @@ def _close_single_env(env: Any) -> None:
 
 @singledispatch
 def close_envs(obj: Any) -> None:
-    """Default: raise if the type is not recognized."""
+    """默认：当类型无法识别时抛出异常。"""
     raise NotImplementedError(f"close_envs not implemented for type {type(obj).__name__}")
 
 
@@ -365,7 +365,7 @@ def _(env: gym.Env) -> None:
     _close_single_env(env)
 
 
-# helper to safely load a python file as a module
+# 辅助函数：安全地将 python 文件作为模块加载
 def _load_module_from_path(path: str, module_name: str | None = None):
     module_name = module_name or f"hub_env_{os.path.basename(path).replace('.', '_')}"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -376,13 +376,13 @@ def _load_module_from_path(path: str, module_name: str | None = None):
     return module
 
 
-# helper to parse hub string (supports "user/repo", "user/repo@rev", optional path)
-# examples:
-#   "user/repo" -> will look for env.py at repo root
-#   "user/repo@main:envs/my_env.py" -> explicit revision and path
+# 辅助函数：解析 hub 字符串（支持 "user/repo"、"user/repo@rev"，可选路径）
+# 示例：
+#   "user/repo" -> 将在仓库根目录查找 env.py
+#   "user/repo@main:envs/my_env.py" -> 显式指定 revision 和路径
 def _parse_hub_url(hub_uri: str):
-    # very small parser: [repo_id][@revision][:path]
-    # repo_id is required (user/repo or org/repo)
+    # 非常小的解析器：[repo_id][@revision][:path]
+    # repo_id 是必需的（user/repo 或 org/repo）
     revision = None
     file_path = "env.py"
     if "@" in hub_uri:
@@ -404,8 +404,8 @@ def _download_hub_file(
     hub_cache_dir: str | None,
 ) -> tuple[str, str, str, str]:
     """
-    Parse `cfg_str` (hub URL), enforce `trust_remote_code`, and return
-    (repo_id, file_path, local_file, revision).
+    解析 `cfg_str`（hub URL），强制执行 `trust_remote_code` 检查，并返回
+    (repo_id, file_path, local_file, revision)。
     """
     if not trust_remote_code:
         raise RuntimeError(
@@ -422,7 +422,7 @@ def _download_hub_file(
             repo_id=repo_id, filename=file_path, revision=revision, cache_dir=hub_cache_dir
         )
     except Exception as e:
-        # fallback to snapshot download
+        # 回退到 snapshot 下载
         snapshot_dir = snapshot_download(repo_id=repo_id, revision=revision, cache_dir=hub_cache_dir)
         local_file = os.path.join(snapshot_dir, file_path)
         if not os.path.exists(local_file):
@@ -435,7 +435,7 @@ def _download_hub_file(
 
 def _import_hub_module(local_file: str, repo_id: str) -> Any:
     """
-    Import the downloaded file as a module and surface helpful import error messages.
+    将已下载的文件作为模块导入，并呈现有用的导入错误信息。
     """
     module_name = f"hub_env_{repo_id.replace('/', '_')}"
     try:
@@ -455,14 +455,14 @@ def _import_hub_module(local_file: str, repo_id: str) -> Any:
 
 def _call_make_env(module: Any, n_envs: int, use_async_envs: bool, cfg: EnvConfig | None) -> Any:
     """
-    Ensure module exposes make_env and call it.
+    确保模块暴露了 make_env 并调用它。
     """
     if not hasattr(module, "make_env"):
         raise AttributeError(
             f"The hub module {getattr(module, '__name__', 'hub_module')} must expose `make_env(n_envs=int, use_async_envs=bool)`."
         )
     entry_fn = module.make_env
-    # Only pass cfg if it's not None (i.e., when an EnvConfig was provided, not a string hub ID)
+    # 仅当 cfg 不为 None 时才传入（即提供的是 EnvConfig 而非字符串形式的 hub ID 时）
     if cfg is not None:
         return entry_fn(n_envs=n_envs, use_async_envs=use_async_envs, cfg=cfg)
     else:
@@ -471,22 +471,22 @@ def _call_make_env(module: Any, n_envs: int, use_async_envs: bool, cfg: EnvConfi
 
 def _normalize_hub_result(result: Any) -> dict[str, dict[int, gym.vector.VectorEnv]]:
     """
-    Normalize possible return types from hub `make_env` into the mapping:
+    将 hub `make_env` 可能的返回类型规范化为如下映射：
       { suite_name: { task_id: vector_env } }
-    Accepts:
-      - dict (assumed already correct)
+    接受：
+      - dict（假定已经正确）
       - gym.vector.VectorEnv
-      - gym.Env (will be wrapped into SyncVectorEnv)
+      - gym.Env（会被包装为 SyncVectorEnv）
     """
     if isinstance(result, dict):
         return result
 
-    # VectorEnv: use its spec.id if available
+    # VectorEnv：如果可用则使用其 spec.id
     if isinstance(result, gym.vector.VectorEnv):
         suite_name = getattr(result, "spec", None) and getattr(result.spec, "id", None) or "hub_env"
         return {suite_name: {0: result}}
 
-    # Single Env: wrap into SyncVectorEnv
+    # 单个 Env：包装为 SyncVectorEnv
     if isinstance(result, gym.Env):
         vec = gym.vector.SyncVectorEnv([lambda: result])
         suite_name = getattr(result, "spec", None) and getattr(result.spec, "id", None) or "hub_env"

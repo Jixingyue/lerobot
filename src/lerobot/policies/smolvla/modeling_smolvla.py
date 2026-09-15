@@ -17,16 +17,16 @@
 """
 SmolVLA:
 
-[Paper](https://huggingface.co/papers/2506.01844)
+[论文](https://huggingface.co/papers/2506.01844)
 
-Designed by Hugging Face.
+由 Hugging Face 设计。
 
-Install smolvla extra dependencies:
+安装 smolvla 的额外依赖：
 ```bash
 pip install -e ".[smolvla]"
 ```
 
-Example of finetuning the smolvla pretrained model (`smolvla_base`):
+微调 smolvla 预训练模型（`smolvla_base`）的示例：
 ```bash
 lerobot-train \
 --policy.path=lerobot/smolvla_base \
@@ -35,8 +35,8 @@ lerobot-train \
 --steps=200000
 ```
 
-Example of finetuning a smolVLA. SmolVLA is composed of a pretrained VLM,
-and an action expert.
+微调 SmolVLA 的示例。SmolVLA 由一个预训练 VLM
+和一个动作专家（action expert）组成。
 ```bash
 lerobot-train \
 --policy.type=smolvla \
@@ -45,7 +45,7 @@ lerobot-train \
 --steps=200000
 ```
 
-Example of using the smolvla pretrained model outside LeRobot training framework:
+在 LeRobot 训练框架之外使用 smolvla 预训练模型的示例：
 ```python
 policy = SmolVLAPolicy.from_pretrained("lerobot/smolvla_base")
 ```
@@ -94,53 +94,52 @@ def unnormalize(x, min_val, max_val):
 
 
 def safe_arcsin(value):
-    # This ensures that the input stays within
-    # [−1,1] to avoid invalid values for arcsin
+    # 这可确保输入保持在
+    # [−1,1] 范围内，以避免 arcsin 出现无效值
     return torch.arcsin(torch.clamp(value, -1.0, 1.0))
 
 
 def aloha_gripper_to_angular(value):
-    # Aloha transforms the gripper positions into a linear space. The following code
-    # reverses this transformation to be consistent with smolvla which is pretrained in
-    # angular space.
+    # Aloha 将夹爪位置变换到一个线性空间。下面的代码
+    # 会逆转该变换，以与在角度空间中预训练的 smolvla 保持一致。
     #
-    # These values are coming from the Aloha code:
-    # PUPPET_GRIPPER_POSITION_OPEN, PUPPET_GRIPPER_POSITION_CLOSED
+    # 这些数值来自 Aloha 代码：
+    # PUPPET_GRIPPER_POSITION_OPEN、PUPPET_GRIPPER_POSITION_CLOSED
     value = unnormalize(value, min_val=0.01844, max_val=0.05800)
 
-    # This is the inverse of the angular to linear transformation inside the Interbotix code.
+    # 这是 Interbotix 代码中角度到线性变换的逆变换。
     def linear_to_radian(linear_position, arm_length, horn_radius):
         value = (horn_radius**2 + linear_position**2 - arm_length**2) / (2 * horn_radius * linear_position)
         return safe_arcsin(value)
 
-    # The constants are taken from the Interbotix code.
+    # 这些常量取自 Interbotix 代码。
     value = linear_to_radian(value, arm_length=0.036, horn_radius=0.022)
 
-    # Normalize to [0, 1].
-    # The values 0.4 and 1.5 were measured on an actual Trossen robot.
+    # 归一化到 [0, 1]。
+    # 数值 0.4 和 1.5 是在真实的 Trossen 机器人上测量得到的。
     return normalize(value, min_val=0.4, max_val=1.5)
 
 
 def aloha_gripper_from_angular(value):
-    # Convert from the gripper position used by smolvla to the gripper position that is used by Aloha.
-    # Note that the units are still angular but the range is different.
+    # 将 smolvla 使用的夹爪位置转换为 Aloha 使用的夹爪位置。
+    # 注意单位仍然是角度，只是取值范围不同。
 
-    # The values 0.4 and 1.5 were measured on an actual Trossen robot.
+    # 数值 0.4 和 1.5 是在真实的 Trossen 机器人上测量得到的。
     value = unnormalize(value, min_val=0.4, max_val=1.5)
 
-    # These values are coming from the Aloha code:
-    # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
+    # 这些数值来自 Aloha 代码：
+    # PUPPET_GRIPPER_JOINT_OPEN、PUPPET_GRIPPER_JOINT_CLOSE
     return normalize(value, min_val=-0.6213, max_val=1.4910)
 
 
 def aloha_gripper_from_angular_inv(value):
-    # Directly inverts the gripper_from_angular function.
+    # 直接求 gripper_from_angular 函数的逆。
     value = unnormalize(value, min_val=-0.6213, max_val=1.4910)
     return normalize(value, min_val=0.4, max_val=1.5)
 
 
 class SmolVLAPolicy(PreTrainedPolicy):
-    """Wrapper class around VLAFlowMatching model to train and run inference within LeRobot."""
+    """对 VLAFlowMatching 模型的封装类，用于在 LeRobot 中进行训练和推理。"""
 
     config_class = SmolVLAConfig
     name = "smolvla"
@@ -155,8 +154,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
     ):
         """
         Args:
-            config: Policy configuration class instance or None, in which case the default instantiation of
-                    the configuration class is used.
+            config: 策略配置类实例；若为 None，则使用该配置类的默认实例化结果。
         """
 
         require_package("transformers", extra="smolvla")
@@ -168,23 +166,23 @@ class SmolVLAPolicy(PreTrainedPolicy):
         self.reset()
 
     def reset(self):
-        """This should be called whenever the environment is reset."""
+        """每当环境重置时都应调用此方法。"""
         self._queues = {
             ACTION: deque(maxlen=self.config.n_action_steps),
         }
 
     def init_rtc_processor(self):
-        """Initialize RTC processor if RTC is enabled in config."""
+        """若配置中启用了 RTC，则初始化 RTC 处理器。"""
         self.rtc_processor = None
 
-        # Lets create processor if the config provided
-        # If RTC is not enabled - we still can track the denoising data
+        # 如果提供了配置，就创建处理器
+        # 即使未启用 RTC，我们仍然可以跟踪去噪数据
         if self.config.rtc_config is not None:
             self.rtc_processor = RTCProcessor(self.config.rtc_config)
 
-            # In case of calling init_rtc_processor after the model is created
-            # We need to set the rtc_processor to the model
-            # During the normal initialization process the model is not created yet
+            # 处理在模型创建之后调用 init_rtc_processor 的情况
+            # 此时需要把 rtc_processor 设置到模型上
+            # 在正常的初始化流程中，模型此时尚未创建
             model_value = getattr(self, "model", None)
             if model_value is not None:
                 model_value.rtc_processor = self.rtc_processor
@@ -195,11 +193,10 @@ class SmolVLAPolicy(PreTrainedPolicy):
     def _get_action_chunk(
         self, batch: dict[str, Tensor], noise: Tensor | None = None, **kwargs: Unpack[ActionSelectKwargs]
     ) -> Tensor:
-        # TODO: Check if this for loop is needed.
-        # Context: In fact, self.queues contains only ACTION field, and in inference, we don't have action in the batch
-        # In the case of offline inference, we have the action in the batch
-        # that why without the k != ACTION check, it will raise an error because we are trying to stack
-        # on an empty container.
+        # TODO：检查是否需要这个 for 循环。
+        # 背景：实际上 self.queues 只包含 ACTION 字段，而推理时 batch 中并没有 action；
+        # 在离线推理的情况下，batch 中才有 action。
+        # 这就是为什么如果不加上 k != ACTION 的判断，会因为试图在空容器上 stack 而报错。
         for k in batch:
             if k in self._queues and k != ACTION:
                 batch[k] = torch.stack(list(self._queues[k]), dim=1)
@@ -213,7 +210,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
             images, img_masks, lang_tokens, lang_masks, state, noise=noise, **kwargs
         )
 
-        # Unpad actions
+        # 去除填充（unpad）动作
         original_action_dim = self.config.action_feature.shape[0]
         actions = actions[:, :, :original_action_dim]
 
@@ -244,11 +241,10 @@ class SmolVLAPolicy(PreTrainedPolicy):
     def select_action(
         self, batch: dict[str, Tensor], noise: Tensor | None = None, **kwargs: Unpack[ActionSelectKwargs]
     ) -> Tensor:
-        """Select a single action given environment observations.
+        """根据环境观测选择单个动作。
 
-        This method wraps `select_actions` in order to return one action at a time for execution in the
-        environment. It works by managing the actions in a queue and only calling `select_actions` when the
-        queue is empty.
+        该方法封装了 `select_actions`，以便每次返回一个动作供环境中执行。
+        它通过队列来管理动作，并且只在队列为空时才调用 `select_actions`。
         """
 
         assert not self._rtc_enabled(), (
@@ -262,8 +258,8 @@ class SmolVLAPolicy(PreTrainedPolicy):
         if self._check_get_actions_condition():
             actions = self._get_action_chunk(batch, noise)
 
-            # `self.predict_action_chunk` returns a (batch_size, n_action_steps, action_dim) tensor, but the queue
-            # effectively has shape (n_action_steps, batch_size, *), hence the transpose.
+            # `self.predict_action_chunk` 返回形状为 (batch_size, n_action_steps, action_dim) 的张量，
+            # 但队列实际采用的形状是 (n_action_steps, batch_size, *)，因此这里需要转置。
             self._queues[ACTION].extend(actions.transpose(0, 1)[: self.config.n_action_steps])
 
         return self._queues[ACTION].popleft()
@@ -277,15 +273,15 @@ class SmolVLAPolicy(PreTrainedPolicy):
     def forward(
         self, batch: dict[str, Tensor], noise=None, time=None, reduction: str = "mean"
     ) -> dict[str, Tensor]:
-        """Do a full training forward pass to compute the loss.
+        """执行完整的训练前向传播以计算损失。
 
         Args:
-            batch: Training batch containing observations and actions.
-            noise: Optional noise tensor for flow matching.
-            time: Optional time tensor for flow matching.
-            reduction: How to reduce the loss. Options:
-                - "mean": Return scalar mean loss (default, backward compatible)
-                - "none": Return per-sample losses of shape (batch_size,) for RA-BC weighting
+            batch: 包含观测和动作的训练批次。
+            noise: 可选的 flow matching 噪声张量。
+            time: 可选的 flow matching 时间张量。
+            reduction: 损失的归约方式。可选值：
+                - "mean"：返回标量平均损失（默认，向后兼容）
+                - "none"：返回形状为 (batch_size,) 的逐样本损失，用于 RA-BC 加权
         """
         if self.config.adapt_to_pi_aloha:
             batch[OBS_STATE] = self._pi_aloha_decode_state(batch[OBS_STATE])
@@ -308,12 +304,12 @@ class SmolVLAPolicy(PreTrainedPolicy):
             losses = losses * in_episode_bound.unsqueeze(-1)
             loss_dict["losses_after_in_ep_bound"] = losses.clone().mean().item()
 
-        # Remove padding
+        # 移除填充
         losses = losses[:, :, : self.config.max_action_dim]
         loss_dict["losses_after_rm_padding"] = losses.clone().mean().item()
 
         if reduction == "none":
-            # Return per-sample losses (B,) by averaging over valid (time, action) entries
+            # 通过对有效的 (time, action) 条目求平均，返回形状为 (B,) 的逐样本损失
             if actions_is_pad is None:
                 per_sample_loss = losses.mean(dim=(1, 2))
             else:
@@ -322,7 +318,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
             loss_dict["loss"] = per_sample_loss.mean().item()
             return per_sample_loss, loss_dict
         else:
-            # Default: return scalar mean loss over valid (time, action) entries
+            # 默认：对有效的 (time, action) 条目求平均，返回标量平均损失
             if actions_is_pad is None:
                 loss = losses.mean()
             else:
@@ -332,8 +328,8 @@ class SmolVLAPolicy(PreTrainedPolicy):
             return loss, loss_dict
 
     def prepare_images(self, batch):
-        """Apply SmolVLA preprocessing to the images, like resizing to 224x224 and padding to keep aspect ratio, and
-        convert pixel range from [0.0, 1.0] to [-1.0, 1.0] as requested by SigLIP.
+        """对图像应用 SmolVLA 预处理，例如将尺寸调整为 224x224 并通过填充保持宽高比，
+        同时按照 SigLIP 的要求将像素范围从 [0.0, 1.0] 转换到 [-1.0, 1.0]。
         """
         images = []
         img_masks = []
@@ -344,11 +340,11 @@ class SmolVLAPolicy(PreTrainedPolicy):
             raise ValueError(
                 f"All image features are missing from the batch. At least one expected. (batch: {batch.keys()}) (image_features:{self.config.image_features})"
             )
-        # Preprocess image features present in the batch
+        # 对批次中存在的图像特征进行预处理
         for key in present_img_keys:
             img = batch[key][:, -1, :, :, :] if batch[key].ndim == 5 else batch[key]
             if self.config.resize_imgs_with_padding is not None:
-                # SmolVLA stores the target as (width, height); the shared helper expects (height, width).
+                # SmolVLA 以 (width, height) 存储目标尺寸，而共享的辅助函数要求 (height, width)。
                 img = resize_with_pad(
                     img,
                     self.config.resize_imgs_with_padding[1],
@@ -356,7 +352,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
                     pad_value=0,
                 )
 
-            # Normalize from range [0,1] to [-1,1] as expacted by siglip
+            # 按 siglip 的要求将范围从 [0,1] 归一化到 [-1,1]
             img = img * 2.0 - 1.0
 
             bsize = img.shape[0]
@@ -368,8 +364,8 @@ class SmolVLAPolicy(PreTrainedPolicy):
             images.append(img)
             img_masks.append(mask)
 
-        # Create image features not present in the batch
-        # as fully 0 padded images.
+        # 将批次中不存在的图像特征创建为
+        # 完全以 0 填充的图像。
         for num_empty_cameras in range(len(missing_img_keys)):
             if num_empty_cameras >= self.config.empty_cameras:
                 break
@@ -380,45 +376,45 @@ class SmolVLAPolicy(PreTrainedPolicy):
         return images, img_masks
 
     def _pi_aloha_decode_state(self, state):
-        # Flip the joints.
+        # 翻转关节。
         for motor_idx in [1, 2, 8, 9]:
             state[:, motor_idx] *= -1
-        # Reverse the gripper transformation that is being applied by the Aloha runtime.
+        # 逆转 Aloha 运行时所应用的夹爪变换。
         for motor_idx in [6, 13]:
             state[:, motor_idx] = aloha_gripper_to_angular(state[:, motor_idx])
         return state
 
     def _pi_aloha_encode_actions(self, actions):
-        # Flip the joints.
+        # 翻转关节。
         for motor_idx in [1, 2, 8, 9]:
             actions[:, :, motor_idx] *= -1
-        # Reverse the gripper transformation that is being applied by the Aloha runtime.
+        # 逆转 Aloha 运行时所应用的夹爪变换。
         for motor_idx in [6, 13]:
             actions[:, :, motor_idx] = aloha_gripper_from_angular(actions[:, :, motor_idx])
         return actions
 
     def _pi_aloha_encode_actions_inv(self, actions):
-        # Flip the joints again.
+        # 再次翻转关节。
         for motor_idx in [1, 2, 8, 9]:
             actions[:, :, motor_idx] *= -1
-        # Reverse the gripper transformation that is being applied by the Aloha runtime.
+        # 逆转 Aloha 运行时所应用的夹爪变换。
         for motor_idx in [6, 13]:
             actions[:, :, motor_idx] = aloha_gripper_from_angular_inv(actions[:, :, motor_idx])
         return actions
 
     def prepare_state(self, batch):
-        """Pad state"""
+        """对状态进行填充"""
         state = batch[OBS_STATE][:, -1, :] if batch[OBS_STATE].ndim > 2 else batch[OBS_STATE]
         state = pad_vector(state, self.config.max_state_dim)
         return state
 
     def prepare_action(self, batch):
-        """Pad action"""
+        """对动作进行填充"""
         actions = pad_vector(batch[ACTION], self.config.max_action_dim)
         return actions
 
     def _get_default_peft_targets(self) -> dict[str, any]:
-        """Return default PEFT target modules for SmolVLA fine-tuning."""
+        """返回 SmolVLA 微调所用的默认 PEFT 目标模块。"""
         common_projections = (
             "state_proj|action_in_proj|action_out_proj|action_time_mlp_in|action_time_mlp_out"
         )
@@ -429,7 +425,7 @@ class SmolVLAPolicy(PreTrainedPolicy):
         }
 
     def _validate_peft_config(self, peft_config) -> None:
-        """Validate PEFT configuration for SmolVLA."""
+        """校验 SmolVLA 的 PEFT 配置。"""
         super()._validate_peft_config(peft_config)
         if not self.config.load_vlm_weights:
             import logging
@@ -442,23 +438,23 @@ class SmolVLAPolicy(PreTrainedPolicy):
 
 def pad_tensor(tensor, max_len, pad_value=0):
     """
-    Efficiently pads a tensor along sequence dimension to match max_len.
+    沿序列维度高效填充张量，使其长度达到 max_len。
 
     Args:
-        tensor (torch.Tensor): Shape (B, L, ...) or (B, L).
-        max_len (int): Fixed sequence length.
-        pad_value (int/float): Value for padding.
+        tensor (torch.Tensor): 形状为 (B, L, ...) 或 (B, L)。
+        max_len (int): 固定的序列长度。
+        pad_value (int/float): 填充所用的值。
 
     Returns:
-        torch.Tensor: Shape (B, max_len, ...) or (B, max_len).
+        torch.Tensor: 形状为 (B, max_len, ...) 或 (B, max_len)。
     """
     b, d = tensor.shape[:2]
 
-    # Create a padded tensor of max_len and copy the existing values
+    # 创建长度为 max_len 的填充张量，并把已有值拷贝进去
     padded_tensor = torch.full(
         (b, max_len, *tensor.shape[2:]), pad_value, dtype=tensor.dtype, device=tensor.device
     )
-    padded_tensor[:, :d] = tensor  # Efficient in-place copy
+    padded_tensor[:, :d] = tensor  # 高效的原地拷贝
 
     return padded_tensor
 
@@ -469,7 +465,7 @@ class VLAFlowMatching(nn.Module):
 
     [Paper]()
 
-    Designed by Hugging Face.
+    由 Hugging Face 设计。
     ┌──────────────────────────────┐
     │                 actions      │
     │                    ▲         │
@@ -530,7 +526,7 @@ class VLAFlowMatching(nn.Module):
         self.prefix_length = self.config.prefix_length
         self.rtc_processor = rtc_processor
 
-        # Compile model if requested
+        # 按需编译模型
         if config.compile_model:
             torch.set_float32_matmul_precision("high")
             self.sample_actions = torch.compile(self.sample_actions, mode=config.compile_mode)
@@ -552,8 +548,8 @@ class VLAFlowMatching(nn.Module):
     def embed_prefix(
         self, images, img_masks, lang_tokens, lang_masks, state: torch.Tensor = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Embed images with SigLIP and language tokens with embedding layer to prepare
-        for SmolVLM transformer processing.
+        """用 SigLIP 嵌入图像、用嵌入层嵌入语言 token，为
+        SmolVLM transformer 的处理做准备。
         """
         embs = []
         pad_masks = []
@@ -580,7 +576,7 @@ class VLAFlowMatching(nn.Module):
             img_emb = self.vlm_with_expert.embed_image(img)
             img_emb = img_emb
 
-            # Normalize image embeddings
+            # 对图像嵌入进行归一化
             img_emb_dim = img_emb.shape[-1]
             img_emb = img_emb * torch.tensor(img_emb_dim**0.5, dtype=img_emb.dtype, device=img_emb.device)
 
@@ -606,7 +602,7 @@ class VLAFlowMatching(nn.Module):
                 pad_masks.append(image_end_mask)
                 att_masks += [0] * (image_end_mask.shape[1])
         lang_emb = self.vlm_with_expert.embed_language_tokens(lang_tokens)
-        # Normalize language embeddings
+        # 对语言嵌入进行归一化
         lang_emb_dim = lang_emb.shape[-1]
         lang_emb = lang_emb * math.sqrt(lang_emb_dim)
 
@@ -626,7 +622,7 @@ class VLAFlowMatching(nn.Module):
         state_mask = torch.ones(bsize, states_seq_len, dtype=torch.bool, device=device)
         pad_masks.append(state_mask)
 
-        # Set attention masks so that image and language inputs do not attend to state or actions
+        # 设置注意力掩码，使图像和语言输入不会关注状态或动作
         att_masks += [1] * (states_seq_len)
         embs = torch.cat(embs, dim=1)
         pad_masks = torch.cat(pad_masks, dim=1)
@@ -644,17 +640,17 @@ class VLAFlowMatching(nn.Module):
         return embs, pad_masks, att_masks
 
     def embed_suffix(self, noisy_actions, timestep):
-        """Embed state, noisy_actions, timestep to prepare for Expert Gemma processing."""
+        """嵌入状态、带噪动作和时间步，为 Expert Gemma 的处理做准备。"""
         embs = []
         pad_masks = []
         att_masks = []
 
-        # Fuse timestep + action information using an MLP
+        # 使用 MLP 融合时间步和动作信息
         action_emb = self.action_in_proj(noisy_actions)
         device = action_emb.device
         bsize = action_emb.shape[0]
         dtype = action_emb.dtype
-        # Embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
+        # 使用正余弦位置编码嵌入时间步，敏感范围为 [0, 1]
         time_emb = create_sinusoidal_pos_embedding(
             timestep,
             self.vlm_with_expert.expert_hidden_size,
@@ -668,17 +664,17 @@ class VLAFlowMatching(nn.Module):
         action_time_emb = torch.cat([action_emb, time_emb], dim=2)
 
         action_time_emb = self.action_time_mlp_in(action_time_emb)
-        action_time_emb = F.silu(action_time_emb)  # swish == silu
+        action_time_emb = F.silu(action_time_emb)  # swish 即 silu
         action_time_emb = self.action_time_mlp_out(action_time_emb)
 
-        # Add to input tokens
+        # 添加到输入 token 中
         embs.append(action_time_emb)
 
         bsize, action_time_dim = action_time_emb.shape[:2]
         action_time_mask = torch.ones(bsize, action_time_dim, dtype=torch.bool, device=device)
         pad_masks.append(action_time_mask)
 
-        # Set attention masks so that image, language and state inputs do not attend to action tokens
+        # 设置注意力掩码，使图像、语言和状态输入不会关注动作 token
         att_masks += [1] * self.config.chunk_size
         embs = torch.cat(embs, dim=1)
         pad_masks = torch.cat(pad_masks, dim=1)
@@ -689,7 +685,7 @@ class VLAFlowMatching(nn.Module):
     def forward(
         self, images, img_masks, lang_tokens, lang_masks, state, actions, noise=None, time=None
     ) -> Tensor:
-        """Do a full training forward pass and compute the loss (batch_size x num_steps x num_motors)"""
+        """执行完整的训练前向传播并计算损失（batch_size x num_steps x num_motors）"""
         if noise is None:
             noise = self.sample_noise(actions.shape, actions.device)
 
@@ -717,7 +713,7 @@ class VLAFlowMatching(nn.Module):
             use_cache=False,
         )
         suffix_out = suffix_out[:, -self.config.chunk_size :]
-        # Original openpi code, upcast attention output
+        # 沿用原始 openpi 代码，将注意力输出提升为高精度类型
         suffix_out = suffix_out.to(dtype=torch.float32)
         v_t = self.action_out_proj(suffix_out)
         losses = F.mse_loss(u_t, v_t, reduction="none")
@@ -733,7 +729,7 @@ class VLAFlowMatching(nn.Module):
         noise=None,
         **kwargs: Unpack[ActionSelectKwargs],
     ) -> Tensor:
-        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+        """执行完整的推理前向传播并计算动作（batch_size x num_steps x num_motors）"""
         bsize = state.shape[0]
         device = state.device
 
@@ -746,7 +742,7 @@ class VLAFlowMatching(nn.Module):
         )
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
-        # Compute image and language key value cache
+        # 计算图像和语言的键值缓存
         _, past_key_values = self.vlm_with_expert.forward(
             attention_mask=prefix_att_2d_masks,
             position_ids=prefix_position_ids,
@@ -779,7 +775,7 @@ class VLAFlowMatching(nn.Module):
         x_t,
         timestep,
     ):
-        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        """在给定时间步对噪声 `x_t` 施加一次去噪步骤。"""
         suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
@@ -801,7 +797,7 @@ class VLAFlowMatching(nn.Module):
             use_cache=self.config.use_cache,
         )
         if past_key_values is not None:
-            # Self-attention layers append suffix K/V in place; restore the prefix for the next step.
+            # 自注意力层会原地追加后缀的 K/V；这里为下一步恢复前缀。
             past_key_values.crop(prefix_len)
         suffix_out = outputs_embeds[1]
         suffix_out = suffix_out[:, -self.config.chunk_size :]

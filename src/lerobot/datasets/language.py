@@ -37,50 +37,49 @@ CORE_STYLES = {
     "trace",
     "task_aug",
 }
-# Project-local styles can be registered at import time by appending to
-# ``EXTENDED_STYLES`` before ``column_for_style`` is called. Anything added
-# here is treated as a known style alongside ``CORE_STYLES`` for resolver
-# validation. Empty by default — populate from a downstream module that
-# also extends ``PERSISTENT_STYLES`` or ``EVENT_ONLY_STYLES`` to declare
-# the new style's column.
+# 项目本地的风格可以在导入时注册，方法是在调用 ``column_for_style`` 之前
+# 将其追加到 ``EXTENDED_STYLES`` 中。此处添加的任何内容都会与
+# ``CORE_STYLES`` 一样被视为已知风格，供解析器验证使用。
+# 默认为空——由同时扩展了 ``PERSISTENT_STYLES`` 或 ``EVENT_ONLY_STYLES``
+# 的下游模块填充，以声明新风格所属的列。
 EXTENDED_STYLES: set[str] = set()
 STYLE_REGISTRY = CORE_STYLES | EXTENDED_STYLES
 
 PERSISTENT_STYLES = {"subtask", "plan", "memory", "motion", "task_aug"}
 EVENT_ONLY_STYLES = {"interjection", "vqa", "trace"}
 
-# Styles whose ``content`` is grounded in a specific camera view. Rows of these
-# styles MUST carry a non-null ``camera`` referencing an ``observation.images.*``
-# feature key. Rows of every other style MUST have ``camera=None``. ``motion``
-# is intentionally NOT in this set: motion primitives are described in
-# robot-frame (joint / Cartesian) terms, not pixel space, so they are
-# camera-agnostic. ``trace`` is the pixel-trajectory event style and IS
-# view-dependent. The ``camera`` field nevertheless lives on
-# ``PERSISTENT_ROW_FIELDS`` too so the schema, validator, and resolver
-# behave symmetrically across the two columns; persistent rows simply
-# always have ``camera=None`` in practice today.
+# 这些风格的 ``content`` 基于特定的相机视角。这些风格的行必须
+# 携带非空的 ``camera``，其值引用某个 ``observation.images.*``
+# 特征键。所有其他风格的行必须满足 ``camera=None``。``motion``
+# 有意不包含在此集合中：运动原语是用机器人坐标系
+# （关节/笛卡尔）术语描述的，而不是像素空间，因此它们
+# 与相机无关。``trace`` 是像素轨迹事件风格，确实
+# 依赖于视角。不过 ``camera`` 字段同样存在于
+# ``PERSISTENT_ROW_FIELDS`` 中，以便 schema、验证器和解析器
+# 在两列上的行为保持对称；目前实践中持久化行
+# 始终满足 ``camera=None``。
 VIEW_DEPENDENT_STYLES = {"vqa", "trace"}
 
 LanguageColumn = Literal["language_persistent", "language_events"]
 
 
 def _json_arrow_type() -> pa.DataType:
-    """Return the Arrow JSON type, falling back to ``string`` on older pyarrow."""
+    """返回 Arrow 的 JSON 类型，在较旧的 pyarrow 上回退为 ``string``。"""
     return pa.json_() if hasattr(pa, "json_") else pa.string()
 
 
 def _json_feature() -> object:
-    """Return the HF ``datasets`` JSON feature, falling back to a string value."""
+    """返回 HF ``datasets`` 的 JSON 特征，回退为字符串值。"""
     return datasets.Json() if hasattr(datasets, "Json") else datasets.Value("string")
 
 
 def language_persistent_row_arrow_type() -> pa.StructType:
-    """Return the Arrow struct type for a single persistent language row.
+    """返回单个持久化语言行的 Arrow struct 类型。
 
-    Persistent rows carry their own ``timestamp`` because they represent a state
-    that became active at a specific moment and remains active until superseded.
-    ``timestamp`` is ``float32`` to match the timestamp dtype LeRobotDataset
-    uses for frame data.
+    持久化行携带自己的 ``timestamp``，因为它们表示在特定时刻
+    生效并持续有效直到被取代的状态。
+    ``timestamp`` 为 ``float32``，与 LeRobotDataset
+    用于帧数据的时间戳 dtype 一致。
     """
     return pa.struct(
         [
@@ -95,10 +94,10 @@ def language_persistent_row_arrow_type() -> pa.StructType:
 
 
 def language_event_row_arrow_type() -> pa.StructType:
-    """Return the Arrow struct type for a single event language row.
+    """返回单个事件语言行的 Arrow struct 类型。
 
-    Event rows have no ``timestamp`` field: each event is stored on the dataset
-    row whose frame timestamp is the event's firing time.
+    事件行没有 ``timestamp`` 字段：每个事件都存储在
+    帧时间戳等于该事件触发时间的数据集行上。
     """
     return pa.struct(
         [
@@ -112,17 +111,17 @@ def language_event_row_arrow_type() -> pa.StructType:
 
 
 def language_persistent_arrow_type() -> pa.ListType:
-    """Return the Arrow list type for the ``language_persistent`` column."""
+    """返回 ``language_persistent`` 列的 Arrow list 类型。"""
     return pa.list_(language_persistent_row_arrow_type())
 
 
 def language_events_arrow_type() -> pa.ListType:
-    """Return the Arrow list type for the ``language_events`` column."""
+    """返回 ``language_events`` 列的 Arrow list 类型。"""
     return pa.list_(language_event_row_arrow_type())
 
 
 def language_persistent_row_feature() -> dict[str, object]:
-    """Return the HF ``datasets`` feature mapping for a persistent language row."""
+    """返回持久化语言行的 HF ``datasets`` 特征映射。"""
     return {
         "role": datasets.Value("string"),
         "content": datasets.Value("string"),
@@ -134,7 +133,7 @@ def language_persistent_row_feature() -> dict[str, object]:
 
 
 def language_event_row_feature() -> dict[str, object]:
-    """Return the HF ``datasets`` feature mapping for an event language row."""
+    """返回事件语言行的 HF ``datasets`` 特征映射。"""
     return {
         "role": datasets.Value("string"),
         "content": datasets.Value("string"),
@@ -145,17 +144,17 @@ def language_event_row_feature() -> dict[str, object]:
 
 
 def language_persistent_column_feature() -> datasets.List:
-    """Return the HF ``datasets`` feature for the ``language_persistent`` column."""
+    """返回 ``language_persistent`` 列的 HF ``datasets`` 特征。"""
     return datasets.List(language_persistent_row_feature())
 
 
 def language_events_column_feature() -> datasets.List:
-    """Return the HF ``datasets`` feature for the ``language_events`` column."""
+    """返回 ``language_events`` 列的 HF ``datasets`` 特征。"""
     return datasets.List(language_event_row_feature())
 
 
 def language_feature_info() -> dict[str, dict]:
-    """Return the ``info["features"]`` entries for both language columns."""
+    """返回两个语言列的 ``info["features"]`` 条目。"""
     return {
         LANGUAGE_PERSISTENT: {"dtype": "language", "shape": (1,), "names": None},
         LANGUAGE_EVENTS: {"dtype": "language", "shape": (1,), "names": None},
@@ -163,21 +162,21 @@ def language_feature_info() -> dict[str, dict]:
 
 
 def is_language_column(key: str) -> bool:
-    """Return ``True`` if ``key`` is one of the dataset's language column names."""
+    """如果 ``key`` 是数据集的语言列名之一，则返回 ``True``。"""
     return key in LANGUAGE_COLUMNS
 
 
 def is_view_dependent_style(style: str | None) -> bool:
-    """Return ``True`` if rows of ``style`` must be tagged with a ``camera`` key."""
+    """如果 ``style`` 的行必须标记 ``camera`` 键，则返回 ``True``。"""
     return style in VIEW_DEPENDENT_STYLES
 
 
 def validate_camera_field(style: str | None, camera: str | None) -> None:
-    """Enforce the ``camera`` invariant: required iff ``style`` is view-dependent.
+    """强制 ``camera`` 不变式：当且仅当 ``style`` 依赖视角时才必须提供。
 
-    Raises ``ValueError`` if a view-dependent style is missing ``camera`` or if
-    a non-view-dependent style carries one. Pipeline writers and the validator
-    should call this on every emitted row.
+    如果依赖视角的风格缺少 ``camera``，或者非依赖视角的风格
+    携带了 ``camera``，则抛出 ``ValueError``。流水线写入器和验证器
+    应对每个输出的行调用此函数。
     """
     if is_view_dependent_style(style):
         if not camera:
@@ -190,12 +189,13 @@ def validate_camera_field(style: str | None, camera: str | None) -> None:
 
 
 # --- Tool registry --------------------------------------------------------
-# Tools declared on a dataset live in ``meta/info.json["tools"]`` as a list
-# of OpenAI-style function schemas. The runtime / training stack reads them
-# through :class:`LeRobotDatasetMetadata.tools` (with these constants as
-# fallback when the dataset doesn't declare any). Implementations live
-# under :mod:`lerobot.tools` (one file per tool); see
-# ``docs/source/tools.mdx`` for the authoring guide.
+# 数据集上声明的工具以 OpenAI 风格函数 schema 列表的形式
+# 存放在 ``meta/info.json["tools"]`` 中。运行时/训练栈通过
+# :class:`LeRobotDatasetMetadata.tools` 读取它们
+# （当数据集未声明任何工具时，以这些常量作为
+# 回退）。实现位于 :mod:`lerobot.tools` 下
+# （每个工具一个文件）；编写指南参见
+# ``docs/source/tools.mdx``。
 
 SAY_TOOL_SCHEMA: dict = {
     "type": "function",
@@ -214,24 +214,24 @@ SAY_TOOL_SCHEMA: dict = {
         },
     },
 }
-"""Canonical schema for the ``say`` tool emitted by the steerable
-annotation pipeline (PR 2 Module 2). Single source of truth — PR 2's
-writer, PR 3's runtime tool registry, and the dataset visualizer all
-import this constant rather than duplicating the dict."""
+"""由可控标注流水线（PR 2 Module 2）输出的 ``say`` 工具的
+标准 schema。单一事实来源——PR 2 的
+写入器、PR 3 的运行时工具注册表以及数据集可视化工具都
+导入此常量，而不是复制该字典。"""
 
 DEFAULT_TOOLS: list[dict] = [SAY_TOOL_SCHEMA]
-"""Fallback tools list. Returned by ``LeRobotDatasetMetadata.tools``
-when ``meta/info.json["tools"]`` is unset, so unannotated datasets and
-chat-template consumers (``apply_chat_template(messages, tools=...)``)
-keep working out of the box."""
+"""回退工具列表。当 ``meta/info.json["tools"]`` 未设置时，
+由 ``LeRobotDatasetMetadata.tools`` 返回，使未标注的数据集和
+chat-template 使用方（``apply_chat_template(messages, tools=...)``）
+开箱即用。"""
 
 
 def column_for_style(style: str | None) -> LanguageColumn:
-    """Map a language style to the column where rows of that style are stored.
+    """将语言风格映射到存储该风格行的列。
 
-    Styles in :data:`PERSISTENT_STYLES` route to :data:`LANGUAGE_PERSISTENT`.
-    Styles in :data:`EVENT_ONLY_STYLES` and the implicit ``None`` style route
-    to :data:`LANGUAGE_EVENTS`.
+    :data:`PERSISTENT_STYLES` 中的风格路由到 :data:`LANGUAGE_PERSISTENT`。
+    :data:`EVENT_ONLY_STYLES` 中的风格以及隐式的 ``None`` 风格路由
+    到 :data:`LANGUAGE_EVENTS`。
     """
     if style is None:
         return LANGUAGE_EVENTS

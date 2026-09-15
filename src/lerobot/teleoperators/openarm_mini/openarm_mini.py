@@ -31,22 +31,22 @@ from .config_openarm_mini import OpenArmMiniConfig
 
 logger = logging.getLogger(__name__)
 
-# Per-side motor direction flips applied during readout.
+# 读取时按侧别应用的电机方向翻转。
 SIDE_MOTORS_TO_FLIP: dict[str, list[str]] = {
     "left": ["joint_1", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"],
     "right": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_7"],
 }
 
-# Leader joint 6 ↔ follower joint 7 (symmetric — its own inverse).
+# 主臂关节 6 ↔ 从动臂关节 7（对称——自身即为逆映射）。
 JOINT_REMAP = {"joint_6": "joint_7", "joint_7": "joint_6"}
 
 GRIPPER_TELEOP_TO_DEGREES = -0.65
 
 
 class OpenArmMini(Teleoperator):
-    """OpenArm Mini single-arm teleoperator (Feetech STS3215, 7DOF + gripper).
+    """OpenArm Mini 单臂遥操作设备（Feetech STS3215，7 自由度 + 夹爪）。
 
-    For the bimanual setup, see :class:`BiOpenArmMini` which composes two of these.
+    双臂配置请参见 :class:`BiOpenArmMini`，它由两个该设备组合而成。
     """
 
     config_class = OpenArmMiniConfig
@@ -107,13 +107,13 @@ class OpenArmMini(Teleoperator):
 
     def calibrate(self) -> None:
         """
-        Run calibration procedure for a single OpenArm Mini arm.
+        运行单个 OpenArm Mini 手臂的校准流程。
 
-        1. Disable torque
-        2. Ask user to position arm in hanging position with gripper closed
-        3. Set this as zero position via half-turn homing
-        4. Interactive gripper calibration (open/close positions)
-        5. Save calibration
+        1. 禁用力矩
+        2. 要求用户将手臂置于自然下垂且夹爪闭合的位置
+        3. 通过半圈归位将该位置设为零位
+        4. 交互式夹爪校准（张开/闭合位置）
+        5. 保存校准
         """
         if self.calibration:
             user_input = input(
@@ -214,18 +214,18 @@ class OpenArmMini(Teleoperator):
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
-        """Get current action (read positions from all motors)."""
+        """获取当前动作（从所有电机读取位置）。"""
         start = time.perf_counter()
 
         positions = self.bus.sync_read("Present_Position")
 
-        # Joint 6↔7 remap: leader joint_6 → follower joint_7 and vice versa.
-        # Per-side direction flip is applied based on the configured `side`.
+        # 关节 6↔7 重映射：主臂 joint_6 → 从动臂 joint_7，反之亦然。
+        # 根据配置的 `side` 应用按侧别的方向翻转。
         action: dict[str, Any] = {}
         for motor, val in positions.items():
             target = JOINT_REMAP.get(motor, motor)
             if motor == "gripper":
-                # Convert gripper from teleop 0-100 to openarms degrees: 0→0°, 100→-65°
+                # 将夹爪从遥操作 0-100 转换为 openarms 角度：0→0°，100→-65°
                 action[f"{target}.pos"] = val * GRIPPER_TELEOP_TO_DEGREES
             else:
                 action[f"{target}.pos"] = -val if motor in self._motors_to_flip else val
@@ -241,19 +241,19 @@ class OpenArmMini(Teleoperator):
         self.bus.disable_torque()
 
     def write_goal_positions(self, positions: dict[str, float]) -> None:
-        """Write goal positions to motors (inverse of get_action flip/gripper/remap logic)."""
+        """将目标位置写入电机（get_action 中翻转/夹爪/重映射逻辑的逆操作）。"""
         goals: dict[str, float] = {}
         for key, val in positions.items():
             if not key.endswith(".pos"):
                 continue
             base = key.removesuffix(".pos")
-            # JOINT_REMAP is symmetric (its own inverse).
+            # JOINT_REMAP 是对称的（自身即为逆映射）。
             target = JOINT_REMAP.get(base, base)
             if base == "gripper":
-                # Convert robot degrees to teleop 0-100: 0°→0, -65°→100
+                # 将机器人角度转换为遥操作 0-100：0°→0，-65°→100
                 goals[target] = val / GRIPPER_TELEOP_TO_DEGREES
             else:
-                # Un-flip using the ORIGINAL motor name (target = leader motor)
+                # 使用原始电机名称取消翻转（target = 主臂电机）
                 goals[target] = -val if target in self._motors_to_flip else val
 
         if goals:

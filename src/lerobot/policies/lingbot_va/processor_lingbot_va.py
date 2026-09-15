@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pre/post-processor pipelines for the LingBot-VA policy.
+"""LingBot-VA 策略的前/后处理器流水线。
 
-The preprocessor passes inputs through (IDENTITY) and the postprocessor maps the policy's
-``[-1, 1]`` actions back to physical units with the built-in ``UnnormalizerProcessorStep``
-(QUANTILES) using per-channel q01/q99 restored from the checkpoint.
+预处理器直接透传输入（IDENTITY），后处理器使用内置的 ``UnnormalizerProcessorStep``
+（QUANTILES），利用从检查点恢复的逐通道 q01/q99，将策略输出的 ``[-1, 1]``
+动作映射回物理单位。
 """
 
 from typing import Any
@@ -43,7 +43,7 @@ def make_lingbot_va_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Build the pre/post processor pipelines for LingBot-VA."""
+    """构建 LingBot-VA 的前/后处理器流水线。"""
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
@@ -54,7 +54,7 @@ def make_lingbot_va_pre_post_processors(
         steps.to_device,
     ]
 
-    # Unnormalize actions from [-1, 1] to physical units (QUANTILES) using q01/q99 restored from the checkpoint.
+    # 利用从检查点恢复的 q01/q99，将动作从 [-1, 1] 反归一化（QUANTILES）到物理单位。
     output_steps: list[ProcessorStep] = [
         UnnormalizerProcessorStep(
             features=config.output_features,

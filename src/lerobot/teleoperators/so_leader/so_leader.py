@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class SOLeader(Teleoperator):
-    """Generic SO leader base for SO-100/101/10X teleoperators."""
+    """SO-100/101/10X 遥操作设备的通用 SO 主臂基类。"""
 
     config_class = SOLeaderTeleopConfig
     name = "so_leader"
@@ -83,7 +83,7 @@ class SOLeader(Teleoperator):
 
     def calibrate(self) -> None:
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用它还是重新运行校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )

@@ -30,52 +30,52 @@ from .pipeline import ObservationProcessorStep, ProcessorStepRegistry
 @ProcessorStepRegistry.register(name="observation_processor")
 class VanillaObservationProcessorStep(ObservationProcessorStep):
     """
-    Processes standard Gymnasium observations into the LeRobot format.
+    将标准 Gymnasium 观测处理为 LeRobot 格式。
 
-    This step handles both image and state data from a typical observation dictionary,
-    preparing it for use in a LeRobot policy.
+    该步骤处理典型观测字典中的图像和状态数据，
+    使其可以在 LeRobot 策略中使用。
 
-    **Image Processing:**
-    -   Converts channel-last (H, W, C), `uint8` images to channel-first (C, H, W),
-        `float32` tensors.
-    -   Normalizes pixel values from the [0, 255] range to [0, 1].
-    -   Adds a batch dimension if one is not already present.
-    -   Recognizes a single image under the key `"pixels"` and maps it to
-        `"observation.image"`.
-    -   Recognizes a dictionary of images under the key `"pixels"` and maps them
-        to `"observation.images.{camera_name}"`.
+    **图像处理：**
+    -   将通道在最后的 (H, W, C)、`uint8` 图像转换为通道在前的 (C, H, W)、
+        `float32` 张量。
+    -   将像素值从 [0, 255] 范围归一化到 [0, 1]。
+    -   如果不存在批次维度，则添加一个。
+    -   识别键 `"pixels"` 下的单张图像，并将其映射到
+        `"observation.image"`。
+    -   识别键 `"pixels"` 下的图像字典，并将其映射到
+        `"observation.images.{camera_name}"`。
 
-    **State Processing:**
-    -   Maps the `"environment_state"` key to `"observation.environment_state"`.
-    -   Maps the `"agent_pos"` key to `"observation.state"`.
-    -   Converts NumPy arrays to PyTorch tensors.
-    -   Adds a batch dimension if one is not already present.
+    **状态处理：**
+    -   将键 `"environment_state"` 映射到 `"observation.environment_state"`。
+    -   将键 `"agent_pos"` 映射到 `"observation.state"`。
+    -   将 NumPy 数组转换为 PyTorch 张量。
+    -   如果不存在批次维度，则添加一个。
     """
 
     def _process_single_image(self, img: np.ndarray) -> Tensor:
         """
-        Processes a single NumPy image array into a channel-first, normalized tensor.
+        将单个 NumPy 图像数组处理为通道在前、已归一化的张量。
 
         Args:
-            img: A NumPy array representing the image, expected to be in channel-last
-                 (H, W, C) format with a `uint8` dtype.
+            img: 表示图像的 NumPy 数组，预期为通道在最后
+                 (H, W, C) 格式，且 dtype 为 `uint8`。
 
         Returns:
-            A `float32` PyTorch tensor in channel-first (B, C, H, W) format, with
-            pixel values normalized to the [0, 1] range.
+            通道在前 (B, C, H, W) 格式的 `float32` PyTorch 张量，
+            像素值已归一化到 [0, 1] 范围。
 
         Raises:
-            ValueError: If the input image does not appear to be in channel-last
-                        format or is not of `uint8` dtype.
+            ValueError: 如果输入图像看起来不是通道在最后格式，
+                        或 dtype 不是 `uint8`。
         """
-        # Convert to tensor
+        # 转换为张量
         img_tensor = torch.from_numpy(img)
 
-        # Add batch dimension if needed
+        # 如有需要则添加批次维度
         if img_tensor.ndim == 3:
             img_tensor = img_tensor.unsqueeze(0)
 
-        # Validate image format
+        # 验证图像格式
         _, h, w, c = img_tensor.shape
         if not (c < h and c < w):
             raise ValueError(f"Expected channel-last images, but got shape {img_tensor.shape}")
@@ -83,17 +83,17 @@ class VanillaObservationProcessorStep(ObservationProcessorStep):
         if img_tensor.dtype != torch.uint8:
             raise ValueError(f"Expected torch.uint8 images, but got {img_tensor.dtype}")
 
-        # Convert to channel-first format
+        # 转换为通道在前格式
         img_tensor = einops.rearrange(img_tensor, "b h w c -> b c h w").contiguous()
 
-        # Convert to float32 and normalize to [0, 1]
+        # 转换为 float32 并归一化到 [0, 1]
         img_tensor = img_tensor.type(torch.float32) / 255.0
 
         return img_tensor
 
     def _process_observation(self, observation):
         """
-        Processes both image and state observations.
+        处理图像和状态观测。
         """
 
         processed_obs = observation.copy()
@@ -132,26 +132,26 @@ class VanillaObservationProcessorStep(ObservationProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        Transforms feature keys from the Gym standard to the LeRobot standard.
+        将特征键从 Gym 标准转换为 LeRobot 标准。
 
-        This method standardizes the feature dictionary by renaming keys according
-        to LeRobot's conventions, ensuring that policies can be constructed correctly.
-        It handles various raw key formats, including those with an "observation." prefix.
+        该方法通过按照 LeRobot 的约定重命名键来规范化特征字典，
+        确保策略可以被正确构建。
+        它处理各种原始键格式，包括带有 "observation." 前缀的格式。
 
-        **Renaming Rules:**
-        - `pixels` or `observation.pixels` -> `observation.image`
-        - `pixels.{cam}` or `observation.pixels.{cam}` -> `observation.images.{cam}`
-        - `environment_state` or `observation.environment_state` -> `observation.environment_state`
-        - `agent_pos` or `observation.agent_pos` -> `observation.state`
+        **重命名规则：**
+        - `pixels` 或 `observation.pixels` -> `observation.image`
+        - `pixels.{cam}` 或 `observation.pixels.{cam}` -> `observation.images.{cam}`
+        - `environment_state` 或 `observation.environment_state` -> `observation.environment_state`
+        - `agent_pos` 或 `observation.agent_pos` -> `observation.state`
 
         Args:
-            features: The policy features dictionary with Gym-style keys.
+            features: 具有 Gym 风格键的策略特征字典。
 
         Returns:
-            The policy features dictionary with standardized LeRobot keys.
+            具有标准化 LeRobot 键的策略特征字典。
         """
-        # Build a new features mapping keyed by the same FeatureType buckets
-        # We assume callers already placed features in the correct FeatureType.
+        # 构建以相同 FeatureType 分类为键的新特征映射
+        # 我们假定调用方已经将特征放置在正确的 FeatureType 中。
         new_features: dict[PipelineFeatureType, dict[str, PolicyFeature]] = {ft: {} for ft in features}
 
         exact_pairs = {
@@ -164,12 +164,12 @@ class VanillaObservationProcessorStep(ObservationProcessorStep):
             "pixels.": f"{OBS_IMAGES}.",
         }
 
-        # Iterate over all incoming feature buckets and normalize/move each entry
+        # 遍历所有传入的特征分类，规范化/移动每个条目
         for src_ft, bucket in features.items():
             for key, feat in list(bucket.items()):
                 handled = False
 
-                # Prefix-based rules (e.g. pixels.cam1 -> OBS_IMAGES.cam1)
+                # 基于前缀的规则（例如 pixels.cam1 -> OBS_IMAGES.cam1）
                 for old_prefix, new_prefix in prefix_pairs.items():
                     prefixed_old = f"{OBS_STR}.{old_prefix}"
                     if key.startswith(prefixed_old):
@@ -189,7 +189,7 @@ class VanillaObservationProcessorStep(ObservationProcessorStep):
                 if handled:
                     continue
 
-                # Exact-name rules (pixels, environment_state, agent_pos)
+                # 精确名称规则（pixels、environment_state、agent_pos）
                 for old, new in exact_pairs.items():
                     if key == old or key == f"{OBS_STR}.{old}":
                         new_key = new
@@ -200,7 +200,7 @@ class VanillaObservationProcessorStep(ObservationProcessorStep):
                 if handled:
                     continue
 
-                # Default: keep key in the same source FeatureType bucket
+                # 默认：将键保留在相同的源 FeatureType 分类中
                 new_features[src_ft][key] = feat
 
         return new_features

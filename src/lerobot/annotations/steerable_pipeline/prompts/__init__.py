@@ -13,11 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Prompt templates loaded as plain text.
+"""以纯文本形式加载的提示词模板。
 
-One file per use site. Templates use ``str.format(**vars)`` substitution; we
-intentionally avoid jinja2 here so the templates remain inspectable in
-plain editors and roundtrip cleanly through ``ruff format``.
+每个使用位置对应一个文件。模板使用 ``str.format(**vars)`` 替换；
+我们在这里有意避免使用 jinja2，以便模板可以在普通编辑器中查看，
+并且能够干净地通过 ``ruff format`` 往返处理。
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ _DIR = Path(__file__).parent
 
 
 def load(name: str) -> str:
-    """Read prompt template ``name.txt`` from the ``prompts/`` directory.
+    """从 ``prompts/`` 目录读取提示词模板 ``name.txt``。
 
-    A ``LEROBOT_PROMPT_OVERRIDE_<name>`` environment variable, when set to a
-    non-empty value, takes precedence over the packaged file. This lets prompt
-    search (e.g. GEPA) inject candidate templates into a remote job without
-    rebuilding the package; the override must keep the same ``{placeholder}``
-    fields the call site formats in.
+    当 ``LEROBOT_PROMPT_OVERRIDE_<name>`` 环境变量被设置为
+    非空值时，它优先于打包的文件。这使得提示词搜索（例如
+    GEPA）无需重新构建包即可将候选模板注入远程作业；
+    覆盖值必须保留调用点所格式化的相同 ``{placeholder}``
+    字段。
     """
     override = os.environ.get(f"LEROBOT_PROMPT_OVERRIDE_{name}")
     if override and override.strip():

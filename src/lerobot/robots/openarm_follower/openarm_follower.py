@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 class OpenArmFollower(Robot):
     """
-    OpenArms Follower Robot which uses CAN bus communication to control 7 DOF arm with a gripper.
-    The arm uses Damiao motors in MIT control mode.
+    OpenArms 从动机器人，使用 CAN 总线通信控制带夹爪的 7 自由度机械臂。
+    该机械臂使用 MIT 控制模式下的 Damiao 电机。
     """
 
     config_class = OpenArmFollowerConfig
@@ -49,12 +49,12 @@ class OpenArmFollower(Robot):
         super().__init__(config)
         self.config = config
 
-        # Arm motors
+        # 机械臂电机
         motors: dict[str, Motor] = {}
         for motor_name, (send_id, recv_id, motor_type_str) in config.motor_config.items():
             motor = Motor(
                 send_id, motor_type_str, MotorNormMode.DEGREES
-            )  # Always use degrees for Damiao motors
+            )  # Damiao 电机始终使用度
             motor.recv_id = recv_id
             motor.motor_type_str = motor_type_str
             motors[motor_name] = motor
@@ -84,12 +84,12 @@ class OpenArmFollower(Robot):
             )
         logger.info(f"Values used for joint limits: {config.joint_limits}.")
 
-        # Initialize cameras
+        # 初始化相机
         self.cameras = make_cameras_from_configs(config.cameras)
 
     @property
     def _motors_ft(self) -> dict[str, type]:
-        """Motor features for observation and action spaces."""
+        """用于观测和动作空间的电机特征。"""
         features: dict[str, type] = {}
         for motor in self.bus.motors:
             features[f"{motor}.pos"] = float
@@ -100,7 +100,7 @@ class OpenArmFollower(Robot):
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        """Camera features for observation space."""
+        """用于观测空间的相机特征。"""
         features: dict[str, tuple] = {}
         for cam in self.cameras:
             cfg = self.config.cameras[cam]
@@ -112,33 +112,33 @@ class OpenArmFollower(Robot):
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
-        """Combined observation features from motors and cameras."""
+        """电机和相机组合的观测特征。"""
         return {**self._motors_ft, **self._cameras_ft}
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        """Action features."""
+        """动作特征。"""
         return self._motors_ft
 
     @property
     def is_connected(self) -> bool:
-        """Check if robot is connected."""
+        """检查机器人是否已连接。"""
         return self.bus.is_connected and all(cam.is_connected for cam in self.cameras.values())
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """
-        Connect to the robot and optionally calibrate.
+        连接到机器人并可选地进行校准。
 
-        We assume that at connection time, the arms are in a safe rest position,
-        and torque can be safely disabled to run calibration if needed.
+        我们假设在连接时，机械臂处于安全的静止位置，
+        并且如有需要，可以安全地禁用力矩来运行校准。
         """
 
-        # Connect to CAN bus
+        # 连接到 CAN 总线
         logger.info(f"Connecting arm on {self.config.port}...")
         self.bus.connect()
 
-        # Run calibration if needed
+        # 如有需要则运行校准
         if not self.is_calibrated and calibrate:
             logger.info(
                 "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
@@ -156,22 +156,22 @@ class OpenArmFollower(Robot):
 
     @property
     def is_calibrated(self) -> bool:
-        """Check if robot is calibrated."""
+        """检查机器人是否已校准。"""
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:
         """
-        Run calibration procedure for OpenArms robot.
+        运行 OpenArms 机器人的校准流程。
 
-        The calibration procedure:
-        1. Disable torque
-        2. Ask user to position arms in hanging position with grippers closed
-        3. Set this as zero position
-        4. Record range of motion for each joint
-        5. Save calibration
+        校准流程：
+        1. 禁用力矩
+        2. 提示用户将机械臂置于悬挂位置并闭合夹爪
+        3. 将此位置设为零位
+        4. 记录每个关节的运动范围
+        5. 保存校准
         """
         if self.calibration:
-            # Calibration file exists, ask user whether to use it or run new calibration
+            # 校准文件已存在，询问用户是使用现有校准还是运行新的校准
             user_input = input(
                 f"Press ENTER to use provided calibration file associated with the id {self.id}, or type 'c' and press ENTER to run calibration: "
             )
@@ -183,7 +183,7 @@ class OpenArmFollower(Robot):
         logger.info(f"\nRunning calibration for {self}")
         self.bus.disable_torque()
 
-        # Step 1: Set zero position
+        # 步骤 1：设置零位
         input(
             "\nCalibration: Set Zero Position)\n"
             "Position the arm in the following configuration:\n"
@@ -192,7 +192,7 @@ class OpenArmFollower(Robot):
             "Press ENTER when ready..."
         )
 
-        # Set current position as zero for all motors
+        # 将所有电机的当前位置设为零位
         self.bus.set_zero_position()
         logger.info("Arm zero position set.")
 
@@ -211,8 +211,8 @@ class OpenArmFollower(Robot):
         print(f"Calibration saved to {self.calibration_fpath}")
 
     def configure(self) -> None:
-        """Configure motors with appropriate settings."""
-        # TODO(Steven, Pepijn): Slightly different from what it is happening in the leader
+        """使用适当的设置配置电机。"""
+        # TODO(Steven, Pepijn): 与主端发生的情况略有不同
         with self.bus.torque_disabled():
             self.bus.configure_motors()
 
@@ -224,10 +224,10 @@ class OpenArmFollower(Robot):
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
         """
-        Get current observation from robot including position, velocity, and torque.
+        从机器人获取当前观测，包括位置、速度和力矩。
 
-        Reads all motor states (pos/vel/torque) in one CAN refresh cycle
-        instead of 3 separate reads.
+        在一个 CAN 刷新周期内读取所有电机状态（位置/速度/力矩），
+        而不是分 3 次单独读取。
         """
         start = time.perf_counter()
 
@@ -242,7 +242,7 @@ class OpenArmFollower(Robot):
                 obs_dict[f"{motor}.vel"] = state.get("velocity", 0.0)
                 obs_dict[f"{motor}.torque"] = state.get("torque", 0.0)
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
@@ -269,22 +269,22 @@ class OpenArmFollower(Robot):
         custom_kd: dict[str, float] | None = None,
     ) -> RobotAction:
         """
-        Send action command to robot.
+        向机器人发送动作指令。
 
-        The action magnitude may be clipped based on safety limits.
+        动作幅度可能会根据安全限制进行裁剪。
 
         Args:
-            action: Dictionary with motor positions (e.g., "joint_1.pos", "joint_2.pos")
-            custom_kp: Optional custom kp gains per motor (e.g., {"joint_1": 120.0, "joint_2": 150.0})
-            custom_kd: Optional custom kd gains per motor (e.g., {"joint_1": 1.5, "joint_2": 2.0})
+            action: 包含电机位置的字典（例如 "joint_1.pos"、"joint_2.pos"）
+            custom_kp: 每个电机可选的自定义 kp 增益（例如 {"joint_1": 120.0, "joint_2": 150.0}）
+            custom_kd: 每个电机可选的自定义 kd 增益（例如 {"joint_1": 1.5, "joint_2": 2.0}）
 
         Returns:
-            The action actually sent (potentially clipped)
+            实际发送的动作（可能经过裁剪）
         """
 
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Apply joint limit clipping to arm
+        # 对机械臂施加关节限位裁剪
         for motor_name, position in goal_pos.items():
             if motor_name in self.config.joint_limits:
                 min_limit, max_limit = self.config.joint_limits[motor_name]
@@ -293,15 +293,15 @@ class OpenArmFollower(Robot):
                     logger.debug(f"Clipped {motor_name} from {position:.2f}° to {clipped_position:.2f}°")
                 goal_pos[motor_name] = clipped_position
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
+        # 当目标位置距离当前位置太远时进行限制。
+        # /!\ 由于需要从从动端读取，预计帧率会降低。
         if self.config.max_relative_target is not None:
             present_pos = self.bus.sync_read("Present_Position")
             goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
             goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
 
-        # TODO(Steven, Pepijn): Refactor writing
-        # Motor name to index mapping for gains
+        # TODO(Steven, Pepijn): 重构写入逻辑
+        # 电机名称到增益索引的映射
         motor_index = {
             "joint_1": 0,
             "joint_2": 1,
@@ -313,11 +313,11 @@ class OpenArmFollower(Robot):
             "gripper": 7,
         }
 
-        # Use batch MIT control for arm (sends all commands, then collects responses)
+        # 对机械臂使用批量 MIT 控制（先发送所有指令，再收集响应）
         commands = {}
         for motor_name, position_degrees in goal_pos.items():
             idx = motor_index.get(motor_name, 0)
-            # Use custom gains if provided, otherwise use config defaults
+            # 如果提供了自定义增益则使用，否则使用配置默认值
             if custom_kp is not None and motor_name in custom_kp:
                 kp = custom_kp[motor_name]
             else:
@@ -342,12 +342,12 @@ class OpenArmFollower(Robot):
 
     @check_if_not_connected
     def disconnect(self):
-        """Disconnect from robot."""
+        """断开与机器人的连接。"""
 
-        # Disconnect CAN bus
+        # 断开 CAN 总线
         self.bus.disconnect(self.config.disable_torque_on_disconnect)
 
-        # Disconnect cameras
+        # 断开相机
         for cam in self.cameras.values():
             cam.disconnect()
 

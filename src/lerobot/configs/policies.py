@@ -40,46 +40,46 @@ logger = getLogger(__name__)
 @dataclass
 class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: ignore[misc,name-defined] #TODO: draccus issue
     """
-    Base configuration class for policy models.
+    策略模型的基础配置类。
 
     Args:
-        n_obs_steps: Number of environment steps worth of observations to pass to the policy (takes the
-            current step and additional steps going back).
-        input_features: A dictionary defining the PolicyFeature of the input data for the policy. The key represents
-            the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        output_features: A dictionary defining the PolicyFeature of the output data for the policy. The key represents
-            the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        normalization_mapping: A dictionary that maps from a str value of FeatureType (e.g., "STATE", "VISUAL") to
-            a corresponding NormalizationMode (e.g., NormalizationMode.MIN_MAX)
+        n_obs_steps: 要传递给策略的观测所覆盖的环境步数（包含当前步以及
+            向前回溯的若干步）。
+        input_features: 定义策略输入数据的 PolicyFeature 的字典。键表示
+            输入数据的名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        output_features: 定义策略输出数据的 PolicyFeature 的字典。键表示
+            输出数据的名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
+        normalization_mapping: 将 FeatureType 的字符串值（例如 "STATE"、"VISUAL"）映射到
+            对应的 NormalizationMode（例如 NormalizationMode.MIN_MAX）的字典
     """
 
     n_obs_steps: int = 1
 
-    # `input_features` can be set to None/null in order to infer those values from the dataset.
+    # 可以将 `input_features` 设置为 None/null，以便从数据集中推断这些值。
     input_features: dict[str, PolicyFeature] | None = field(default_factory=dict)
     output_features: dict[str, PolicyFeature] | None = field(default_factory=dict)
 
-    device: str | None = None  # e.g. "cuda", "cuda:0", "cpu", or "mps"
-    # `use_amp` determines whether to use Automatic Mixed Precision (AMP) for training and evaluation. With AMP,
-    # automatic gradient scaling is used.
+    device: str | None = None  # 例如 "cuda"、"cuda:0"、"cpu" 或 "mps"
+    # `use_amp` 决定训练和评估时是否使用自动混合精度（AMP）。使用 AMP 时，
+    # 会启用自动梯度缩放。
     use_amp: bool = False
 
-    # Whether the policy employed PEFT for training.
+    # 策略训练时是否使用了 PEFT。
     use_peft: bool = False
 
     push_to_hub: bool = True  # type: ignore[assignment] # TODO: use a different name to avoid override
     repo_id: str | None = None
 
-    # Upload on private repository on the Hugging Face hub.
+    # 上传到 Hugging Face hub 上的私有仓库。
     private: bool | None = None
-    # Add tags to your policy on the hub.
+    # 为 hub 上的策略添加标签。
     tags: list[str] | None = None
-    # Add tags to your policy on the hub.
+    # 为 hub 上的策略添加标签。
     license: str | None = None
-    # Either the repo ID of a model hosted on the Hub or a path to a directory containing weights
-    # saved using `Policy.save_pretrained`. If not provided, the policy is initialized from scratch.
+    # 托管在 Hub 上的模型的仓库 ID，或包含使用 `Policy.save_pretrained` 保存的
+    # 权重的目录路径。如果未提供，策略将从头初始化。
     pretrained_path: Path | None = None
-    # Optional Hub revision (commit hash, branch, or tag) to pin the pretrained model version.
+    # 可选的 Hub revision（commit hash、分支或标签），用于固定预训练模型的版本。
     pretrained_revision: str | None = None
 
     def __post_init__(self) -> None:
@@ -88,7 +88,7 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
             logger.warning(f"Device '{self.device}' is not available. Switching to '{auto_device}'.")
             self.device = auto_device.type
 
-        # Automatically deactivate AMP if necessary
+        # 必要时自动停用 AMP
         if self.use_amp and not is_amp_available(self.device):
             logger.warning(
                 f"Automatic Mixed Precision (amp) is not available on device '{self.device}'. Deactivating AMP."
@@ -163,8 +163,8 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
         return None
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        # Encode against the base class so draccus includes the choice "type" key,
-        # which `from_pretrained` needs to resolve the concrete subclass.
+        # 针对基类进行编码，这样 draccus 会包含 choice 的 "type" 键，
+        # `from_pretrained` 需要它来解析具体的子类。
         with open(save_directory / CONFIG_NAME, "w") as f:
             json.dump(draccus.encode(self, PreTrainedConfig), f, indent=4)
 
@@ -213,9 +213,9 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
         with open(config_file) as f:
             config = json.load(f)
 
-        # Resolve the concrete config subclass from the serialized "type" tag, then parse
-        # the config (with CLI overrides) directly for that class. The "type" key is
-        # stripped because draccus only consumes it when parsing the registry base class.
+        # 从序列化的 "type" 标签解析出具体的配置子类，然后直接针对该类
+        # 解析配置（带 CLI 覆盖项）。"type" 键会被剥离，因为 draccus
+        # 只在解析注册表基类时才会消费它。
         policy_type = config.pop("type", None)
         if policy_type is None:
             raise ValueError(f"Missing 'type' field in {CONFIG_NAME} of {model_id}")

@@ -78,7 +78,7 @@ def evo1_batch_to_transition(batch: dict[str, Any]):
 @dataclass
 @ProcessorStepRegistry.register(name="evo1_pad_state_processor")
 class Evo1PadStateProcessorStep(ObservationProcessorStep):
-    """Pad policy observations to EVO1's fixed state width before normalization."""
+    """在归一化之前，将策略观测填充到 EVO1 的固定状态宽度。"""
 
     max_state_dim: int = 24
 
@@ -113,7 +113,7 @@ class Evo1PadStateProcessorStep(ObservationProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="evo1_pad_action_processor")
 class Evo1PadActionProcessorStep(ProcessorStep):
-    """Pad training actions and preserve the active action dimensions with action_mask."""
+    """填充训练动作，并用 action_mask 保留有效的动作维度。"""
 
     max_action_dim: int = 24
 
@@ -168,7 +168,7 @@ class Evo1PadActionProcessorStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="evo1_action_processor")
 class Evo1ActionProcessorStep(PolicyActionProcessorStep):
-    """Crop padded EVO1 actions and optionally binarize the LIBERO gripper channel."""
+    """裁剪填充后的 EVO1 动作，并可选地将 LIBERO 夹爪通道二值化。"""
 
     action_dim: int
     binarize_gripper: bool = False
@@ -295,8 +295,8 @@ def _pad_evo1_stats(
         return None
 
     padded_stats = deepcopy(stats)
-    # Added dimensions represent zero-padding inside EVO1. These neutral stats keep
-    # padded observations at normalized zero and only provide shape compatibility.
+    # 新增的维度表示 EVO1 内部的零填充。这些中性统计量使填充的观测
+    # 保持归一化后的零值，仅提供形状兼容性。
     _pad_feature_stats(padded_stats, OBS_STATE, config.max_state_dim)
     _pad_feature_stats(padded_stats, ACTION, config.max_action_dim)
     return padded_stats
@@ -307,13 +307,13 @@ def _refresh_evo1_normalization_steps(
     preprocessor: PolicyProcessorPipeline,
     postprocessor: PolicyProcessorPipeline,
 ) -> None:
-    """Re-pad checkpoint-loaded (un)normalizer stats/features to EVO1's fixed widths.
+    """将从检查点加载的（反）归一化统计量/特征重新填充到 EVO1 的固定宽度。
 
-    Loading a checkpoint injects the raw dataset stats (unpadded to max_state_dim/max_action_dim)
-    into the (un)normalizer via the generic override path in make_pre_post_processors. Those stats
-    and their declared features must be re-padded/reshaped to EVO1's fixed widths, otherwise
-    normalization fails against the padded state/action tensors (e.g. state padded to 24 vs. 8-dim
-    LIBERO stats). Padding is a no-op when stats are already at the target width.
+    加载检查点会通过 make_pre_post_processors 中的通用覆盖路径，将原始数据集
+    统计量（未填充到 max_state_dim/max_action_dim）注入（反）归一化器。这些统计量
+    及其声明的特征必须被重新填充/重塑为 EVO1 的固定宽度，否则针对填充后的
+    状态/动作张量的归一化会失败（例如状态被填充到 24 维，而 LIBERO 统计量是 8 维）。
+    当统计量已经达到目标宽度时，填充是空操作。
     """
     normalization_features = _evo1_normalization_features(config)
     action_features = _evo1_action_features(config)
@@ -334,17 +334,17 @@ def reconcile_evo1_processors(
     preprocessor: PolicyProcessorPipeline,
     postprocessor: PolicyProcessorPipeline,
 ) -> tuple[PolicyProcessorPipeline, PolicyProcessorPipeline]:
-    """Reconcile checkpoint-loaded pipelines with the current EVO1 config.
+    """将从检查点加载的流水线与当前 EVO1 配置进行调和。
 
-    Three things cannot be restored from a serialized pipeline alone: the EVO1 batch converter
-    (converters are plain functions and are never serialized), eval-time CLI overrides of the
-    action postprocessing flags (`postprocess_action_dim`, `binarize_gripper`, `gripper_*`), and the
-    (un)normalizer stats/features when the generic override path injects raw, unpadded dataset
-    stats. This restores the converter, re-pads the normalization stats to EVO1's fixed widths, and
-    rebuilds the action step from the current config so those overrides take effect.
+    有三样东西无法仅从序列化的流水线中恢复：EVO1 的批次转换器
+    （转换器是普通函数，从不被序列化）、评估时通过 CLI 覆盖的动作后处理标志
+    （`postprocess_action_dim`、`binarize_gripper`、`gripper_*`），以及当通用覆盖
+    路径注入原始未填充的数据集统计量时的（反）归一化统计量/特征。本函数恢复
+    转换器，将归一化统计量重新填充到 EVO1 的固定宽度，并根据当前配置重建
+    动作步骤，使这些覆盖生效。
     """
-    # Pipelines reloaded from a checkpoint come back with the default batch converter, which drops
-    # non-observation extras (embodiment_id, state_mask, custom task fields) needed by EVO1.
+    # 从检查点重新加载的流水线会带回默认的批次转换器，它会丢弃
+    # EVO1 所需的非观测附加项（embodiment_id、state_mask、自定义任务字段）。
     preprocessor.to_transition = evo1_batch_to_transition
 
     _refresh_evo1_normalization_steps(config, preprocessor, postprocessor)
@@ -411,7 +411,7 @@ def make_evo1_pre_post_processors(
             gripper_below_threshold_value=config.gripper_below_threshold_value,
             gripper_above_threshold_value=config.gripper_above_threshold_value,
         ),
-        # float32 so downstream numpy conversion works even when the policy computes in bf16.
+        # 使用 float32，即使策略以 bf16 计算，下游的 numpy 转换也能正常工作。
         DeviceProcessorStep(device="cpu", float_dtype="float32"),
     ]
 

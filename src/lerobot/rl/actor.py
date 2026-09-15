@@ -14,35 +14,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Actor server runner for distributed HILSerl robot policy training.
+用于分布式 HILSerl 机器人策略训练的 Actor 服务器运行脚本。
 
-This script implements the actor component of the distributed HILSerl architecture.
-It executes the policy in the robot environment, collects experience,
-and sends transitions to the learner server for policy updates.
+本脚本实现了分布式 HILSerl 架构中的 actor 组件。
+它在机器人环境中执行策略、收集经验，
+并将 transition 发送给 learner 服务器以更新策略。
 
-Examples of usage:
+使用示例：
 
-- Start an actor server for real robot training with human-in-the-loop intervention:
+- 启动一个用于带有人工介入（human-in-the-loop）的真实机器人训练的 actor 服务器：
 ```bash
 python -m lerobot.rl.actor --config_path src/lerobot/configs/train_config_hilserl_so100.json
 ```
 
-**NOTE**: The actor server requires a running learner server to connect to. Ensure the learner
-server is started before launching the actor.
+**注意**：actor 服务器需要一个正在运行的 learner 服务器以供连接。请确保在
+启动 actor 之前先启动 learner 服务器。
 
-**NOTE**: Human intervention is key to HILSerl training. Press the upper right trigger button on the
-gamepad to take control of the robot during training. Initially intervene frequently, then gradually
-reduce interventions as the policy improves.
+**注意**：人工介入是 HILSerl 训练的关键。在训练期间按下手柄右上角的
+扳机按钮即可接管机器人控制。初期应频繁介入，随后随着策略
+改进逐步减少介入次数。
 
-**WORKFLOW**:
-1. Determine robot workspace bounds using `lerobot-find-joint-limits`
-2. Record demonstrations with `gym_manipulator.py` in record mode
-3. Process the dataset and determine camera crops with `crop_dataset_roi.py`
-4. Start the learner server with the training configuration
-5. Start this actor server with the same configuration
-6. Use human interventions to guide policy learning
+**工作流程**：
+1. 使用 `lerobot-find-joint-limits` 确定机器人工作空间的边界
+2. 使用 `gym_manipulator.py` 的录制模式记录演示
+3. 使用 `crop_dataset_roi.py` 处理数据集并确定相机裁剪区域
+4. 使用训练配置启动 learner 服务器
+5. 使用相同的配置启动本 actor 服务器
+6. 通过人工介入引导策略学习
 
-For more details on the complete HILSerl training workflow, see:
+有关完整 HILSerl 训练工作流程的更多详情，参见：
 https://github.com/michel-aractingi/lerobot-hilserl-guide
 """
 
@@ -114,12 +114,12 @@ from .gym_manipulator import (
 from .queue import get_last_item_from_queue
 from .train_rl import TrainRLServerPipelineConfig
 
-# Main entry point
+# 主入口
 
 
 @parser.wrap()
 def actor_cli(cfg: TrainRLServerPipelineConfig):
-    # Fail fast with a friendly error if the optional ``hilserl`` extra is missing.
+    # 如果缺少可选的 ``hilserl`` extra，快速失败并给出友好的错误信息。
     require_package("grpcio", extra="hilserl", import_name="grpc")
     cfg.validate()
     display_pid = False
@@ -127,12 +127,12 @@ def actor_cli(cfg: TrainRLServerPipelineConfig):
         ensure_multiprocessing_start_method(cfg.policy.concurrency.multiprocessing_context)
         display_pid = True
 
-    # Create logs directory to ensure it exists
+    # 创建日志目录以确保其存在
     log_dir = os.path.join(cfg.output_dir, "logs")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"actor_{cfg.job_name}.log")
 
-    # Initialize logging with explicit log file
+    # 使用显式的日志文件初始化日志记录
     init_logging(log_file=log_file, display_pid=display_pid)
     logging.info(f"Actor logging initialized, writing to {log_file}")
 
@@ -150,7 +150,7 @@ def actor_cli(cfg: TrainRLServerPipelineConfig):
         return
 
     if not use_threads(cfg):
-        # If we use multithreading, we can reuse the channel
+        # 如果使用多线程，我们可以复用该通道
         grpc_channel.close()
         grpc_channel = None
 
@@ -224,7 +224,7 @@ def actor_cli(cfg: TrainRLServerPipelineConfig):
         logging.info("[ACTOR] Cleanup complete")
 
 
-# Core algorithm functions
+# 核心算法函数
 
 
 def act_with_policy(
@@ -235,19 +235,19 @@ def act_with_policy(
     interactions_queue: Queue,
 ):
     """
-    Executes policy interaction within the environment.
+    在环境中执行策略交互。
 
-    This function rolls out the policy in the environment, collecting interaction data and pushing it to a queue for streaming to the learner.
-    Once an episode is completed, updated network parameters received from the learner are retrieved from a queue and loaded into the network.
+    该函数在环境中展开（roll out）策略，收集交互数据并将其推入队列，以流式发送给 learner。
+    一旦某个 episode 完成，就从队列中取出从 learner 接收到的更新后的网络参数并加载到网络中。
 
     Args:
-        cfg: Configuration settings for the interaction process.
-        shutdown_event: Event to check if the process should shutdown.
-        parameters_queue: Queue to receive updated network parameters from the learner.
-        transitions_queue: Queue to send transitions to the learner.
-        interactions_queue: Queue to send interactions to the learner.
+        cfg: 交互过程的配置项。
+        shutdown_event: 用于检查进程是否应关闭的事件。
+        parameters_queue: 用于从 learner 接收更新后网络参数的队列。
+        transitions_queue: 用于向 learner 发送 transition 的队列。
+        interactions_queue: 用于向 learner 发送交互信息的队列。
     """
-    # Initialize logging for multiprocessing
+    # 为多进程初始化日志记录
     if not use_threads(cfg):
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
@@ -268,9 +268,9 @@ def act_with_policy(
 
     logging.info("make_policy")
 
-    ### Instantiate the policy in both the actor and learner processes
-    ### To avoid sending a policy object through the port, we create a policy instance
-    ### on both sides, the learner sends the updated parameters every n steps to update the actor's parameters
+    ### 在 actor 和 learner 两个进程中分别实例化策略
+    ### 为了避免通过端口发送策略对象，我们在双方各自创建策略实例，
+    ### learner 每 n 步发送一次更新后的参数，以更新 actor 的参数
     policy = make_policy(
         cfg=cfg.policy,
         env_cfg=cfg.env,
@@ -278,7 +278,7 @@ def act_with_policy(
     policy = policy.to(device).eval()
     assert isinstance(policy, nn.Module)
 
-    # Build the algorithm
+    # 构建算法
     algorithm = make_algorithm(cfg=cfg.algorithm, policy=policy)
 
     preprocessor, postprocessor = make_pre_post_processors(
@@ -288,11 +288,11 @@ def act_with_policy(
 
     transition = reset_and_build_transition(online_env, env_processor, action_processor)
 
-    # NOTE: For the moment we will solely handle the case of a single environment
+    # 注意：目前我们仅处理单环境的情况
     sum_reward_episode = 0
     list_transition_to_send_to_learner = []
     episode_intervention = False
-    # Add counters for intervention rate calculation
+    # 添加用于计算介入率的计数器
     episode_intervention_steps = 0
     episode_total_steps = 0
 
@@ -308,11 +308,11 @@ def act_with_policy(
             k: v for k, v in transition[TransitionKey.OBSERVATION].items() if k in cfg.policy.input_features
         }
 
-        # Time policy inference and check if it meets FPS requirement
+        # 对策略推理计时，并检查是否满足 FPS 要求
         with policy_timer:
             normalized_observation = preprocessor.process_observation(observation)
             action = policy.select_action(batch=normalized_observation)
-            # Unnormalize only the continuous part.
+            # 仅对连续部分进行反归一化。
             if cfg.policy.num_discrete_actions is not None:
                 continuous_action = postprocessor.process_action(action[..., :-1])
                 discrete_action = action[..., -1:].to(
@@ -325,7 +325,7 @@ def act_with_policy(
 
         log_policy_frequency_issue(policy_fps=policy_fps, cfg=cfg, interaction_step=interaction_step)
 
-        # Use the new step function
+        # 使用新的 step 函数
         new_transition = step_env_and_process_transition(
             env=online_env,
             transition=transition,
@@ -334,15 +334,15 @@ def act_with_policy(
             action_processor=action_processor,
         )
 
-        # Extract values from processed transition
+        # 从处理后的 transition 中提取各项值
         next_observation = {
             k: v
             for k, v in new_transition[TransitionKey.OBSERVATION].items()
             if k in cfg.policy.input_features
         }
 
-        # Teleop action is the action that was executed in the environment
-        # It is either the action from the teleop device or the action from the policy
+        # Teleop action 是实际在环境中执行的动作
+        # 它要么来自遥操作设备，要么来自策略
         executed_action = new_transition[TransitionKey.COMPLEMENTARY_DATA]["teleop_action"]
 
         reward = new_transition[TransitionKey.REWARD]
@@ -352,7 +352,7 @@ def act_with_policy(
         sum_reward_episode += float(reward)
         episode_total_steps += 1
 
-        # Check for intervention from transition info
+        # 从 transition 信息中检查是否发生了介入
         intervention_info = new_transition[TransitionKey.INFO]
         is_intervention = bool(intervention_info.get(TeleopEvents.IS_INTERVENTION, False))
         if is_intervention:
@@ -365,7 +365,7 @@ def act_with_policy(
             ),
             TeleopEvents.IS_INTERVENTION.value: is_intervention,
         }
-        # Create transition for learner (convert to old format)
+        # 为 learner 创建 transition（转换为旧格式）
         list_transition_to_send_to_learner.append(
             Transition(
                 state=observation,
@@ -378,7 +378,7 @@ def act_with_policy(
             )
         )
 
-        # Update transition for next iteration
+        # 更新 transition 以供下一次迭代使用
         transition = new_transition
 
         if done or truncated:
@@ -396,12 +396,12 @@ def act_with_policy(
             stats = get_frequency_stats(policy_timer)
             policy_timer.reset()
 
-            # Calculate intervention rate
+            # 计算介入率
             intervention_rate = 0.0
             if episode_total_steps > 0:
                 intervention_rate = episode_intervention_steps / episode_total_steps
 
-            # Send episodic reward to the learner
+            # 将 episode 奖励发送给 learner
             interactions_queue.put(
                 python_object_to_bytes(
                     {
@@ -414,7 +414,7 @@ def act_with_policy(
                 )
             )
 
-            # Reset intervention counters and environment
+            # 重置介入计数器和环境
             sum_reward_episode = 0.0
             episode_intervention = False
             episode_intervention_steps = 0
@@ -427,7 +427,7 @@ def act_with_policy(
             precise_sleep(max(1 / cfg.env.fps - dt_time, 0.0))
 
 
-#  Communication Functions - Group all gRPC/messaging functions
+#  通信函数 - 汇总所有 gRPC/消息传递函数
 
 
 def establish_learner_connection(
@@ -435,21 +435,21 @@ def establish_learner_connection(
     shutdown_event: Any,  # Event
     attempts: int = 30,
 ) -> bool:
-    """Establish a connection with the learner.
+    """与 learner 建立连接。
 
     Args:
-        stub (services_pb2_grpc.LearnerServiceStub): The stub to use for the connection.
-        shutdown_event (Event): The event to check if the connection should be established.
-        attempts (int): The number of attempts to establish the connection.
+        stub (services_pb2_grpc.LearnerServiceStub): 用于连接的 stub。
+        shutdown_event (Event): 用于检查是否应建立连接的事件。
+        attempts (int): 建立连接的尝试次数。
     Returns:
-        bool: True if the connection is established, False otherwise.
+        bool: 如果连接已建立则返回 True，否则返回 False。
     """
     for _ in range(attempts):
         if shutdown_event.is_set():
             logging.info("[ACTOR] Shutting down establish_learner_connection")
             return False
 
-        # Force a connection attempt and check state
+        # 强制尝试连接并检查状态
         try:
             logging.info("[ACTOR] Send ready message to Learner")
             if stub.Ready(services_pb2.Empty()) == services_pb2.Empty():
@@ -465,13 +465,13 @@ def learner_service_client(
     host: str = "127.0.0.1",
     port: int = 50051,
 ) -> "tuple[services_pb2_grpc.LearnerServiceStub, grpc.Channel]":
-    """Return a client for the learner service.
+    """返回 learner 服务的客户端。
 
-    GRPC uses HTTP/2, which is a binary protocol and multiplexes requests over a single connection.
-    So we need to create only one client and reuse it.
+    GRPC 使用 HTTP/2，这是一种二进制协议，可在单个连接上多路复用请求。
+    因此我们只需创建一个客户端并复用它。
 
     Returns:
-        tuple[services_pb2_grpc.LearnerServiceStub, grpc.Channel]: The stub and the channel.
+        tuple[services_pb2_grpc.LearnerServiceStub, grpc.Channel]: stub 和通道。
     """
 
     channel = grpc.insecure_channel(
@@ -490,28 +490,28 @@ def receive_policy(
     learner_client: "services_pb2_grpc.LearnerServiceStub | None" = None,
     grpc_channel: "grpc.Channel | None" = None,
 ) -> None:
-    """Receive parameters from the learner.
+    """从 learner 接收参数。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): The configuration for the actor.
-        parameters_queue (Queue): The queue to receive the parameters.
-        shutdown_event (Event): The event to check if the process should shutdown.
-        learner_client (services_pb2_grpc.LearnerServiceStub | None): Optional pre-created stub.
-        grpc_channel (grpc.Channel | None): Optional pre-created channel.
+        cfg (TrainRLServerPipelineConfig): actor 的配置。
+        parameters_queue (Queue): 用于接收参数的队列。
+        shutdown_event (Event): 用于检查进程是否应关闭的事件。
+        learner_client (services_pb2_grpc.LearnerServiceStub | None): 可选的预创建 stub。
+        grpc_channel (grpc.Channel | None): 可选的预创建通道。
     """
     logging.info("[ACTOR] Start receiving parameters from the Learner")
     if not use_threads(cfg):
-        # Create a process-specific log file
+        # 创建进程专属的日志文件
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"actor_receive_policy_{os.getpid()}.log")
 
-        # Initialize logging with explicit log file
+        # 使用显式的日志文件初始化日志记录
         init_logging(log_file=log_file, display_pid=True)
         logging.info("Actor receive policy process logging initialized")
 
-        # Setup process handlers to handle shutdown signal
-        # But use shutdown event from the main process
+        # 设置进程处理器以处理关闭信号
+        # 但使用主进程的 shutdown 事件
         _ = ProcessSignalHandler(use_threads=False, display_pid=True)
 
     if grpc_channel is None or learner_client is None:
@@ -544,30 +544,30 @@ def send_transitions(
     learner_client: "services_pb2_grpc.LearnerServiceStub | None" = None,
     grpc_channel: "grpc.Channel | None" = None,
 ) -> None:
-    """Send transitions to the learner.
+    """向 learner 发送 transition。
 
-    This function continuously retrieves messages from the queue and processes:
+    该函数持续从队列中取出消息并进行处理：
 
-    - Transition Data:
-        - A batch of transitions (observation, action, reward, next observation) is collected.
-        - Transitions are moved to the CPU and serialized using PyTorch.
-        - The serialized data is wrapped in a `services_pb2.Transition` message and sent to the learner.
+    - Transition 数据：
+        - 收集一批 transition（观测、动作、奖励、下一观测）。
+        - 将 transition 移动到 CPU 并使用 PyTorch 序列化。
+        - 将序列化后的数据包装在 `services_pb2.Transition` 消息中并发送给 learner。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): The configuration for the actor.
-        transitions_queue (Queue): The queue to receive the transitions.
-        shutdown_event (Event): The event to check if the process should shutdown.
-        learner_client (services_pb2_grpc.LearnerServiceStub | None): Optional pre-created stub.
-        grpc_channel (grpc.Channel | None): Optional pre-created channel.
+        cfg (TrainRLServerPipelineConfig): actor 的配置。
+        transitions_queue (Queue): 用于接收 transition 的队列。
+        shutdown_event (Event): 用于检查进程是否应关闭的事件。
+        learner_client (services_pb2_grpc.LearnerServiceStub | None): 可选的预创建 stub。
+        grpc_channel (grpc.Channel | None): 可选的预创建通道。
     """
 
     if not use_threads(cfg):
-        # Create a process-specific log file
+        # 创建进程专属的日志文件
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"actor_transitions_{os.getpid()}.log")
 
-        # Initialize logging with explicit log file
+        # 使用显式的日志文件初始化日志记录
         init_logging(log_file=log_file, display_pid=True)
         logging.info("Actor transitions process logging initialized")
 
@@ -600,34 +600,34 @@ def send_interactions(
     learner_client: "services_pb2_grpc.LearnerServiceStub | None" = None,
     grpc_channel: "grpc.Channel | None" = None,
 ) -> None:
-    """Send interactions to the learner.
+    """向 learner 发送交互信息。
 
-    This function continuously retrieves messages from the queue and processes:
+    该函数持续从队列中取出消息并进行处理：
 
-    - Interaction Messages:
-        - Contains useful statistics about episodic rewards and policy timings.
-        - The message is serialized using `pickle` and sent to the learner.
+    - 交互消息：
+        - 包含有关 episode 奖励和策略计时的有用统计信息。
+        - 消息使用 `pickle` 序列化并发送给 learner。
 
     Args:
-        cfg (TrainRLServerPipelineConfig): The configuration for the actor.
-        interactions_queue (Queue): The queue to receive the interactions.
-        shutdown_event (Event): The event to check if the process should shutdown.
-        learner_client (services_pb2_grpc.LearnerServiceStub | None): Optional pre-created stub.
-        grpc_channel (grpc.Channel | None): Optional pre-created channel.
+        cfg (TrainRLServerPipelineConfig): actor 的配置。
+        interactions_queue (Queue): 用于接收交互信息的队列。
+        shutdown_event (Event): 用于检查进程是否应关闭的事件。
+        learner_client (services_pb2_grpc.LearnerServiceStub | None): 可选的预创建 stub。
+        grpc_channel (grpc.Channel | None): 可选的预创建通道。
     """
 
     if not use_threads(cfg):
-        # Create a process-specific log file
+        # 创建进程专属的日志文件
         log_dir = os.path.join(cfg.output_dir, "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"actor_interactions_{os.getpid()}.log")
 
-        # Initialize logging with explicit log file
+        # 使用显式的日志文件初始化日志记录
         init_logging(log_file=log_file, display_pid=True)
         logging.info("Actor interactions process logging initialized")
 
-        # Setup process handlers to handle shutdown signal
-        # But use shutdown event from the main process
+        # 设置进程处理器以处理关闭信号
+        # 但使用主进程的 shutdown 事件
         _ = ProcessSignalHandler(use_threads=False, display_pid=True)
 
     if grpc_channel is None or learner_client is None:
@@ -692,38 +692,38 @@ def interactions_stream(
     return services_pb2.Empty()
 
 
-#  Policy functions
+#  策略函数
 
 
 def update_policy_parameters(algorithm: RLAlgorithm, parameters_queue: Queue, device):
-    """Drain the latest learner-pushed weights into ``algorithm.policy``."""
+    """取出 learner 推送的最新权重并加载到 ``algorithm.policy`` 中。"""
     bytes_state_dict = get_last_item_from_queue(parameters_queue, block=False)
     if bytes_state_dict is not None:
         logging.info("[ACTOR] Load new parameters from Learner.")
         state_dicts = bytes_to_state_dict(bytes_state_dict)
 
-        # TODO: check encoder parameter synchronization possible issues:
-        # 1. When shared_encoder=True, we're loading stale encoder params from actor's state_dict
-        #    instead of the updated encoder params from critic (which is optimized separately)
-        # 2. When freeze_vision_encoder=True, we waste bandwidth sending/loading frozen params
-        # 3. Need to handle encoder params correctly for both actor and discrete_critic
-        # Potential fixes:
-        # - Send critic's encoder state when shared_encoder=True
-        # - Skip encoder params entirely when freeze_vision_encoder=True
-        # - Ensure discrete_critic gets correct encoder state (currently uses encoder_critic)
+        # TODO: 检查编码器参数同步可能存在的问题：
+        # 1. 当 shared_encoder=True 时，我们从 actor 的 state_dict 加载的是过期的编码器参数，
+        #    而不是来自 critic（单独优化的）更新后的编码器参数
+        # 2. 当 freeze_vision_encoder=True 时，发送/加载被冻结的参数会浪费带宽
+        # 3. 需要为 actor 和 discrete_critic 正确处理编码器参数
+        # 可能的修复方案：
+        # - 当 shared_encoder=True 时，发送 critic 的编码器状态
+        # - 当 freeze_vision_encoder=True 时，完全跳过编码器参数
+        # - 确保 discrete_critic 获得正确的编码器状态（目前使用的是 encoder_critic）
         algorithm.load_weights(state_dicts, device=device)
 
 
-#  Utilities functions
+#  工具函数
 
 
 def push_transitions_to_transport_queue(transitions: list, transitions_queue):
-    """Send transitions to learner in smaller chunks to avoid network issues.
+    """以较小的分块向 learner 发送 transition，以避免网络问题。
 
     Args:
-        transitions: List of transitions to send
-        message_queue: Queue to send messages to learner
-        chunk_size: Size of each chunk to send
+        transitions: 要发送的 transition 列表
+        message_queue: 用于向 learner 发送消息的队列
+        chunk_size: 每个发送分块的大小
     """
     transition_to_send_to_learner = []
     for transition in transitions:
@@ -738,13 +738,13 @@ def push_transitions_to_transport_queue(transitions: list, transitions_queue):
 
 
 def get_frequency_stats(timer: TimerManager) -> dict[str, float]:
-    """Get the frequency statistics of the policy.
+    """获取策略的频率统计信息。
 
     Args:
-        timer (TimerManager): The timer with collected metrics.
+        timer (TimerManager): 包含已收集指标的计时器。
 
     Returns:
-        dict[str, float]: The frequency statistics of the policy.
+        dict[str, float]: 策略的频率统计信息。
     """
     stats = {}
     if timer.count > 1:

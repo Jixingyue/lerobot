@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)
 
 class OmxFollower(Robot):
     """
-    - [OMX](https://github.com/ROBOTIS-GIT/open_manipulator),
-        expansion, developed by Woojin Wie and Junha Cha from [ROBOTIS](https://ai.robotis.com/)
+    - [OMX](https://github.com/ROBOTIS-GIT/open_manipulator)，
+        扩展版，由 [ROBOTIS](https://ai.robotis.com/) 的 Woojin Wie 和 Junha Cha 开发
     """
 
     config_class = OmxFollowerConfig
@@ -92,10 +92,10 @@ class OmxFollower(Robot):
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """
-        For OMX robots that come pre-calibrated:
-        - If default calibration from package doesn't match motors, read from motors and save
-        - This allows using pre-calibrated robots without manual calibration
-        - If no calibration file exists, use factory default values (homing_offset=0, range_min=0, range_max=4095)
+        对于出厂已校准的 OMX 机器人：
+        - 如果软件包中的默认校准与电机不匹配，则从电机读取并保存
+        - 这样无需手动校准即可使用已校准的机器人
+        - 如果不存在校准文件，则使用出厂默认值（homing_offset=0、range_min=0、range_max=4095）
         """
 
         self.bus.connect()
@@ -142,23 +142,22 @@ class OmxFollower(Robot):
     def configure(self) -> None:
         with self.bus.torque_disabled():
             self.bus.configure_motors()
-            # Use 'extended position mode' for all motors except gripper, because in joint mode the servos
-            # can't rotate more than 360 degrees (from 0 to 4095) And some mistake can happen while assembling
-            # the arm, you could end up with a servo with a position 0 or 4095 at a crucial point
+            # 除夹爪外，所有电机都使用"扩展位置模式"，因为在关节模式下舵机
+            # 无法旋转超过 360 度（从 0 到 4095）。而且在组装手臂时可能会出错，
+            # 导致某个舵机在关键点上处于位置 0 或 4095
             for motor in self.bus.motors:
                 if motor != "gripper":
                     self.bus.write("Operating_Mode", motor, OperatingMode.EXTENDED_POSITION.value)
 
-            # Use 'position control current based' for gripper to be limited by the limit of the current. For
-            # the follower gripper, it means it can grasp an object without forcing too much even tho, its
-            # goal position is a complete grasp (both gripper fingers are ordered to join and reach a touch).
-            # For the leader gripper, it means we can use it as a physical trigger, since we can force with
-            # our finger to make it move, and it will move back to its original target position when we
-            # release the force.
+            # 夹爪使用"基于电流的位置控制"，使其受到电流限制。对于
+            # follower 夹爪，这意味着即使其目标位置是完全夹合（命令两个夹爪手指
+            # 合拢并接触），它抓取物体时也不会过度用力。
+            # 对于 leader 夹爪，这意味着我们可以将其用作物理触发器，因为我们可以
+            # 用手指用力使其移动，并在松开力后它会回到原来的目标位置。
             self.bus.write("Operating_Mode", "gripper", OperatingMode.CURRENT_POSITION.value)
 
-            # Set better PID values to close the gap between recorded states and actions
-            # TODO(rcadene): Implement an automatic procedure to set optimal PID values for each motor
+            # 设置更优的 PID 值以缩小记录的状态与动作之间的差距
+            # TODO(rcadene): 实现自动流程为每个电机设置最优 PID 值
             self.bus.write("Position_P_Gain", "elbow_flex", 1500)
             self.bus.write("Position_I_Gain", "elbow_flex", 0)
             self.bus.write("Position_D_Gain", "elbow_flex", 600)
@@ -171,14 +170,14 @@ class OmxFollower(Robot):
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
-        # Read arm position
+        # 读取机械臂位置
         start = time.perf_counter()
         obs_dict = self.bus.sync_read("Present_Position")
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
+        # 从相机采集图像
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
@@ -196,29 +195,29 @@ class OmxFollower(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Command arm to move to a target joint configuration.
+        """命令机械臂移动到目标关节配置。
 
-        The relative action magnitude may be clipped depending on the configuration parameter
-        `max_relative_target`. In this case, the action sent differs from original action.
-        Thus, this function always returns the action actually sent.
+        相对动作幅度可能会根据配置参数 ``max_relative_target`` 进行裁剪。
+        在这种情况下，发送的动作与原始动作不同。
+        因此，该函数始终返回实际发送的动作。
 
         Args:
-            action (RobotAction): The goal positions for the motors.
+            action (RobotAction): 电机的目标位置。
 
         Returns:
-            RobotAction: The action sent to the motors, potentially clipped.
+            RobotAction: 发送给电机的动作，可能经过裁剪。
         """
 
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
+        # 当目标位置距离当前位置太远时进行限制。
+        # /!\ 由于需要从从动端读取，预计帧率会降低。
         if self.config.max_relative_target is not None:
             present_pos = self.bus.sync_read("Present_Position")
             goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
             goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
 
-        # Send goal position to the arm
+        # 将目标位置发送给机械臂
         self.bus.sync_write("Goal_Position", goal_pos)
         return {f"{motor}.pos": val for motor, val in goal_pos.items()}
 

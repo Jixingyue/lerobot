@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-Simple script to control a robot from teleoperation.
+通过遥操作控制机器人的简单脚本。
 
-Requires: pip install 'lerobot[hardware]'
+需要安装：pip install 'lerobot[hardware]'
 
-Example:
+示例：
 
 ```shell
 lerobot-teleoperate \
@@ -31,8 +31,8 @@ lerobot-teleoperate \
     --display_data=true
 ```
 
-To stream the data to Foxglove instead of Rerun, add ``--display_mode=foxglove``
-(then connect the Foxglove app to ``ws://127.0.0.1:8765``; override the port with ``--display_port=<port>``):
+若要将数据流式传输到 Foxglove 而不是 Rerun，请添加 ``--display_mode=foxglove``
+（然后将 Foxglove 应用连接到 ``ws://127.0.0.1:8765``；可用 ``--display_port=<port>`` 覆盖端口）：
 
 ```shell
 lerobot-teleoperate \
@@ -47,7 +47,7 @@ lerobot-teleoperate \
     --display_mode=foxglove
 ```
 
-Example teleoperation with bimanual so100:
+双臂 so100 的遥操作示例：
 
 ```shell
 lerobot-teleoperate \
@@ -133,22 +133,22 @@ from lerobot.utils.visualization_utils import (
 
 @dataclass
 class TeleoperateConfig:
-    # TODO: pepijn, steven: if more robots require multiple teleoperators (like lekiwi) its good to make this possibele in teleop.py and record.py with List[Teleoperator]
+    # TODO: pepijn, steven: 如果有更多机器人需要多个遥操作器（比如 lekiwi），最好在 teleop.py 和 record.py 中通过 List[Teleoperator] 支持这一点
     teleop: TeleoperatorConfig
     robot: RobotConfig
-    # Limit the maximum frames per second.
+    # 限制最大每秒帧数。
     fps: int = 60
     teleop_time_s: float | None = None
-    # Display all cameras on screen
+    # 在屏幕上显示所有相机画面
     display_data: bool = False
-    # Visualization backend used when display_data is True: "rerun" or "foxglove".
+    # 当 display_data 为 True 时使用的可视化后端："rerun" 或 "foxglove"。
     display_mode: str = "rerun"
-    # For "rerun": IP of a remote server to send to. For "foxglove": interface to bind the WebSocket
-    # server to (127.0.0.1 for local only, 0.0.0.0 for all interfaces).
+    # 对于 "rerun"：要发送到的远程服务器的 IP。对于 "foxglove"：WebSocket 服务器
+    # 绑定的接口（127.0.0.1 仅限本地，0.0.0.0 为所有接口）。
     display_ip: str | None = None
-    # For "rerun": port of the remote server. For "foxglove": port to bind the WebSocket server to.
+    # 对于 "rerun"：远程服务器的端口。对于 "foxglove"：WebSocket 服务器绑定的端口。
     display_port: int | None = None
-    # Whether to display compressed (JPEG) images instead of raw frames
+    # 是否显示压缩后的（JPEG）图像而不是原始帧
     display_compressed_images: bool = False
 
 
@@ -165,62 +165,61 @@ def teleop_loop(
     display_compressed_images: bool = False,
 ):
     """
-    This function continuously reads actions from a teleoperation device, processes them through optional
-    pipelines, sends them to a robot, and optionally displays the robot's state. The loop runs at a
-    specified frequency until a set duration is reached or it is manually interrupted.
+    该函数持续从遥操作设备读取动作，通过可选的流水线处理它们，将其发送给机器人，
+    并可选地显示机器人的状态。该循环以指定频率运行，
+    直到达到设定时长或被手动中断为止。
 
-    Args:
-        teleop: The teleoperator device instance providing control actions.
-        robot: The robot instance being controlled.
-        fps: The target frequency for the control loop in frames per second.
-        display_data: If True, fetches robot observations and displays them in the console and the
-            visualization backend.
-        display_mode: Visualization backend to use when display_data is True ("rerun" or "foxglove").
-        display_compressed_images: If True, compresses images before sending them to the backend for display.
-        duration: The maximum duration of the teleoperation loop in seconds. If None, the loop runs indefinitely.
-        teleop_action_processor: An optional pipeline to process raw actions from the teleoperator.
-        robot_action_processor: An optional pipeline to process actions before they are sent to the robot.
-        robot_observation_processor: An optional pipeline to process raw observations from the robot.
+    参数：
+        teleop: 提供控制动作的遥操作器设备实例。
+        robot: 被控制的机器人实例。
+        fps: 控制循环的目标频率，单位为每秒帧数。
+        display_data: 若为 True，则获取机器人观测并在控制台和可视化后端中显示。
+        display_mode: 当 display_data 为 True 时使用的可视化后端（"rerun" 或 "foxglove"）。
+        display_compressed_images: 若为 True，则在将图像发送到后端显示前先进行压缩。
+        duration: 遥操作循环的最大时长（秒）。若为 None，循环将无限运行。
+        teleop_action_processor: 用于处理遥操作器原始动作的可选流水线。
+        robot_action_processor: 在动作发送给机器人之前处理动作的可选流水线。
+        robot_observation_processor: 用于处理机器人原始观测的可选流水线。
     """
 
     display_len = max(len(key) for key in robot.action_features)
-    # Teleoperation writes no dataset, so a missed deadline costs control smoothness
-    # only.  The live readout below is the instantaneous rate; the timer adds the
-    # warning when the loop cannot keep up and the summary of where the time went.
+    # 遥操作不写入数据集，因此错过截止时间只会损失控制平滑度。
+    # 下方的实时读数是瞬时频率；当循环跟不上时，计时器会添加警告，
+    # 并给出时间耗在何处的汇总。
     timer = CycleTimer(fps, records_data=False)
     start = time.perf_counter()
     try:
         while True:
             timer.tick()
-            loop_start = time.perf_counter()  # for the live readout below
+            loop_start = time.perf_counter()  # 用于下方的实时读数
 
             with timer.section("observe"):
-                # Get robot observation
-                # Not really needed for now other than for visualization
-                # teleop_action_processor can take None as an observation
-                # given that it is the identity processor as default
+                # 获取机器人观测
+                # 目前除了用于可视化外其实并不需要
+                # 由于默认是恒等处理器，
+                # teleop_action_processor 可以接受 None 作为观测
                 obs = robot.get_observation()
 
                 if robot.name == "unitree_g1":
                     teleop.send_feedback(obs)
 
             with timer.section("teleop"):
-                # Get teleop action
+                # 获取遥操作动作
                 raw_action = teleop.get_action()
 
-                # Process teleop action through pipeline
+                # 通过流水线处理遥操作动作
                 teleop_action = teleop_action_processor((raw_action, obs))
 
-                # Process action for robot through pipeline
+                # 通过流水线处理发送给机器人的动作
                 robot_action_to_send = robot_action_processor((teleop_action, obs))
 
             with timer.section("send"):
-                # Send processed action to robot (robot_action_processor.to_output should return RobotAction)
+                # 将处理后的动作发送给机器人（robot_action_processor.to_output 应返回 RobotAction）
                 _ = robot.send_action(robot_action_to_send)
 
             if display_data:
                 with timer.section("telemetry"):
-                    # Process robot observation through pipeline
+                    # 通过流水线处理机器人观测
                     obs_transition = robot_observation_processor(obs)
 
                     log_visualization_data(
@@ -232,7 +231,7 @@ def teleop_loop(
 
                     print("\n" + "-" * (display_len + 10))
                     print(f"{'NAME':<{display_len}} | {'NORM':>7}")
-                    # Display the final robot action that was sent
+                    # 显示已发送的最终机器人动作
                     for motor, value in robot_action_to_send.items():
                         print(f"{motor:<{display_len}} | {value:>7.2f}")
                     move_cursor_up(len(robot_action_to_send) + 3)
@@ -245,7 +244,7 @@ def teleop_loop(
             if duration is not None and time.perf_counter() - start >= duration:
                 return
     finally:
-        # In `finally` so ^C — how a teleop session normally ends — still reports.
+        # 放在 `finally` 中，这样 ^C（遥操作会话通常的结束方式）也能输出报告。
         timer.log_run_summary()
 
 

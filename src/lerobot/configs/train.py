@@ -43,16 +43,16 @@ TRAIN_CONFIG_NAME = "train_config.json"
 
 
 class CheckpointFormat(str, Enum):
-    """Model-artifact format inside training checkpoints.
+    """训练检查点内部的模型产物格式。
 
-    Selects only the *model* artifact; the training_state layout is format-independent (the
-    optimizer channel is always DCP under sharded runs, safetensors+json otherwise).
+    仅选择*模型*产物；training_state 的布局与格式无关（在分片运行下
+    优化器通道始终为 DCP，否则为 safetensors+json）。
 
-    - SAFETENSORS (default): a full `model.safetensors` — maximum compatibility, one gather per
-      save under sharding.
-    - DCP: sharded `pytorch_model_fsdp_0/*.distcp` only — fastest save/resume; convert with
-      `lerobot-convert-dcp` before distributing.
-    - SAFETENSORS_AND_DCP: both artifacts, written independently.
+    - SAFETENSORS（默认）：完整的 `model.safetensors` —— 兼容性最高，
+      分片情况下每次保存需做一次聚合。
+    - DCP：仅分片的 `pytorch_model_fsdp_0/*.distcp` —— 保存/恢复最快；
+      分发前请用 `lerobot-convert-dcp` 转换。
+    - SAFETENSORS_AND_DCP：两种产物独立写入。
     """
 
     SAFETENSORS = "safetensors"
@@ -61,17 +61,17 @@ class CheckpointFormat(str, Enum):
 
     @property
     def wants_safetensors(self) -> bool:
-        """True when a full `model.safetensors` artifact should be written."""
+        """当应写入完整的 `model.safetensors` 产物时为 True。"""
         return self in (CheckpointFormat.SAFETENSORS, CheckpointFormat.SAFETENSORS_AND_DCP)
 
     @property
     def wants_dcp(self) -> bool:
-        """True when sharded DCP model shards (`pytorch_model_fsdp_0/`) should be written."""
+        """当应写入分片的 DCP 模型分片（`pytorch_model_fsdp_0/`）时为 True。"""
         return self in (CheckpointFormat.DCP, CheckpointFormat.SAFETENSORS_AND_DCP)
 
 
 def _migrate_legacy_rabc_fields(config: dict[str, Any]) -> dict[str, Any] | None:
-    """Return migrated payload for legacy RA-BC fields, or None when no migration is needed."""
+    """返回旧版 RA-BC 字段迁移后的配置内容；无需迁移时返回 None。"""
     legacy_fields = (
         "use_rabc",
         "rabc_progress_path",
@@ -89,8 +89,8 @@ def _migrate_legacy_rabc_fields(config: dict[str, Any]) -> dict[str, Any] | None
     rabc_epsilon = migrated_config.pop("rabc_epsilon", None)
     rabc_head_mode = migrated_config.pop("rabc_head_mode", None)
 
-    # New configs may already define sample_weighting explicitly. In that case,
-    # legacy fields are ignored after being stripped from the payload.
+    # 新配置可能已经显式定义了 sample_weighting。在这种情况下，
+    # 旧版字段在从配置内容中剥离后将被忽略。
     if migrated_config.get("sample_weighting") is None and use_rabc:
         sample_weighting: dict[str, Any] = {"type": "rabc"}
         if rabc_progress_path is not None:
@@ -112,96 +112,96 @@ class TrainPipelineConfig(HubMixin):
     env: envs.EnvConfig | None = None
     policy: PreTrainedConfig | None = None
     reward_model: RewardModelConfig | None = None
-    # Set `dir` to where you would like to save all of the run outputs. If you run another training session
-    # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
+    # 将 `dir` 设置为你希望保存所有运行输出的位置。如果你用相同的 `dir` 值
+    # 运行另一个训练会话，其内容将被覆盖，除非你将 `resume` 设置为 true。
     output_dir: Path | None = None
     job_name: str | None = None
-    # Set `resume` to true to resume a previous run. Pass `--config_path` pointing at either a local
-    # checkpoint's train_config.json or a Hub repo id holding `checkpoints/<step>/` subtrees (the
-    # latest checkpoint is downloaded and resumed from). Note that when resuming, the default behavior
-    # is to use the configuration from the checkpoint, regardless of what's provided with the training
-    # command at the time of resumption (CLI `--*` flags still override).
+    # 将 `resume` 设置为 true 以恢复之前的运行。传入指向本地检查点的
+    # train_config.json 或保存有 `checkpoints/<step>/` 子树的 Hub 仓库 id 的
+    # `--config_path`（会下载最新的检查点并从中恢复）。注意，恢复时的默认行为
+    # 是使用检查点中的配置，而不管恢复时训练命令提供了什么配置
+    # （CLI `--*` 标志仍会覆盖）。
     resume: bool = False
-    # `seed` is used for training (eg: model initialization, dataset shuffling)
-    # AND for the evaluation environments.
+    # `seed` 用于训练（例如：模型初始化、数据集打乱），
+    # 也用于评估环境。
     seed: int | None = 1000
-    # Set to True to use deterministic cuDNN algorithms for reproducibility.
-    # This disables cudnn.benchmark and may reduce training speed by ~10-20 percent.
+    # 设置为 True 以使用确定性的 cuDNN 算法来保证可复现性。
+    # 这会禁用 cudnn.benchmark，并可能使训练速度降低约 10-20%。
     cudnn_deterministic: bool = False
-    # Number of workers for the dataloader.
+    # 数据加载器的 worker 数量。
     num_workers: int = 4
     batch_size: int = 8
     prefetch_factor: int = 4
     persistent_workers: bool = True
-    # DataLoader worker start method. "spawn" is safer than "fork" with
-    # non-fork-safe libs (PyAV / torchcodec / ffmpeg), but adds some
-    # worker-startup time per run since workers re-import modules instead
-    # of inheriting parent state. Override with `--dataloader_multiprocessing_context=fork`
-    # when appropriate, or set it to `null` to use Python's platform default.
+    # DataLoader worker 的启动方式。在使用非 fork 安全库（PyAV / torchcodec /
+    # ffmpeg）时，"spawn" 比 "fork" 更安全，但由于 worker 需要重新导入模块
+    # 而不是继承父进程状态，因此每次运行都会增加一些 worker 启动时间。
+    # 在合适的情况下可以用 `--dataloader_multiprocessing_context=fork` 覆盖，
+    # 或将其设置为 `null` 以使用 Python 的平台默认值。
     dataloader_multiprocessing_context: str | None = "spawn"
     steps: int = 100_000
-    # Run policy in the simulation environment every N steps to measure reward/success (0 = disabled).
+    # 每 N 步在仿真环境中运行策略以测量奖励/成功率（0 = 禁用）。
     env_eval_freq: int = 20_000
     log_freq: int = 200
-    # Compute eval loss on held-out episodes every N steps (0 = disabled). Requires eval_split > 0.
+    # 每 N 步在留出的剧集上计算评估损失（0 = 禁用）。需要 eval_split > 0。
     eval_steps: int = 0
-    # Cap on total eval samples, split uniformly across tasks (0 = use all held-out data).
+    # 评估样本总数上限，在各任务间均匀分配（0 = 使用全部留出数据）。
     max_eval_samples: int = 0
     tolerance_s: float = 1e-4
     save_checkpoint: bool = True
-    # Checkpoint is saved every `save_freq` training iterations and after the last training step.
-    # A non-positive value disables periodic saving, keeping only the final checkpoint.
+    # 检查点每 `save_freq` 次训练迭代保存一次，并在最后一个训练步骤后保存。
+    # 非正值会禁用周期性保存，只保留最终检查点。
     save_freq: int = 20_000
-    # Model-artifact format inside checkpoints; non-default values require a sharded run.
+    # 检查点内部的模型产物格式；非默认值需要分片运行。
     checkpoint_format: CheckpointFormat = CheckpointFormat.SAFETENSORS
     use_policy_training_preset: bool = True
     optimizer: OptimizerConfig | None = None
     scheduler: LRSchedulerConfig | None = None
-    # Process topology: dp_replicate / dp_shard (HSDP) and context-parallel degree placeholders.
+    # 进程拓扑：dp_replicate / dp_shard（HSDP）以及上下文并行度的占位符。
     parallelism: ParallelismConfig = field(default_factory=ParallelismConfig)
-    # Execution runtime handed to the Accelerator: mixed precision, gradient accumulation,
-    # FSDP/DDP tuning knobs, compile & activation-checkpointing placeholders.
+    # 交给 Accelerator 的执行时配置：混合精度、梯度累积、
+    # FSDP/DDP 调优参数、compile 和激活检查点的占位符。
     accelerator: AcceleratorConfig = field(default_factory=AcceleratorConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
-    # Maintain an EMA shadow of the policy weights during training (see EMAConfig).
+    # 训练期间维护策略权重的 EMA 影子（参见 EMAConfig）。
     ema: EMAConfig = field(default_factory=EMAConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     peft: PeftConfig | None = None
 
-    # Where to run training (local default, or an HF Jobs flavor). See JobConfig.
+    # 训练运行的位置（本地默认，或某种 HF Jobs 规格）。参见 JobConfig。
     job: JobConfig = field(default_factory=JobConfig)
-    # Push each saved checkpoint to the Hub (policy.repo_id) as it is written, not
-    # just the final model (useful to monitor progress mid-run). Optional; the
-    # final model is pushed regardless. Works the same locally and remotely.
+    # 在写入时将每个保存的检查点推送到 Hub（policy.repo_id），而不仅仅是
+    # 最终模型（便于在运行中途监控进度）。可选；无论如何最终模型都会被推送。
+    # 在本地和远程的行为相同。
     save_checkpoint_to_hub: bool = False
 
-    # Sample weighting configuration (e.g., for RA-BC training)
+    # 样本加权配置（例如用于 RA-BC 训练）
     sample_weighting: SampleWeightingConfig | None = None
 
-    # Rename map for the observation to override the image and state keys
+    # 观测值的重命名映射，用于覆盖 image 和 state 的键名
     rename_map: dict[str, str] = field(default_factory=dict)
     checkpoint_path: Path | None = field(init=False, default=None)
 
     @property
     def is_reward_model_training(self) -> bool:
-        """True when the config targets a reward model rather than a policy."""
+        """当配置针对的是奖励模型而非策略时为 True。"""
         return self.reward_model is not None
 
     @property
     def trainable_config(self) -> PreTrainedConfig | RewardModelConfig:
-        """Return whichever config (policy or reward_model) is active."""
+        """返回当前生效的配置（policy 或 reward_model）。"""
         if self.is_reward_model_training:
             return self.reward_model  # type: ignore[return-value]
         return self.policy  # type: ignore[return-value]
 
     def _resolve_pretrained_from_cli(self) -> None:
-        """Resolve the pretrained source passed on the CLI into a loaded config.
+        """将 CLI 上传入的预训练来源解析为已加载的配置。
 
-        The pretrained paths (`--policy.path`, `--reward_model.path`) and
-        `--config_path` are only recoverable by re-reading the CLI args: draccus
-        has already consumed them by the time `validate()` runs, so they are not
-        reflected on `self`. Exactly one source applies, in priority order:
-        reward-model path, policy path, then resume.
+        预训练路径（`--policy.path`、`--reward_model.path`）和
+        `--config_path` 只能通过重新读取 CLI 参数来恢复：在 `validate()` 运行时
+        draccus 已经消费了它们，因此它们不会反映在 `self` 上。
+        恰好只有一个来源生效，按优先级顺序为：
+        奖励模型路径、策略路径，然后是 resume。
         """
         reward_model_path = parser.get_path_arg("reward_model")
         policy_path = parser.get_path_arg("policy")
@@ -220,13 +220,13 @@ class TrainPipelineConfig(HubMixin):
             self._resolve_resume_checkpoint()
 
     def _resolve_resume_checkpoint(self) -> None:
-        """Point the trainable config at the checkpoint named by `--config_path`.
+        """将可训练配置指向 `--config_path` 指定的检查点。
 
-        `config_path` is either a local path (to a checkpoint's train_config.json or its
-        pretrained_model/ dir) or a Hub repo id. For a Hub repo, the latest checkpoint is downloaded
-        into a fresh local run dir and resumed from there. The download is skipped when dispatching to
-        an HF Job (`job.is_remote`): the pod performs it when it runs the resume locally, and
-        `submit_to_hf` resolves the source repo for the remote command.
+        `config_path` 可以是本地路径（指向检查点的 train_config.json 或其
+        pretrained_model/ 目录），也可以是 Hub 仓库 id。对于 Hub 仓库，最新的检查点
+        会被下载到一个全新的本地运行目录并从那里恢复。当分派到 HF Job
+        （`job.is_remote`）时跳过下载：pod 在本地执行恢复时会自行下载，
+        而 `submit_to_hf` 会为远程命令解析源仓库。
         """
         config_path = parser.parse_arg("config_path")
         if not config_path:
@@ -235,9 +235,9 @@ class TrainPipelineConfig(HubMixin):
             )
 
         if Path(config_path).resolve().exists():
-            # `config_path` may point at the checkpoint's train_config.json or at its
-            # pretrained_model/ directory (both documented above) — resolve either to
-            # the pretrained_model/ directory.
+            # `config_path` 可能指向检查点的 train_config.json 或其
+            # pretrained_model/ 目录（两者都在上文有说明）—— 将任一种情况
+            # 解析为 pretrained_model/ 目录。
             config_path_obj = Path(config_path)
             policy_dir = config_path_obj.parent if config_path_obj.is_file() else config_path_obj
             self.checkpoint_path = policy_dir.parent
@@ -246,9 +246,9 @@ class TrainPipelineConfig(HubMixin):
         else:
             from lerobot.common.train_utils import resolve_resume_checkpoint
 
-            # `self.output_dir` was loaded from the checkpoint's config and points at the original
-            # run's (now-absent) local dir. Resume into a fresh local dir instead, unless the user
-            # passed --output_dir explicitly.
+            # `self.output_dir` 是从检查点的配置中加载的，指向原始运行的
+            # （现已不存在的）本地目录。改为恢复到一个全新的本地目录，
+            # 除非用户显式传入了 --output_dir。
             cli_output_dir = parser.parse_arg("output_dir")
             if cli_output_dir:
                 self.output_dir = Path(cli_output_dir)
@@ -318,8 +318,8 @@ class TrainPipelineConfig(HubMixin):
         if self.eval_steps > 0 and self.dataset.eval_split == 0.0:
             raise ValueError("eval_steps > 0 requires dataset.eval_split > 0.0 to hold out eval data.")
 
-        # Remote runs auto-generate the repo_id in submit_to_hf (the policy may only be
-        # resolved here, from --policy.path), so don't demand it up front for them.
+        # 远程运行的 repo_id 是在 submit_to_hf 中自动生成的（策略可能在这里
+        # 才从 --policy.path 解析出来），因此不要提前对它们强制要求该参数。
         if (
             hasattr(active_cfg, "push_to_hub")
             and active_cfg.push_to_hub
@@ -334,15 +334,14 @@ class TrainPipelineConfig(HubMixin):
         self._validate_distributed()
 
     def _validate_distributed(self) -> None:
-        """Fail-fasts for the distributed-training scope.
+        """针对分布式训练范围的快速失败检查。
 
         Raises:
-            ValueError: If the config requests anything outside the verified scope: context
-                parallelism or CFG parallelism (reserved placeholders), the compile or
-                activation-checkpointing placeholders, a DCP checkpoint format on a
-                non-sharded run, or — under sharded training — fp16 mixed precision, PEFT,
-                reward-model training, in-training environment evaluation, or multi-optimizer
-                configs.
+            ValueError: 当配置请求了已验证范围之外的任何内容时抛出：上下文
+                并行或 CFG 并行（保留的占位符）、compile 或激活检查点占位符、
+                在非分片运行下使用 DCP 检查点格式，或者在分片训练下使用
+                fp16 混合精度、PEFT、奖励模型训练、训练中环境评估，
+                或多优化器配置。
         """
         if self.parallelism.cp_size > 1:
             raise ValueError(
@@ -387,11 +386,11 @@ class TrainPipelineConfig(HubMixin):
 
     @classmethod
     def __get_path_fields__(cls) -> list[str]:
-        """Keys for draccus pretrained-path loading."""
+        """用于 draccus 预训练路径加载的键。"""
         return ["policy", "reward_model"]
 
     def to_dict(self) -> dict[str, Any]:
-        return draccus.encode(self)  # type: ignore[no-any-return]  # because of the third-party library draccus uses Any as the return type
+        return draccus.encode(self)  # type: ignore[no-any-return]  # 因为第三方库 draccus 使用 Any 作为返回类型
 
     def _save_pretrained(self, save_directory: Path) -> None:
         with open(save_directory / TRAIN_CONFIG_NAME, "w") as f, draccus.config_type("json"):
@@ -434,9 +433,9 @@ class TrainPipelineConfig(HubMixin):
             try:
                 config_file = hf_hub_download(filename=TRAIN_CONFIG_NAME, **dl_kwargs)
             except HfHubHTTPError as e:
-                # No root train_config.json: this is a repo of periodic checkpoints from an
-                # interrupted run. Fall back to the latest checkpoint's config so the run can be
-                # resumed straight from the repo with `--config_path=<repo>`.
+                # 根目录没有 train_config.json：这是一个来自中断运行的周期性检查点仓库。
+                # 回退到最新检查点的配置，这样就可以直接用 `--config_path=<repo>`
+                # 从仓库恢复运行。
                 latest = find_latest_hub_checkpoint(model_id, token=token, revision=revision)
                 if latest is None:
                     raise FileNotFoundError(
@@ -447,8 +446,8 @@ class TrainPipelineConfig(HubMixin):
                 )
 
         cli_args = kwargs.pop("cli_args", [])
-        # Legacy RA-BC migration only applies to framework-saved checkpoints (always JSON).
-        # Hand-written YAML/TOML configs are expected to use the current sample_weighting schema.
+        # 旧版 RA-BC 迁移仅适用于框架保存的检查点（始终为 JSON）。
+        # 手写的 YAML/TOML 配置应使用当前的 sample_weighting 结构。
         if config_file is not None and config_file.endswith(".json"):
             with open(config_file) as f:
                 config = json.load(f)

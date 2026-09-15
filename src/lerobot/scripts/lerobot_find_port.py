@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Helper to find the USB port associated with your MotorsBus.
+查找与你的 MotorsBus 关联的 USB 端口的辅助工具。
 
-Example:
+示例：
 
 ```shell
 lerobot-find-port
@@ -34,10 +34,10 @@ def find_available_ports():
     from serial.tools import list_ports
 
     if platform.system() == "Windows":
-        # List COM ports using pyserial
+        # 使用 pyserial 列出 COM 端口
         ports = [port.device for port in list_ports.comports()]
     else:  # Linux/macOS
-        # List /dev/tty* ports for Unix-based systems
+        # 在基于 Unix 的系统上列出 /dev/tty* 端口
         ports = [str(path) for path in Path("/dev").glob("tty*")]
     return ports
 
@@ -48,9 +48,9 @@ def find_port():
     print("Ports before disconnecting:", ports_before)
 
     print("Remove the USB cable from your MotorsBus and press Enter when done.")
-    input()  # Wait for user to disconnect the device
+    input()  # 等待用户断开设备连接
 
-    time.sleep(0.5)  # Allow some time for port to be released
+    time.sleep(0.5)  # 留出一些时间让端口被释放
     ports_after = find_available_ports()
     ports_diff = list(set(ports_before) - set(ports_after))
 

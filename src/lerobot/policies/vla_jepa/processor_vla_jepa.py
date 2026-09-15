@@ -42,15 +42,14 @@ from lerobot.utils.constants import ACTION
 
 @ProcessorStepRegistry.register(name="vla_jepa_image_prep")
 class ImagePrepProcessorStep(ObservationProcessorStep):
-    """Prepares image observations for the VLA-JEPA model: float cast, 1->3 channel expand, resize.
+    """为 VLA-JEPA 模型准备图像观测：转换为 float、1->3 通道扩展、缩放。
 
-    Surfaces in the serialized pipeline the prep the model used to do internally. The model keeps the
-    same operations as idempotent guards, so older checkpoints saved without this step still get
-    prepped and newer ones no-op there.
+    将模型过去在内部完成的预处理暴露到序列化的 pipeline 中。模型仍保留相同操作作为幂等保护，
+    因此未保存该步骤的旧 checkpoint 仍会得到预处理，而较新的 checkpoint 在那里则是空操作。
 
-    Mirrors `Qwen3VLInterface.to_pixel_values` plus the `F.interpolate(mode="area")` resize in
-    `VLAJEPAPolicy._prepare_model_inputs`/`predict_action`, and does not clamp (neither does the model
-    path), so values stay bit-identical. Handles [C,H,W], [B,C,H,W]/[T,C,H,W] and [B,T,C,H,W].
+    与 `Qwen3VLInterface.to_pixel_values` 以及 `VLAJEPAPolicy._prepare_model_inputs`/
+    `predict_action` 中的 `F.interpolate(mode="area")` 缩放保持一致，并且不做 clamp（模型路径
+    同样不做），因此数值保持逐位一致。支持 [C,H,W]、[B,C,H,W]/[T,C,H,W] 和 [B,T,C,H,W]。
     """
 
     def __init__(self, resize_to: tuple[int, int] | None = None, expand_channels: bool = True):
@@ -69,7 +68,7 @@ class ImagePrepProcessorStep(ObservationProcessorStep):
                 image = image.repeat(*repeats)
             if self.resize_to is not None and tuple(image.shape[-2:]) != self.resize_to:
                 device = image.device
-                # NOTE: no "area" kernel on mps; resize on cpu then move back.
+                # 注意：mps 上没有 "area" 核函数；先在 cpu 上缩放再移回原设备。
                 if device.type == "mps":
                     image = image.cpu()
                 lead = image.shape[:-3]
@@ -91,7 +90,7 @@ class ImagePrepProcessorStep(ObservationProcessorStep):
             if "image" not in key:
                 continue
             feat = features[PipelineFeatureType.OBSERVATION][key]
-            # Match `to_pixel_values`: only a single channel is expanded to 3.
+            # 与 `to_pixel_values` 保持一致：只有单通道才会被扩展为 3 通道。
             nb_channel = 3 if (self.expand_channels and feat.shape[0] == 1) else feat.shape[0]
             spatial = self.resize_to if self.resize_to is not None else tuple(feat.shape[1:])
             features[PipelineFeatureType.OBSERVATION][key] = PolicyFeature(
@@ -102,7 +101,7 @@ class ImagePrepProcessorStep(ObservationProcessorStep):
 
 @ProcessorStepRegistry.register(name="vla_jepa_clip_actions")
 class ClipActionsProcessorStep(ProcessorStep):
-    """Clips action tensor to [-1, 1] before unnormalization."""
+    """在反归一化之前将动作张量裁剪到 [-1, 1]。"""
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
         action = transition.get(TransitionKey.ACTION)
@@ -117,13 +116,12 @@ class ClipActionsProcessorStep(ProcessorStep):
 
 @ProcessorStepRegistry.register(name="vla_jepa_pre_snap_gripper")
 class PreSnapGripperProcessorStep(ProcessorStep):
-    """Snaps a gripper dimension to {0, 1} BEFORE unnormalization.
+    """在反归一化之前将夹爪维度吸附（snap）到 {0, 1}。
 
-    Mirrors the original starVLA LIBERO eval:
+    对应 starVLA 原始的 LIBERO 评估：
       normalized[:, gripper_dim] = np.where(normalized[:, gripper_dim] < threshold, 0, 1)
-    This ensures the unnormalizer receives an exact binary value, which is
-    required when the model was trained with gripper in identity (mask=False)
-    space where 0=open and 1=close.
+    这可以确保反归一化器接收到精确的二值值；当模型训练时夹爪处于 identity（mask=False）
+    空间（其中 0=张开、1=闭合）时，这是必需的。
     """
 
     def __init__(self, gripper_dim: int = 6, threshold: float = 0.5):
@@ -140,8 +138,8 @@ class PreSnapGripperProcessorStep(ProcessorStep):
         return transition
 
     def get_config(self) -> dict[str, Any]:
-        # Without this the base class serializes `{}` and a reloaded pipeline silently reverts
-        # to the class defaults, discarding whatever the training config set.
+        # 没有这个方法的话，基类会序列化成 `{}`，重新加载的 pipeline 会静默地回退到类的默认值，
+        # 从而丢弃训练配置中设置的内容。
         return {"gripper_dim": self.gripper_dim, "threshold": self.threshold}
 
     def transform_features(self, features):
@@ -150,15 +148,15 @@ class PreSnapGripperProcessorStep(ProcessorStep):
 
 @ProcessorStepRegistry.register(name="vla_jepa_binarize_gripper")
 class BinarizeGripperProcessorStep(ProcessorStep):
-    """Binarizes a gripper dimension after unnormalization.
+    """在反归一化之后将夹爪维度二值化。
 
-    Maps continuous value to {-1, 1}: > threshold → -1, <= threshold → 1 (matches starVLA convention).
-    Only applied when action has more dimensions than gripper_dim.
+    将连续值映射到 {-1, 1}：> threshold → -1，<= threshold → 1（与 starVLA 的约定一致）。
+    仅当 action 的维度数多于 gripper_dim 时才应用。
 
-    WARNING: runs *below* the unnormalizer, so `threshold` is compared against the gripper's
-    **physical** value while its 0.5 default comes from the model's [0, 1]/±1 convention. For a
-    gripper in degrees, mm or [0, 100] every value exceeds 0.5 and the output collapses to -1;
-    `make_vla_jepa_pre_post_processors` warns when the dataset stats say that is the case.
+    警告：该步骤运行在反归一化器*下游*，因此 `threshold` 是与夹爪的**物理**值比较的，而其
+    默认值 0.5 来自模型的 [0, 1]/±1 约定。对于以度、毫米或 [0, 100] 为单位的夹爪，每个值都会
+    超过 0.5，输出会全部坍缩为 -1；当数据集统计信息表明存在这种情况时，
+    `make_vla_jepa_pre_post_processors` 会发出警告。
     """
 
     def __init__(self, gripper_dim: int = 6, threshold: float = 0.5):
@@ -175,7 +173,7 @@ class BinarizeGripperProcessorStep(ProcessorStep):
         return transition
 
     def get_config(self) -> dict[str, Any]:
-        # See PreSnapGripperProcessorStep.get_config: `{}` would reload as the class defaults.
+        # 参见 PreSnapGripperProcessorStep.get_config：`{}` 在重新加载时会变回类的默认值。
         return {"gripper_dim": self.gripper_dim, "threshold": self.threshold}
 
     def transform_features(self, features):
@@ -187,11 +185,11 @@ def _warn_if_gripper_steps_are_misconfigured(
     gripper_dim: int,
     dataset_stats: dict[str, dict[str, torch.Tensor]] | None,
 ) -> None:
-    """Warn when the gripper post-steps would pin the gripper to a constant.
+    """当夹爪后处理步骤会把夹爪固定为常量时发出警告。
 
-    `BinarizeGripperProcessorStep` thresholds the *unnormalized* gripper at `gripper_threshold`. When
-    the dataset's physical range sits well above it, every value lands on the same side and the
-    gripper never moves — detectable from the stats already here, so say so.
+    `BinarizeGripperProcessorStep` 以 `gripper_threshold` 对*未归一化*的夹爪值做阈值判断。当数据集
+    的物理范围远高于该阈值时，所有值都会落在同一侧，夹爪永远不会动作——利用手头已有的统计信息
+    就能检测到这种情况，因此在此明确提示。
     """
     if not (config.pre_snap_gripper_action or config.binarize_gripper_action):
         return
@@ -204,8 +202,8 @@ def _warn_if_gripper_steps_are_misconfigured(
     except (IndexError, TypeError, ValueError):
         return
     threshold = config.gripper_threshold
-    # `pre_snap` writes {0, 1} in normalized space, which unnormalizes to the midpoint and the
-    # max. Both landing on the same side of the threshold means a constant output.
+    # `pre_snap` 在归一化空间写入 {0, 1}，反归一化后分别对应中点和最大值。两者落在阈值的
+    # 同一侧即意味着输出为常量。
     midpoint = (low + high) / 2.0
     if (midpoint > threshold) == (high > threshold):
         name = (
@@ -233,9 +231,9 @@ def make_vla_jepa_pre_post_processors(
     features = {**config.input_features, **config.output_features}
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
-    # Shared relative-action step (OpenPI order: raw -> relative -> normalize -> model ->
-    # unnormalize -> absolute). The SAME instance is passed to AbsoluteActionsProcessorStep
-    # below so its cached raw state (set during preprocessing) flows to postprocessing.
+    # 共享的相对动作步骤（OpenPI 顺序：raw -> relative -> normalize -> model ->
+    # unnormalize -> absolute）。将同一个实例传给下面的 AbsoluteActionsProcessorStep，
+    # 以便其缓存的原始状态（在预处理期间设置）能够流转到后处理。
     relative_step = RelativeActionsProcessorStep(
         enabled=config.use_relative_actions,
         exclude_joints=getattr(config, "relative_exclude_joints", []),
@@ -257,9 +255,9 @@ def make_vla_jepa_pre_post_processors(
 
     output_steps: list[ProcessorStep] = []
     if config.clip_normalized_actions:
-        # Clipping to [-1, 1] is a range assertion under MIN_MAX, but under MEAN_STD the same
-        # clamp truncates every action beyond 1 sigma. That shows up as a hesitant, low-amplitude
-        # policy with no error anywhere, so refuse to add the step instead of honoring the flag.
+        # 在 MIN_MAX 下，裁剪到 [-1, 1] 只是一种范围断言；但在 MEAN_STD 下，同样的 clamp 会
+        # 截断所有超过 1 sigma 的动作。这会表现为一个迟疑、低幅度的策略，且任何地方都不报错，
+        # 因此这里拒绝添加该步骤，而不是机械地遵从这个开关。
         action_norm_mode = config.normalization_mapping.get("ACTION")
         if action_norm_mode == NormalizationMode.MIN_MAX:
             output_steps.append(ClipActionsProcessorStep())
@@ -274,8 +272,8 @@ def make_vla_jepa_pre_post_processors(
         output_steps.append(
             PreSnapGripperProcessorStep(gripper_dim=gripper_dim, threshold=config.gripper_threshold)
         )
-    # NOTE: unlike the default policy unnormalizer (output features only), VLA-JEPA
-    # unnormalizes over BOTH input and output features.
+    # 注意：与默认的策略反归一化器（仅处理输出特征）不同，VLA-JEPA 会同时对输入和输出
+    # 特征进行反归一化。
     output_steps.append(
         UnnormalizerProcessorStep(
             features=features,
@@ -283,8 +281,8 @@ def make_vla_jepa_pre_post_processors(
             stats=dataset_stats,
         )
     )
-    # Reverse the relative conversion on the unnormalized action, before gripper binarization.
-    # gripper is kept absolute by relative_exclude_joints, so the two steps touch disjoint dims.
+    # 在夹爪二值化之前，对反归一化后的动作逆转相对转换。夹爪由 relative_exclude_joints
+    # 保持为绝对值，因此这两个步骤作用于互不相交的维度。
     output_steps.append(
         AbsoluteActionsProcessorStep(enabled=config.use_relative_actions, relative_step=relative_step)
     )

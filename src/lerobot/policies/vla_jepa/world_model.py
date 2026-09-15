@@ -231,8 +231,8 @@ class ACRoPEAttention(nn.Module):
             v = merge(v, action_v)
 
         if attn_mask is not None or self.use_sdpa:
-            # Attention dropout (not projection dropout), and only while training — SDPA does
-            # not consult `self.training` on its own the way `nn.Dropout` does.
+            # 注意力 dropout（不是投影 dropout），且仅在训练时生效——SDPA 不会像 `nn.Dropout`
+            # 那样自行参考 `self.training`。
             x = F.scaled_dot_product_attention(
                 q,
                 k,
@@ -318,7 +318,7 @@ class ACBlock(nn.Module):
 
 
 class ActionConditionedVideoPredictor(nn.Module):
-    """JEVLA1-compatible action-conditioned V-JEPA predictor."""
+    """与 JEVLA1 兼容的、以动作为条件的 V-JEPA 预测器。"""
 
     def __init__(
         self,
@@ -341,9 +341,9 @@ class ActionConditionedVideoPredictor(nn.Module):
         self.use_extrinsics = use_extrinsics
         self.predictor_embed = nn.Linear(embed_dim, predictor_embed_dim, bias=True)
         self.action_encoder = nn.Linear(action_embed_dim, predictor_embed_dim, bias=True)
-        # Only built when `use_extrinsics`; unconditionally was ~2.1M parameters that never got a
-        # gradient. A never-called `state_encoder` was dropped for the same reason. Older checkpoints
-        # carry both and they are ignored as unexpected keys on load.
+        # 仅在 `use_extrinsics` 时构建；无条件构建会带来约 210 万个永远得不到梯度的参数。
+        # 出于同样原因，一个从不被调用的 `state_encoder` 也被移除了。旧 checkpoint 同时带有
+        # 这两者，加载时它们会作为 unexpected keys 被忽略。
         self.extrinsics_encoder = (
             nn.Linear(action_embed_dim - 1, predictor_embed_dim, bias=True) if use_extrinsics else None
         )
@@ -390,7 +390,7 @@ class ActionConditionedVideoPredictor(nn.Module):
         action_tokens: torch.Tensor,
         extrinsics: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        # starVLA input convention: frame_tokens [B, T*H*W, D], actions [B, T*A, D].
+        # starVLA 输入约定：frame_tokens [B, T*H*W, D]，actions [B, T*A, D]。
         x = self.predictor_embed(frame_tokens)
         batch_size, num_context_tokens, hidden_dim = x.size()
         num_frames = num_context_tokens // (self.grid_height * self.grid_width)

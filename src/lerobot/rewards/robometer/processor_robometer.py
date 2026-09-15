@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Robometer pre/post processing pipelines."""
+"""Robometer 前/后处理流水线。"""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ PROGRESS_PROMPT = (
 
 
 def _frames_to_pil(frames: np.ndarray) -> list[Image.Image]:
-    """Convert ``(T, H, W, C)`` uint8 frames to a list of PIL images."""
+    """将 ``(T, H, W, C)`` uint8 帧转换为 PIL 图像列表。"""
     if frames.ndim != 4:
         raise ValueError(f"Expected (T,H,W,C) frames; got shape {frames.shape}")
     if frames.dtype != np.uint8:
@@ -71,7 +71,7 @@ def _frames_to_pil(frames: np.ndarray) -> list[Image.Image]:
 
 
 def _video_to_numpy(video: Tensor, *, max_frames: int | None) -> np.ndarray:
-    """Convert one trajectory tensor to a ``(T, H, W, C) uint8`` numpy array."""
+    """将单条轨迹张量转换为 ``(T, H, W, C) uint8`` numpy 数组。"""
     if max_frames is not None:
         video = video[-max_frames:]
     if video.shape[1] in (1, 3):
@@ -106,25 +106,25 @@ def _expand_tasks(task: Any, *, batch_size: int, default: str | None) -> list[st
 @dataclass
 @ProcessorStepRegistry.register(name="robometer_encoder")
 class RobometerEncoderProcessorStep(ProcessorStep):
-    """Encode raw frames + task into Qwen-VL tensors for the Robometer model.
+    """将原始帧 + 任务编码为供 Robometer 模型使用的 Qwen-VL 张量。
 
-    Loads a :class:`~transformers.AutoProcessor` matching ``base_model_id`` and
-    registers Robometer's special tokens on the tokenizer. The matching
-    embedding resize happens model-side in
-    :meth:`RobometerRewardModel.__init__`.
+    加载与 ``base_model_id`` 匹配的
+    :class:`~transformers.AutoProcessor`，并在 tokenizer 上注册
+    Robometer 的特殊 token。对应的嵌入表大小调整在模型侧的
+    :meth:`RobometerRewardModel.__init__` 中完成。
 
-    At call time the step reads:
+    调用时，该步骤读取：
 
-    - ``observation[image_key]``: ``(B, T, C, H, W)`` or ``(B, C, H, W)`` frames.
-    - ``complementary_data[task_key]``: a string or list of strings.
+    - ``observation[image_key]``：``(B, T, C, H, W)`` 或 ``(B, C, H, W)`` 帧。
+    - ``complementary_data[task_key]``：字符串或字符串列表。
 
-    and writes ``observation[f"{ROBOMETER_FEATURE_PREFIX}<name>"]`` for:
+    并为以下内容写入 ``observation[f"{ROBOMETER_FEATURE_PREFIX}<name>"]``：
 
-    - the Qwen-VL processor outputs: ``input_ids``, ``attention_mask``,
-      ``pixel_values``, ``image_grid_thw``, ``video_grid_thw``, ...
-    - Robometer-specific token ids consumed by the model heads:
-      ``prog_token_id``, ``vision_start_token_id``, ``vision_end_token_id``,
-      ``video_merge_size``.
+    - Qwen-VL 处理器的输出：``input_ids``、``attention_mask``、
+      ``pixel_values``、``image_grid_thw``、``video_grid_thw`` 等。
+    - 供模型头部使用的 Robometer 特有 token id：
+      ``prog_token_id``、``vision_start_token_id``、``vision_end_token_id``、
+      ``video_merge_size``。
     """
 
     base_model_id: str = "Qwen/Qwen3-VL-4B-Instruct"
@@ -149,11 +149,11 @@ class RobometerEncoderProcessorStep(ProcessorStep):
             padding_side="right",
         )
 
-        # Register Robometer's special tokens on the tokenizer. The matching
-        # embedding resize happens model-side in `RobometerRewardModel.__init__`.
+        # 在 tokenizer 上注册 Robometer 的特殊 token。对应的嵌入表大小调整
+        # 在模型侧的 `RobometerRewardModel.__init__` 中完成。
         tokenizer = self._processor.tokenizer
-        # Qwen tokenizers may not define a pad token, but batched prompts/videos
-        # require padding, so reuse EOS as the padding token.
+        # Qwen tokenizer 可能没有定义 pad token，但批量的提示/视频
+        # 需要填充，因此复用 EOS 作为填充 token。
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         for token in ROBOMETER_SPECIAL_TOKENS:
@@ -199,7 +199,7 @@ class RobometerEncoderProcessorStep(ProcessorStep):
         return new_transition
 
     def encode_samples(self, samples: list[tuple[np.ndarray, str]]) -> dict[str, Tensor]:
-        """Run the Qwen-VL processor on a list of ``(frames, task)`` samples."""
+        """对 ``(frames, task)`` 样本列表运行 Qwen-VL 处理器。"""
         from qwen_vl_utils import process_vision_info
 
         conversations = [self._build_conversation(frames, task) for frames, task in samples]
@@ -254,10 +254,9 @@ class RobometerEncoderProcessorStep(ProcessorStep):
 
         encoded = self._processor(**processor_kwargs)
 
-        # Write Robometer-specific token ids and the video patch merge size into
-        # the encoded batch so `RobometerRewardModel` doesn't need its own
-        # tokenizer at inference (EO1-style separation: the processor owns the
-        # tokenizer, the model owns the backbone and heads).
+        # 将 Robometer 特有的 token id 和视频 patch 合并大小写入编码后的批次，
+        # 使 `RobometerRewardModel` 在推理时无需自带 tokenizer
+        # （EO1 风格的职责分离：处理器持有 tokenizer，模型持有骨干和头部）。
         tokenizer = self._processor.tokenizer
         encoded["prog_token_id"] = tokenizer.convert_tokens_to_ids("<|prog_token|>")
         encoded["vision_start_token_id"] = tokenizer.convert_tokens_to_ids("<|vision_start|>")
@@ -306,14 +305,13 @@ def make_robometer_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Pipeline that pre-encodes frames + task into Qwen-VL tensors.
+    """将帧 + 任务预编码为 Qwen-VL 张量的流水线。
 
-    The preprocessor adds a batch dimension if needed, runs Robometer's
-    encoder, and moves everything to the configured device. The
-    postprocessor is the identity since Robometer outputs a single reward
-    tensor.
+    前处理器在需要时添加批次维度，运行 Robometer 的编码器，
+    并将所有内容移动到配置的设备上。后处理器是恒等操作，
+    因为 Robometer 输出单个奖励张量。
     """
-    del dataset_stats  # Robometer has its own normalisation inside the Qwen-VL processor.
+    del dataset_stats  # Robometer 在 Qwen-VL 处理器内部有自己的归一化。
 
     preprocessor = PolicyProcessorPipeline[dict[str, Any], dict[str, Any]](
         steps=[

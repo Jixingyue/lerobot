@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Episodic rollout strategy: mirrors the behavior of ``lerobot-record``.
+"""回合制（episodic）rollout 策略：行为与 ``lerobot-record`` 相同。
 
-- Policy drives the robot during each recording episode.
-- An optional teleoperator can drive the robot during reset phases so the
-  operator can bring the environment back to its starting configuration.
-  If no teleop is connected the robot stays in its current position.
-- Keyboard controls:
+- 在每个录制回合中由策略驱动机器人。
+- 在复位（reset）阶段，可以由可选的遥操作器驱动机器人，使操作员能够
+  将环境恢复到起始配置。如果未连接遥操作器，机器人则保持在当前位置。
+- 键盘控制：
 
-      Right arrow  — end the current episode or reset phase early
-      Left arrow   — discard the current episode and re-record it
-      Escape       — stop the recording session
+      右方向键  —— 提前结束当前回合或复位阶段
+      左方向键  —— 丢弃当前回合并重新录制
+      Escape    —— 停止录制会话
 
-Dataset naming follows the rollout convention: repo names must start with ``rollout_``.
+数据集命名遵循 rollout 约定：仓库名必须以 ``rollout_`` 开头。
 """
 
 from __future__ import annotations
@@ -55,23 +54,23 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodicStrategy(RolloutStrategy):
-    """Policy-driven multi-episode recording, mirrors the behavior of ``lerobot-record``.
+    """由策略驱动的多回合录制，行为与 ``lerobot-record`` 相同。
 
-    Each recording episode runs the policy for maximum ``dataset.episode_time_s``
-    seconds, recording one frame per policy action (``1/fps`` cadence — with
-    ``interpolation_multiplier > 1`` the interpolated ticks only send commands
-    to the robot).  A reset phase of ``dataset.reset_time_s``
-    follows every episode (except the last) so the operator can manually
-    reset the environment.  During the reset phase, an optional teleoperator
-    drives the robot; if none is present the robot returns to its initial joint positions captured at startup.
+    每个录制回合最多运行策略 ``dataset.episode_time_s`` 秒，每个策略
+    动作录制一帧（``1/fps`` 的节拍——当
+    ``interpolation_multiplier > 1`` 时，被插值的节拍只向机器人发送
+    指令）。每个回合（最后一个除外）之后都有一个时长为
+    ``dataset.reset_time_s`` 的复位阶段，以便操作员手动复位环境。
+    在复位阶段，可由可选的遥操作器驱动机器人；如果不存在遥操作器，
+    机器人会回到启动时捕获的初始关节位置。
 
-    The policy state (hidden state, RTC queue, interpolator) is reset at
-    the start of each recording episode.
+    策略状态（隐藏状态、RTC 队列、插值器）会在每个录制回合开始时
+    重置。
 
-    Keyboard events:
-        right arrow  → end current episode or reset phase early
-        left arrow   → discard & re-record current episode
-        ESC          → stop the session
+    键盘事件：
+        右方向键  → 提前结束当前回合或复位阶段
+        左方向键  → 丢弃并重新录制当前回合
+        ESC       → 停止会话
     """
 
     config: EpisodicStrategyConfig
@@ -82,13 +81,13 @@ class EpisodicStrategy(RolloutStrategy):
         self._events: dict | None = None
 
     def setup(self, ctx: RolloutContext) -> None:
-        """Start the inference engine and attach the keyboard listener."""
+        """启动推理引擎并挂载键盘监听器。"""
         self._init_engine(ctx)
         self._listener, self._events = init_keyboard_listener()
         logger.info("Episodic strategy ready")
 
     def run(self, ctx: RolloutContext) -> None:
-        """Main multi-episode recording loop."""
+        """多回合录制的主循环。"""
         cfg = ctx.runtime.cfg
         dataset_cfg = cfg.dataset
         robot = ctx.hardware.robot_wrapper
@@ -110,8 +109,8 @@ class EpisodicStrategy(RolloutStrategy):
             else cfg.display_compressed_images
         )
 
-        # One timer for the whole session: episodes get their own cadence line, and
-        # the run summary averages across them without the untimed reset phases.
+        # 整个会话共用一个计时器：每个回合各有自己的节拍统计行，而运行摘要
+        # 会跨回合取平均，且不包含未计时的复位阶段。
         timer = CycleTimer(fps, self._interpolator.multiplier)
 
         with VideoEncodingManager(dataset):
@@ -121,12 +120,12 @@ class EpisodicStrategy(RolloutStrategy):
                     if ctx.runtime.shutdown_event.is_set():
                         break
 
-                    # Reset policy state at episode start (discard leftover hidden state / queue)
+                    # 在回合开始时重置策略状态（丢弃残留的隐藏状态 / 队列）
                     self._engine.reset()
                     self._interpolator.reset()
-                    # A reset interpolator re-primes over two consecutive inference
-                    # ticks, exactly like loop start-up, so exempt the group that
-                    # spans them instead of reporting a healthy episode as slow.
+                    # 重置后的插值器会像循环启动时一样，在连续两个推理节拍内
+                    # 重新预置，因此对跨越这两个节拍的分组予以豁免，而不是把
+                    # 一个健康的回合误报为缓慢。
                     timer.restart()
                     self._engine.resume()
 
@@ -142,21 +141,21 @@ class EpisodicStrategy(RolloutStrategy):
                         single_task=single_task,
                     )
 
-                    # Reset phase, skip after the last episode (but run when re-recording)
+                    # 复位阶段，最后一个回合之后跳过（但重新录制时仍会执行）
                     if not events["stop_recording"] and (
                         recorded_episodes < num_episodes - 1 or events["rerecord_episode"]
                     ):
                         log_say("Reset the environment", play_sounds)
 
                         if teleop:
-                            # Smooth handover so the transition to teleop control is jerk-free.
-                            # For actuated teleops: drive the leader arm to the follower's current
-                            # position so the operator takes over without fighting the arm.
-                            # For non-actuated teleops: slide the follower to the teleop's current
-                            # pose instead, since the leader cannot be driven.
-                            # Disabled entirely with --strategy.smooth_handover=false (useful for
-                            # clutch-style teleops that re-reference at the current robot pose on
-                            # engage).
+                            # 平滑交接，使切换到遥操作控制时不产生抖动。
+                            # 对于有驱动的遥操作器：将主臂（leader）移动到从臂（follower）
+                            # 当前的位置，使操作员接管时不必与机械臂较劲。
+                            # 对于无驱动的遥操作器：由于主臂无法被驱动，改为将从臂
+                            # 平滑移动到遥操作器当前的位姿。
+                            # 可通过 --strategy.smooth_handover=false 完全禁用（适用于
+                            # 离合器式遥操作器，这类设备在接合时会以机器人当前位姿
+                            # 重新建立参考）。
                             if self.config.smooth_handover:
                                 obs = robot.get_observation()
                                 current_pos = {k: v for k, v in obs.items() if k.endswith(".pos")}
@@ -175,7 +174,7 @@ class EpisodicStrategy(RolloutStrategy):
                                     follower_smooth_move_to(robot, current_pos, target, duration_s=1)
 
                         elif self.config.reset_to_initial_position:
-                            # No teleop: return the robot to its startup position.
+                            # 没有遥操作器：让机器人回到启动时的位置。
                             self.return_to_initial_position(hw=ctx.hardware, duration_s=1)
 
                         self._reset_loop(
@@ -197,7 +196,7 @@ class EpisodicStrategy(RolloutStrategy):
                         dataset.clear_episode_buffer()
                         timer.log_episode_summary("discarded episode")
 
-                        # returns to its initial joint positions captured at startup
+                        # 回到启动时捕获的初始关节位置
                         if not teleop and self.config.reset_to_initial_position:
                             self.return_to_initial_position(hw=ctx.hardware, duration_s=1)
 
@@ -207,9 +206,9 @@ class EpisodicStrategy(RolloutStrategy):
                     recorded_episodes += 1
                     timer.log_episode_summary(f"episode {dataset.num_episodes}")
             finally:
-                # Save any frames buffered in the current episode so an unexpected
-                # exception or KeyboardInterrupt does not silently drop recorded data.
-                # suppress: save_episode raises if the buffer is empty (nothing to lose).
+                # 保存当前回合中已缓冲的所有帧，以免意外异常或
+                # KeyboardInterrupt 静默丢失已录制的数据。
+                # suppress：缓冲区为空时 save_episode 会抛异常（此时没什么可丢失的）。
                 logger.info("Episodic control loop ended — saving any in-progress episode")
                 timer.log_run_summary()
                 with contextlib.suppress(Exception):
@@ -226,10 +225,10 @@ class EpisodicStrategy(RolloutStrategy):
         dataset,
         single_task: str,
     ) -> None:
-        """Policy-driven recording loop for a single episode.
+        """单个回合的、由策略驱动的录制循环。
 
-        *timer* is owned by :meth:`run` and shared across episodes so its run
-        summary spans the session; the caller re-arms it between episodes.
+        *timer* 由 :meth:`run` 拥有并在各回合之间共享，因此其运行摘要
+        覆盖整个会话；调用方会在回合之间重新激活（re-arm）它。
         """
         interpolator = self._interpolator
 
@@ -259,9 +258,8 @@ class EpisodicStrategy(RolloutStrategy):
             if action_dict is not None:
                 with timer.section("telemetry"):
                     self._log_telemetry(obs_processed, action_dict, ctx.runtime)
-                # Record once per interpolation cycle so the dataset cadence
-                # matches its declared fps; interpolated ticks only send
-                # commands to the robot.
+                # 每个插值周期只录制一次，使数据集的节拍与其声明的 fps
+                # 一致；被插值的节拍只向机器人发送指令。
                 if interpolator.emitted_policy_action:
                     with timer.section("record"):
                         obs_frame = build_dataset_frame(features, obs_processed, prefix=OBS_STR)
@@ -283,7 +281,7 @@ class EpisodicStrategy(RolloutStrategy):
         display_mode: str,
         display_compressed: bool,
     ) -> None:
-        """Reset-phase loop: teleop drives the robot if available, no recording."""
+        """复位阶段循环：如果遥操作器可用则由其驱动机器人，不进行录制。"""
         processors = ctx.processors
         control_interval = 1.0 / fps
 
@@ -323,7 +321,7 @@ class EpisodicStrategy(RolloutStrategy):
             timestamp = time.perf_counter() - start_t
 
     def teardown(self, ctx: RolloutContext) -> None:
-        """Finalise dataset, stop listener, push to hub, and disconnect hardware."""
+        """终结数据集、停止监听器、推送到 hub，并断开硬件连接。"""
         cfg = ctx.runtime.cfg
         play_sounds = cfg.play_sounds
 

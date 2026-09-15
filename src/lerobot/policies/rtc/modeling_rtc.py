@@ -15,9 +15,9 @@
 # limitations under the License.
 
 """
-Real-Time Chunking (RTC) implementation for LeRobot.
+LeRobot 的实时分块（Real-Time Chunking，RTC）实现。
 
-Based on Physical Intelligence's Kinetix implementation:
+基于 Physical Intelligence 的 Kinetix 实现：
 https://github.com/Physical-Intelligence/real-time-chunking-kinetix/blob/main/src/model.py#L214
 """
 
@@ -36,10 +36,9 @@ logger = logging.getLogger(__name__)
 
 
 class RTCProcessor:
-    """Real-Time Chunking processor for action chunking policies.
+    """面向动作分块策略的实时分块处理器。
 
-    This class implements RTC techniques including velocity calculation,
-    prefix attention, and adaptive chunk processing.
+    该类实现了 RTC 相关技术，包括速度计算、前缀注意力以及自适应动作块处理。
     """
 
     def __init__(self, rtc_config: RTCConfig, *, trained_mode_supported: bool = False):
@@ -58,7 +57,7 @@ class RTCProcessor:
                 maxlen=rtc_config.debug_maxlen,
             )
 
-    # ====================== Tracker Proxy Methods ======================
+    # ====================== Tracker 代理方法 ======================
     def track(
         self,
         time: float | Tensor,
@@ -73,10 +72,10 @@ class RTCProcessor:
         execution_horizon: int | None = None,
         **metadata,
     ) -> None:
-        """Proxy method to track debug information.
+        """跟踪调试信息的代理方法。
 
-        If tracker is None or disabled, this method does nothing.
-        Otherwise, it forwards the call to tracker.track().
+        若 tracker 为 None 或被禁用，则此方法什么都不做；
+        否则将调用转发给 tracker.track()。
         """
         if self.tracker is not None:
             self.tracker.track(
@@ -94,30 +93,30 @@ class RTCProcessor:
             )
 
     def get_all_debug_steps(self) -> list:
-        """Get all debug steps from tracker.
+        """从 tracker 获取所有调试步骤。
 
-        Returns empty list if tracker is disabled or None.
+        若 tracker 被禁用或为 None，则返回空列表。
         """
         if self.tracker is not None:
             return self.tracker.get_all_steps()
         return []
 
     def is_debug_enabled(self) -> bool:
-        """Check if debug tracking is enabled.
+        """检查是否启用了调试跟踪。
 
-        Returns True if tracker exists and is enabled.
+        当 tracker 存在且处于启用状态时返回 True。
         """
         return self.tracker is not None and self.tracker.enabled
 
     def reset_tracker(self) -> None:
-        """Reset the tracker, clearing all recorded steps.
+        """重置 tracker，清除所有已记录的步骤。
 
-        Does nothing if tracker is None.
+        若 tracker 为 None 则什么都不做。
         """
         if self.tracker is not None:
             self.tracker.reset()
 
-    # ====================== End Tracker Proxy Methods ======================
+    # ====================== Tracker 代理方法结束 ======================
 
     def denoise_step(
         self,
@@ -128,49 +127,47 @@ class RTCProcessor:
         original_denoise_step_partial,
         execution_horizon=None,
     ) -> Tensor:
-        """RTC guidance wrapper around an existing denoiser.
+        """在已有去噪器外层包装的 RTC 引导方法。
 
-        This method wraps an original denoising callable that only takes ``x_t`` and
-        returns a base denoised velocity ``v_t``. It then applies Real-Time Chunking
-        (RTC) prefix guidance using the leftover prefix from the previous chunk.
+        该方法包装一个原始的去噪可调用对象，该对象只接收 ``x_t`` 并返回基础的
+        去噪速度 ``v_t``。随后利用上一动作块遗留的前缀，应用实时分块（RTC）前缀引导。
 
         Args:
-            x_t (Tensor): Current latent/state to denoise. Shape ``(B, T, A)`` or ``(T, A)``.
-            prev_chunk_left_over (Tensor | None): Unexecuted prefix from the previous
-                chunk. Shape ``(B, T_prev, A)`` or ``(T_prev, A)``. If ``None``, no guidance
-                is applied and the method returns ``v_t`` from the original denoiser.
-            inference_delay (int): Number of timesteps from the prefix to use for guidance.
-            time (float | Tensor): Scalar in [0, 1] indicating normalized time. Must be
-                broadcastable with ``x_t``.
-            original_denoise_step_partial (Callable[[Tensor], Tensor]): Callable that
-                computes the base denoised velocity given only ``x_t``.
-            execution_horizon (int | None): Horizon used to build prefix weights. If
-                ``None``, defaults to ``self.rtc_config.execution_horizon``.
+            x_t (Tensor): 待去噪的当前潜变量/状态。形状为 ``(B, T, A)`` 或 ``(T, A)``。
+            prev_chunk_left_over (Tensor | None): 上一动作块中未执行的前缀。
+                形状为 ``(B, T_prev, A)`` 或 ``(T_prev, A)``。若为 ``None``，则不施加引导，
+                方法直接返回原始去噪器给出的 ``v_t``。
+            inference_delay (int): 前缀中用于引导的时间步数量。
+            time (float | Tensor): 取值 [0, 1] 的标量，表示归一化时间。必须能够
+                与 ``x_t`` 广播。
+            original_denoise_step_partial (Callable[[Tensor], Tensor]): 仅给定 ``x_t``
+                即可计算基础去噪速度的可调用对象。
+            execution_horizon (int | None): 用于构建前缀权重的时域。若为
+                ``None``，则默认取 ``self.rtc_config.execution_horizon``。
 
         Returns:
-            Tensor: Guided velocity with the same shape as ``v_t``.
+            Tensor: 引导后的速度，与 ``v_t`` 形状相同。
 
         Notes:
-            - If inputs are 2D, a batch dimension is temporarily added and removed at the end.
-            - If ``prev_chunk_left_over`` is shorter than the current chunk length ``T``, it is
-              right-padded with zeros to match ``T``.
-            - Prefix weights are constructed via ``get_prefix_weights(inference_delay, execution_horizon, T)``
-              and broadcast to ``(B, T, A)``.
-            - Guidance correction is computed via autograd using ``x1_t = x_t + time * v_t`` and
-              ``error = (prev_chunk_left_over - x1_t) * weights``.
-            - The final guidance weight is clamped by ``max_guidance_weight`` from the config.
+            - 若输入为二维，会临时添加一个批次维度，并在最后移除。
+            - 若 ``prev_chunk_left_over`` 短于当前动作块长度 ``T``，会在右侧补零至与 ``T`` 等长。
+            - 前缀权重通过 ``get_prefix_weights(inference_delay, execution_horizon, T)``
+              构建，并广播至 ``(B, T, A)``。
+            - 引导校正量通过 autograd 计算，使用 ``x1_t = x_t + time * v_t`` 以及
+              ``error = (prev_chunk_left_over - x1_t) * weights``。
+            - 最终的引导权重会被配置中的 ``max_guidance_weight`` 截断。
 
         Reference:
             https://www.physicalintelligence.company/download/real_time_chunking.pdf
         """
 
-        # In the original implementation, the time goes from 0 to 1 and
-        # In our implementation, the time goes from 1 to 0
-        # So we need to invert the time
+        # 在原始实现中，时间从 0 变化到 1；
+        # 而在我们的实现中，时间从 1 变化到 0，
+        # 因此需要对时间取反
         tau = 1 - time
 
         if prev_chunk_left_over is None:
-            # First step, no guidance - return v_t
+            # 第一步，不进行引导，直接返回 v_t
             v_t = original_denoise_step_partial(x_t)
             return v_t
 
@@ -178,19 +175,19 @@ class RTCProcessor:
 
         squeezed = False
         if len(x_t.shape) < 3:
-            # Add batch dimension
+            # 添加批次维度
             x_t = x_t.unsqueeze(0)
             squeezed = True
 
         if len(prev_chunk_left_over.shape) < 3:
-            # Add batch dimension
+            # 添加批次维度
             prev_chunk_left_over = prev_chunk_left_over.unsqueeze(0)
 
         if execution_horizon is None:
             execution_horizon = self.rtc_config.execution_horizon
 
-        # If the previous action chunk is to short then it doesn't make sense to use long execution horizon
-        # because there is nothing to merge
+        # 如果上一个动作块太短，就没有必要使用很长的执行时域，
+        # 因为没有内容可供合并
         if execution_horizon > prev_chunk_left_over.shape[1]:
             execution_horizon = prev_chunk_left_over.shape[1]
 
@@ -233,7 +230,7 @@ class RTCProcessor:
 
         result = v_t - guidance_weight * correction
 
-        # Remove the batch dimension if it was added
+        # 如果批次维度是此前添加的，则移除
         if squeezed:
             result = result.squeeze(0)
             correction = correction.squeeze(0)

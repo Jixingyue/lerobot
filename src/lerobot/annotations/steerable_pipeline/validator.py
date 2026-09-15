@@ -13,21 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pre-write validation against staged outputs.
+"""对暂存输出进行写入前验证。
 
-Runs after all three modules have written their per-episode artifacts but
-*before* the writer rewrites parquet shards. The validator never touches
-parquet; it only inspects the staging tree and the source frame timestamps
-exposed by :class:`EpisodeRecord`.
+在所有三个模块都写入了它们的按回合产物之后、但在写入器重写 parquet 分片
+*之前*运行。验证器从不接触 parquet；它只检查暂存树和
+:class:`EpisodeRecord` 暴露的源帧时间戳。
 
-Checks (per the plan's "Intermediate staging and validation" section):
+检查项（根据计划的"中间暂存和验证"部分）：
 
-- exact timestamp alignment against source frame timestamps
-- no orphan speech / interjection pairs
-- plan / memory emission consistency (events have a paired persistent row)
-- VQA assistant ``content`` is valid JSON (one of bbox / keypoint / count /
-  attribute / spatial)
-- every row maps to its correct column under :func:`column_for_style`
+- 与源帧时间戳的精确时间戳对齐
+- 没有孤立的语音/插入语对
+- 计划/记忆发射一致性（事件有配对的持久行）
+- VQA 助手 ``content`` 是有效的 JSON（bbox / keypoint / count /
+  attribute / spatial 之一）
+- 每行在 :func:`column_for_style` 下映射到其正确的列
 """
 
 from __future__ import annotations
@@ -50,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ValidationReport:
-    """Outcome of one validation pass across all episodes."""
+    """跨所有回合的一次验证过程的结果。"""
 
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -80,7 +79,7 @@ VQA_ANSWER_SHAPES: dict[str, set[str]] = {
 
 
 def classify_vqa_answer(payload: Any) -> str | None:
-    """Best-effort classification of a VQA answer payload to a question type."""
+    """尽力将 VQA 答案载荷分类为问题类型。"""
     if not isinstance(payload, dict):
         return None
     keys = set(payload.keys())
@@ -92,14 +91,13 @@ def classify_vqa_answer(payload: Any) -> str | None:
 
 @dataclass
 class StagingValidator:
-    """Walks the staging tree and produces a :class:`ValidationReport`."""
+    """遍历暂存树并生成 :class:`ValidationReport`。"""
 
-    timestamp_atol: float = 0.0  # exact-match by default
+    timestamp_atol: float = 0.0  # 默认精确匹配
     dataset_camera_keys: tuple[str, ...] | None = None
-    """Known ``observation.images.*`` keys on the dataset. When set, the
-    validator additionally enforces that every view-dependent row's
-    ``camera`` field references one of these keys. Pass ``None`` (default)
-    to skip that cross-check (e.g. in unit tests with no real dataset)."""
+    """数据集上已知的 ``observation.images.*`` 键。设置后，验证器还会强制
+    每个视图相关行的 ``camera`` 字段引用这些键之一。传递 ``None``（默认）
+    以跳过该交叉检查（例如在没有真实数据集的单元测试中）。"""
 
     def validate(
         self,
@@ -133,8 +131,8 @@ class StagingValidator:
         for row in all_rows:
             self._check_column_routing(row, report, record.episode_index)
             self._check_camera_field(row, report, record.episode_index, self.dataset_camera_keys)
-            # ``_check_column_routing`` already recorded any unknown-style error;
-            # don't let the same ``column_for_style`` lookup raise here uncaught.
+            # ``_check_column_routing`` 已经记录了任何未知样式错误；
+            # 不要让同样的 ``column_for_style`` 查找在这里未被捕获地抛出。
             try:
                 column = column_for_style(row.get("style"))
             except ValueError:
@@ -159,7 +157,7 @@ class StagingValidator:
         episode_index: int,
         dataset_camera_keys: Sequence[str] | None,
     ) -> None:
-        """Enforce the camera invariant + that the key matches the dataset's cameras."""
+        """强制摄像头不变量 + 键匹配数据集的摄像头。"""
         style = row.get("style")
         camera = row.get("camera")
         try:
@@ -179,7 +177,7 @@ class StagingValidator:
         report: ValidationReport,
         episode_index: int,
     ) -> None:
-        """Ensure at most one (vqa, user) and one (vqa, assistant) per (t, camera)."""
+        """确保每个 (t, camera) 最多有一个 (vqa, user) 和一个 (vqa, assistant)。"""
         counts: dict[tuple[float, str, str], int] = {}
         for row in events:
             if row.get("style") != "vqa":
@@ -188,7 +186,7 @@ class StagingValidator:
             camera = row.get("camera")
             role = row.get("role")
             if ts is None or camera is None or role is None:
-                continue  # other validators flag these
+                continue  # 其他验证器会标记这些
             key = (float(ts), str(camera), str(role))
             counts[key] = counts.get(key, 0) + 1
         for (ts, camera, role), n in counts.items():
@@ -284,13 +282,13 @@ class StagingValidator:
 
         if persistent and not plan_ts:
             report.add_warning(f"ep={episode_index}: persistent rows present but no plan emitted")
-        # every interjection should have a same-timestamp plan refresh
+        # 每个插入语都应该有一个同时间戳的计划刷新
         for ts in interjection_ts:
             if ts not in set(plan_ts):
                 report.add_error(
                     f"ep={episode_index}: interjection at t={ts} has no co-timestamped plan update"
                 )
-        # memory should be emitted at subtask boundaries (subset relation)
+        # 记忆应该在子任务边界处发射（子集关系）
         if memory_ts and subtask_ts:
             mem_set = set(memory_ts)
             sub_set = set(subtask_ts)

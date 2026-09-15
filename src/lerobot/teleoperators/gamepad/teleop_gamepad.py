@@ -46,7 +46,7 @@ gripper_action_map = {
 
 class GamepadTeleop(Teleoperator):
     """
-    Teleop class to use gamepad inputs for control.
+    使用手柄输入进行控制的遥操作类。
     """
 
     config_class = GamepadTeleopConfig
@@ -96,13 +96,13 @@ class GamepadTeleop(Teleoperator):
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
-        # Update the controller to get fresh inputs
+        # 更新控制器以获取最新输入
         self.gamepad.update()
 
-        # Get movement deltas from the controller
+        # 从控制器获取运动增量
         delta_x, delta_y, delta_z = self.gamepad.get_deltas()
 
-        # Create action from gamepad input
+        # 根据手柄输入创建动作
         gamepad_action = np.array([delta_x, delta_y, delta_z], dtype=np.float32)
 
         action_dict = {
@@ -111,7 +111,7 @@ class GamepadTeleop(Teleoperator):
             "delta_z": gamepad_action[2],
         }
 
-        # Default gripper action is to stay
+        # 默认夹爪动作为保持
         gripper_action = GripperAction.STAY.value
         if self.config.use_gripper:
             gripper_command = self.gamepad.gripper_command()
@@ -122,15 +122,14 @@ class GamepadTeleop(Teleoperator):
 
     def get_teleop_events(self) -> dict[str, Any]:
         """
-        Get extra control events from the gamepad such as intervention status,
-        episode termination, success indicators, etc.
+        从手柄获取额外的控制事件，例如干预状态、回合终止、成功指示等。
 
         Returns:
-            Dictionary containing:
-                - is_intervention: bool - Whether human is currently intervening
-                - terminate_episode: bool - Whether to terminate the current episode
-                - success: bool - Whether the episode was successful
-                - rerecord_episode: bool - Whether to rerecord the episode
+            包含以下内容的字典：
+                - is_intervention: bool - 人工当前是否正在干预
+                - terminate_episode: bool - 是否终止当前回合
+                - success: bool - 回合是否成功
+                - rerecord_episode: bool - 是否重新录制回合
         """
         if self.gamepad is None:
             return {
@@ -140,13 +139,13 @@ class GamepadTeleop(Teleoperator):
                 TeleopEvents.RERECORD_EPISODE: False,
             }
 
-        # Update gamepad state to get fresh inputs
+        # 更新手柄状态以获取最新输入
         self.gamepad.update()
 
-        # Check if intervention is active
+        # 检查干预是否激活
         is_intervention = self.gamepad.should_intervene()
 
-        # Get episode end status
+        # 获取回合结束状态
         episode_end_status = self.gamepad.get_episode_end_status()
         terminate_episode = episode_end_status in [
             TeleopEvents.RERECORD_EPISODE,
@@ -163,32 +162,32 @@ class GamepadTeleop(Teleoperator):
         }
 
     def disconnect(self) -> None:
-        """Disconnect from the gamepad."""
+        """断开与手柄的连接。"""
         if self.gamepad is not None:
             self.gamepad.stop()
             self.gamepad = None
 
     @property
     def is_connected(self) -> bool:
-        """Check if gamepad is connected."""
+        """检查手柄是否已连接。"""
         return self.gamepad is not None
 
     def calibrate(self) -> None:
-        """Calibrate the gamepad."""
-        # No calibration needed for gamepad
+        """校准手柄。"""
+        # 手柄无需校准
         pass
 
     def is_calibrated(self) -> bool:
-        """Check if gamepad is calibrated."""
-        # Gamepad doesn't require calibration
+        """检查手柄是否已校准。"""
+        # 手柄不需要校准
         return True
 
     def configure(self) -> None:
-        """Configure the gamepad."""
-        # No additional configuration needed
+        """配置手柄。"""
+        # 无需额外配置
         pass
 
     def send_feedback(self, feedback: dict) -> None:
-        """Send feedback to the gamepad."""
-        # Gamepad doesn't support feedback
+        """向手柄发送反馈。"""
+        # 手柄不支持反馈
         pass

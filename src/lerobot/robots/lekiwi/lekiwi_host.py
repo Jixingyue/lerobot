@@ -29,7 +29,7 @@ from .lekiwi import LeKiwi
 
 @dataclass
 class LeKiwiServerConfig:
-    """Configuration for the LeKiwi host script."""
+    """LeKiwi 主机脚本的配置。"""
 
     robot: LeKiwiConfig = field(default_factory=LeKiwiConfig)
     host: LeKiwiHostConfig = field(default_factory=LeKiwiHostConfig)
@@ -43,8 +43,8 @@ class LeKiwiHost:
         self.zmq_cmd_socket.bind(f"tcp://*:{config.port_zmq_cmd}")
 
         self.zmq_observation_socket = self.zmq_context.socket(zmq.PUSH)
-        # CONFLATE does not support multipart messages; a 2-deep send queue keeps
-        # near-latest-only semantics and sheds stale observations during stalls.
+        # CONFLATE 不支持多部分消息；深度为 2 的发送队列保持了
+        # 近似只保留最新值的语义，并在停滞期间丢弃过时的观测。
         self.zmq_observation_socket.setsockopt(zmq.SNDHWM, 2)
         self.zmq_observation_socket.bind(f"tcp://*:{config.port_zmq_observations}")
 
@@ -73,7 +73,7 @@ def main(cfg: LeKiwiServerConfig):
     watchdog_active = False
     logging.info("Waiting for commands...")
     try:
-        # Business logic
+        # 业务逻辑
         start = time.perf_counter()
         duration = 0
         while duration < host.connection_time_s:
@@ -100,9 +100,9 @@ def main(cfg: LeKiwiServerConfig):
 
             last_observation = robot.get_observation()
 
-            # Send one multipart message: a JSON header frame (state + camera
-            # order) followed by one raw JPEG frame per camera. Raw JPEG avoids
-            # the 33% base64 inflation of embedding binary data in JSON.
+            # 发送一条多部分消息：一个 JSON 头部帧（状态 + 相机
+            # 顺序），随后每个相机一个原始 JPEG 帧。原始 JPEG 避免了
+            # 将二进制数据嵌入 JSON 时 33% 的 base64 膨胀。
             cam_keys = list(robot.cameras.keys())
             jpeg_frames = []
             for cam_key in cam_keys:
@@ -112,7 +112,7 @@ def main(cfg: LeKiwiServerConfig):
                 jpeg_frames.append(jpeg if ret else b"")
             header = {"_cams": cam_keys, **last_observation}
 
-            # Send the observation to the remote agent
+            # 将观测发送给远程代理
             try:
                 host.zmq_observation_socket.send_multipart(
                     [json.dumps(header).encode()] + jpeg_frames, flags=zmq.NOBLOCK
@@ -120,7 +120,7 @@ def main(cfg: LeKiwiServerConfig):
             except zmq.Again:
                 logging.info("Dropping observation, no client connected")
 
-            # Ensure a short sleep to avoid overloading the CPU.
+            # 确保短暂休眠以避免 CPU 过载。
             elapsed = time.time() - loop_start_time
 
             time.sleep(max(1 / host.max_loop_freq_hz - elapsed, 0))

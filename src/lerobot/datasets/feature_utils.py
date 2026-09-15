@@ -37,16 +37,16 @@ from .utils import (
 
 
 def get_hf_features_from_features(features: dict) -> datasets.Features:
-    """Convert a LeRobot features dictionary to a `datasets.Features` object.
+    """将 LeRobot 特征字典转换为 `datasets.Features` 对象。
 
     Args:
-        features (dict): A LeRobot-style feature dictionary.
+        features (dict): LeRobot 风格的特征字典。
 
     Returns:
-        datasets.Features: The corresponding Hugging Face `datasets.Features` object.
+        datasets.Features: 对应的 Hugging Face `datasets.Features` 对象。
 
     Raises:
-        ValueError: If a feature has an unsupported shape.
+        ValueError: 当某个特征的形状不受支持时。
     """
     hf_features = {}
     for key, ft in features.items():
@@ -90,20 +90,20 @@ def create_empty_dataset_info(
     data_files_size_in_mb: int | None = None,
     video_files_size_in_mb: int | None = None,
 ) -> DatasetInfo:
-    """Create a template ``DatasetInfo`` object for a new dataset's ``meta/info.json``.
+    """为新数据集的 ``meta/info.json`` 创建一个模板 ``DatasetInfo`` 对象。
 
     Args:
-        codebase_version (str): The version of the LeRobot codebase.
-        fps (int): The frames per second of the data.
-        features (dict): The LeRobot features dictionary for the dataset.
-        use_videos (bool): Whether the dataset will store videos.
-        robot_type (str | None): The type of robot used, if any.
-        chunks_size (int | None): Max files per chunk directory. Defaults to ``DEFAULT_CHUNK_SIZE``.
-        data_files_size_in_mb (int | None): Max parquet file size in MB. Defaults to ``DEFAULT_DATA_FILE_SIZE_IN_MB``.
-        video_files_size_in_mb (int | None): Max video file size in MB. Defaults to ``DEFAULT_VIDEO_FILE_SIZE_IN_MB``.
+        codebase_version (str): LeRobot 代码库的版本。
+        fps (int): 数据的每秒帧数。
+        features (dict): 数据集的 LeRobot 特征字典。
+        use_videos (bool): 数据集是否将存储视频。
+        robot_type (str | None): 所使用机器人的类型（如果有）。
+        chunks_size (int | None): 每个分片目录的最大文件数。默认为 ``DEFAULT_CHUNK_SIZE``。
+        data_files_size_in_mb (int | None): parquet 文件的最大大小（MB）。默认为 ``DEFAULT_DATA_FILE_SIZE_IN_MB``。
+        video_files_size_in_mb (int | None): 视频文件的最大大小（MB）。默认为 ``DEFAULT_VIDEO_FILE_SIZE_IN_MB``。
 
     Returns:
-        DatasetInfo: A typed dataset information object with initial metadata.
+        DatasetInfo: 包含初始元数据的带类型数据集信息对象。
     """
     return DatasetInfo(
         codebase_version=codebase_version,
@@ -119,12 +119,12 @@ def create_empty_dataset_info(
 
 
 def canonicalize_depth_marker(feature: dict) -> None:
-    """Fold a feature's legacy depth marker into the canonical ``info['is_depth_map']``.
+    """将特征中遗留的深度图标记统一归入规范的 ``info['is_depth_map']``。
 
-    Depth maps can be flagged in three ways across dataset versions: the canonical
-    ``feature['info']['is_depth_map']``, the legacy ``feature['info']['video.is_depth_map']``,
-    or a legacy ``feature['video_info']['video.is_depth_map']`` in a separate dict. This mutates
-    ``feature`` in place, dropping the legacy keys.
+    在不同数据集版本中，深度图可以通过三种方式标记：规范的
+    ``feature['info']['is_depth_map']``、遗留的 ``feature['info']['video.is_depth_map']``，
+    或位于独立字典中的遗留 ``feature['video_info']['video.is_depth_map']``。本函数会原地
+    修改 ``feature``，并删除遗留的键。
     """
     info = feature.get("info") or {}
     feature["info"] = info
@@ -139,12 +139,12 @@ def canonicalize_depth_marker(feature: dict) -> None:
 
 
 def features_equal_for_merge(features_a: dict[str, dict], features_b: dict[str, dict]) -> bool:
-    """Return whether two LeRobotDatasetMetadata ``features`` dicts are compatible for aggregation.
+    """判断两个 LeRobotDatasetMetadata 的 ``features`` 字典是否兼容、可以聚合。
 
-    For video features, keys under ``info`` related to video encoding parameters are ignored during
-    comparison as they do not prevent aggregation. The legacy depth marker (``video.is_depth_map``,
-    in ``info`` or a separate ``video_info`` dict) is canonicalized so datasets that only differ in
-    how they flag depth remain mergeable.
+    对于视频特征，比较时会忽略 ``info`` 下与视频编码参数相关的键，因为它们
+    不会妨碍聚合。遗留的深度图标记（位于 ``info`` 或独立 ``video_info`` 字典中的
+    ``video.is_depth_map``）会被规范化，从而使仅在深度图标记方式上有差异的
+    数据集仍然可以合并。
     """
 
     def _normalized(feature: dict) -> dict:
@@ -172,23 +172,23 @@ def features_equal_for_merge(features_a: dict[str, dict], features_b: dict[str, 
 def check_delta_timestamps(
     delta_timestamps: dict[str, list[float]], fps: int, tolerance_s: float, raise_value_error: bool = True
 ) -> bool:
-    """Check if delta timestamps are multiples of 1/fps +/- tolerance.
+    """检查增量时间戳是否为 1/fps 的整数倍（允许给定容差）。
 
-    This ensures that adding these delta timestamps to any existing timestamp in
-    the dataset will result in a value that aligns with the dataset's frame rate.
+    这可以确保将这些增量时间戳与数据集中任意已有时间戳相加后，
+    所得值仍与数据集的帧率对齐。
 
     Args:
-        delta_timestamps (dict): A dictionary where values are lists of time
-            deltas in seconds.
-        fps (int): The frames per second of the dataset.
-        tolerance_s (float): The allowed tolerance in seconds.
-        raise_value_error (bool): If True, raises an error on failure.
+        delta_timestamps (dict): 一个字典，其值为以秒为单位的
+            时间增量列表。
+        fps (int): 数据集的每秒帧数。
+        tolerance_s (float): 允许的容差（秒）。
+        raise_value_error (bool): 为 True 时，校验失败会抛出错误。
 
     Returns:
-        bool: True if all deltas are valid, False otherwise.
+        bool: 所有增量都有效时返回 True，否则返回 False。
 
     Raises:
-        ValueError: If any delta is outside the tolerance and `raise_value_error` is True.
+        ValueError: 当存在超出容差的增量且 `raise_value_error` 为 True 时。
     """
     outside_tolerance = {}
     for key, delta_ts in delta_timestamps.items():
@@ -214,14 +214,14 @@ def check_delta_timestamps(
 
 
 def get_delta_indices(delta_timestamps: dict[str, list[float]], fps: int) -> dict[str, list[int]]:
-    """Convert delta timestamps in seconds to delta indices in frames.
+    """将以秒为单位的增量时间戳转换为以帧为单位的增量索引。
 
     Args:
-        delta_timestamps (dict): A dictionary of time deltas in seconds.
-        fps (int): The frames per second of the dataset.
+        delta_timestamps (dict): 以秒为单位的时间增量字典。
+        fps (int): 数据集的每秒帧数。
 
     Returns:
-        dict: A dictionary of frame delta indices.
+        dict: 帧增量索引字典。
     """
     delta_indices = {}
     for key, delta_ts in delta_timestamps.items():
@@ -231,18 +231,18 @@ def get_delta_indices(delta_timestamps: dict[str, list[float]], fps: int) -> dic
 
 
 def validate_frame(frame: dict, features: dict) -> None:
-    # DEFAULT_FEATURES (timestamp, frame_index, episode_index, index, task_index) are
-    # auto-populated by the recording pipeline (add_frame / save_episode) and must not
-    # be supplied by the caller. Excluding them here means any frame dict that contains
-    # these keys will be rejected as extra features.
+    # DEFAULT_FEATURES（timestamp、frame_index、episode_index、index、task_index）由
+    # 录制流水线（add_frame / save_episode）自动填充，调用方不得
+    # 提供。在这里排除它们意味着任何包含这些键的帧字典都会
+    # 因多余特征而被拒绝。
     expected_features = set(features) - set(DEFAULT_FEATURES)
     actual_features = set(frame)
 
-    # task is a special required field that's not part of regular features
+    # task 是特殊的必填字段，不属于常规特征
     if "task" not in actual_features:
         raise ValueError("Feature mismatch in `frame` dictionary:\nMissing features: {'task'}\n")
 
-    # Remove task from actual_features for regular feature validation
+    # 从 actual_features 中移除 task，以便进行常规特征校验
     actual_features_for_validation = actual_features - {"task"}
 
     error_message = validate_features_presence(actual_features_for_validation, expected_features)
@@ -256,14 +256,14 @@ def validate_frame(frame: dict, features: dict) -> None:
 
 
 def validate_features_presence(actual_features: set[str], expected_features: set[str]) -> str:
-    """Check for missing or extra features in a frame.
+    """检查帧中是否存在缺失或多余的特征。
 
     Args:
-        actual_features (set[str]): The set of feature names present in the frame.
-        expected_features (set[str]): The set of feature names expected in the frame.
+        actual_features (set[str]): 帧中实际存在的特征名集合。
+        expected_features (set[str]): 帧中预期存在的特征名集合。
 
     Returns:
-        str: An error message string if there's a mismatch, otherwise an empty string.
+        str: 不匹配时返回错误消息字符串，否则返回空字符串。
     """
     error_message = ""
     missing_features = expected_features - actual_features
@@ -282,18 +282,18 @@ def validate_features_presence(actual_features: set[str], expected_features: set
 def validate_feature_dtype_and_shape(
     name: str, feature: dict, value: np.ndarray | PILImage.Image | str
 ) -> str:
-    """Validate the dtype and shape of a single feature's value.
+    """校验单个特征值的 dtype 和形状。
 
     Args:
-        name (str): The name of the feature.
-        feature (dict): The feature specification from the LeRobot features dictionary.
-        value: The value of the feature to validate.
+        name (str): 特征名。
+        feature (dict): 来自 LeRobot 特征字典的特征规范。
+        value: 待校验的特征值。
 
     Returns:
-        str: An error message if validation fails, otherwise an empty string.
+        str: 校验失败时返回错误消息，否则返回空字符串。
 
     Raises:
-        NotImplementedError: If the feature dtype is not supported for validation.
+        NotImplementedError: 当该特征 dtype 尚不支持校验时。
     """
     expected_dtype = feature["dtype"]
     expected_shape = feature["shape"]
@@ -312,16 +312,16 @@ def validate_feature_dtype_and_shape(
 def validate_feature_numpy_array(
     name: str, expected_dtype: str, expected_shape: list[int], value: np.ndarray
 ) -> str:
-    """Validate a feature that is expected to be a numpy array.
+    """校验一个预期为 numpy 数组的特征。
 
     Args:
-        name (str): The name of the feature.
-        expected_dtype (str): The expected numpy dtype as a string.
-        expected_shape (list[int]): The expected shape.
-        value (np.ndarray): The numpy array to validate.
+        name (str): 特征名。
+        expected_dtype (str): 预期的 numpy dtype（字符串形式）。
+        expected_shape (list[int]): 预期的形状。
+        value (np.ndarray): 待校验的 numpy 数组。
 
     Returns:
-        str: An error message if validation fails, otherwise an empty string.
+        str: 校验失败时返回错误消息，否则返回空字符串。
     """
     error_message = ""
     if isinstance(value, np.ndarray):
@@ -342,19 +342,19 @@ def validate_feature_numpy_array(
 def validate_feature_image_or_video(
     name: str, expected_shape: list[str], value: np.ndarray | PILImage.Image
 ) -> str:
-    """Validate a feature that is expected to be an image or video frame.
+    """校验一个预期为图像或视频帧的特征。
 
-    Accepts `np.ndarray` (channel-first or channel-last) or `PIL.Image.Image`.
+    接受 `np.ndarray`（通道优先或通道最后）或 `PIL.Image.Image`。
 
     Args:
-        name (str): The name of the feature.
-        expected_shape (list[str]): The expected shape, e.g. (C, H, W) or (H, W, C).
-        value: The image data to validate.
+        name (str): 特征名。
+        expected_shape (list[str]): 预期的形状，例如 (C, H, W) 或 (H, W, C)。
+        value: 待校验的图像数据。
 
     Returns:
-        str: An error message if validation fails, otherwise an empty string.
+        str: 校验失败时返回错误消息，否则返回空字符串。
     """
-    # Note: The check of pixels range ([0,1] for float and [0,255] for uint8) is done by the image writer threads.
+    # 注意：像素范围的检查（浮点数为 [0,1]，uint8 为 [0,255]）由图像写入器线程完成。
     error_message = ""
     if isinstance(value, np.ndarray):
         actual_shape = value.shape
@@ -370,14 +370,14 @@ def validate_feature_image_or_video(
 
 
 def validate_feature_string(name: str, value: str) -> str:
-    """Validate a feature that is expected to be a string.
+    """校验一个预期为字符串的特征。
 
     Args:
-        name (str): The name of the feature.
-        value (str): The value to validate.
+        name (str): 特征名。
+        value (str): 待校验的值。
 
     Returns:
-        str: An error message if validation fails, otherwise an empty string.
+        str: 校验失败时返回错误消息，否则返回空字符串。
     """
     if not isinstance(value, str):
         return f"The feature '{name}' is expected to be of type 'str', but type '{type(value)}' provided instead.\n"
@@ -385,20 +385,19 @@ def validate_feature_string(name: str, value: str) -> str:
 
 
 def validate_feature_language(name: str, value) -> str:
-    """Validate a feature that is expected to hold language annotations.
+    """校验一个预期存放语言标注的特征。
 
-    Language columns (``language_persistent`` / ``language_events``) are
-    populated after recording by the annotation pipeline, not at record time.
-    Any value supplied here is dropped before the frame is written, so a
-    non-empty value almost certainly signals a mistake. We warn rather than
-    fail to keep recording resilient.
+    语言列（``language_persistent`` / ``language_events``）是在录制之后
+    由标注流水线填充的，而非在录制时填充。此处提供的任何值都会在
+    帧写入之前被丢弃，因此非空值几乎肯定意味着出错了。这里选择发出
+    警告而非直接失败，以保持录制过程的健壮性。
 
     Args:
-        name (str): The name of the feature.
-        value: The value to validate.
+        name (str): 特征名。
+        value: 待校验的值。
 
     Returns:
-        str: Always an empty string — language values are non-fatal.
+        str: 始终为空字符串——语言值问题不属于致命错误。
     """
     if value is not None:
         logging.warning(
@@ -409,19 +408,19 @@ def validate_feature_language(name: str, value) -> str:
 
 
 def validate_episode_buffer(episode_buffer: dict, total_episodes: int, features: dict) -> None:
-    """Validate the episode buffer before it's written to disk.
+    """在 episode 缓冲区写入磁盘之前对其进行校验。
 
-    Ensures the buffer has the required keys, contains at least one frame, and
-    has features consistent with the dataset's specification.
+    确保缓冲区包含必需的键、至少有一帧，并且其特征
+    与数据集规范一致。
 
     Args:
-        episode_buffer (dict): The buffer containing data for a single episode.
-        total_episodes (int): The current total number of episodes in the dataset.
-        features (dict): The LeRobot features dictionary for the dataset.
+        episode_buffer (dict): 包含单个 episode 数据的缓冲区。
+        total_episodes (int): 数据集中当前的 episode 总数。
+        features (dict): 数据集的 LeRobot 特征字典。
 
     Raises:
-        ValueError: If the buffer is invalid.
-        NotImplementedError: If the episode index is manually set and doesn't match.
+        ValueError: 当缓冲区无效时。
+        NotImplementedError: 当手动设置了不匹配的 episode 索引时。
     """
     if "size" not in episode_buffer:
         raise ValueError("size key not found in episode_buffer")
@@ -430,7 +429,7 @@ def validate_episode_buffer(episode_buffer: dict, total_episodes: int, features:
         raise ValueError("task key not found in episode_buffer")
 
     if episode_buffer["episode_index"] != total_episodes:
-        # TODO(aliberts): Add option to use existing episode_index
+        # TODO(aliberts): 增加使用已有 episode_index 的选项
         raise NotImplementedError(
             "You might have manually provided the episode_buffer with an episode_index that doesn't "
             "match the total number of episodes already in the dataset. This is not supported for now."

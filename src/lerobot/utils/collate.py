@@ -27,21 +27,21 @@ _PYTHON_LIST_KEYS = {MESSAGES_RENDERED, "message_streams", "target_message_indic
 
 
 def lerobot_collate_fn(batch: list[dict[str, Any] | None]) -> dict[str, Any] | None:
-    """Collate function that preserves Python-list and language fields as lists.
+    """将 Python 列表字段和语言字段保留为列表的批处理合并函数。
 
-    Drops ``None`` samples (e.g. recipes that yielded no target message), keeps
-    rendered-message and language fields as plain Python lists, and delegates
-    every other key to PyTorch's ``default_collate``.
+    丢弃 ``None`` 样本（例如未产生目标消息的配方），将渲染消息字段和
+    语言字段保留为普通 Python 列表，其余所有键都委托给
+    PyTorch 的 ``default_collate`` 处理。
     """
     batch = [sample for sample in batch if sample is not None]
     if not batch:
         return None
 
-    # All-or-nothing per key: a partial-presence batch (e.g. half the samples
-    # carry `messages_rendered` and half don't) is a real bug in the upstream
-    # rendering step — silently filtering would hand downstream consumers a
-    # preserved list shorter than the tensor batch. Raise instead so the
-    # mismatch surfaces at the boundary.
+    # 每个键要么全有要么全无：部分存在的批次（例如一半样本
+    # 带有 `messages_rendered` 而另一半没有）是上游渲染步骤中
+    # 真实存在的 bug —— 静默过滤会让下游消费者拿到
+    # 比张量批次更短的保留列表。改为抛出异常，
+    # 让这种不一致在边界处暴露出来。
     preserved: dict[str, list[Any]] = {}
     for key in _PYTHON_LIST_KEYS:
         presence = [key in sample for sample in batch]

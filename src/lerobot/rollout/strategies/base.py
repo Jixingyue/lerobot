@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Base rollout strategy: autonomous policy execution with no data recording."""
+"""基础 rollout 策略：自主执行策略，不记录数据。"""
 
 from __future__ import annotations
 
@@ -28,19 +28,19 @@ logger = logging.getLogger(__name__)
 
 
 class BaseStrategy(RolloutStrategy):
-    """Autonomous policy rollout with no data recording.
+    """自主策略 rollout，不记录数据。
 
-    All actions flow through the ``robot_action_processor`` pipeline
-    before reaching the robot.
+    所有动作在送达机器人之前，都会经过 ``robot_action_processor``
+    流水线处理。
     """
 
     def setup(self, ctx: RolloutContext) -> None:
-        """Initialise the inference engine."""
+        """初始化推理引擎。"""
         self._init_engine(ctx)
         logger.info("Base strategy ready")
 
     def run(self, ctx: RolloutContext) -> None:
-        """Run the autonomous control loop until shutdown or duration expires."""
+        """运行自主控制循环，直到收到关闭信号或达到持续时长限制。"""
         engine = self._engine
         cfg = ctx.runtime.cfg
         robot = ctx.hardware.robot_wrapper
@@ -77,8 +77,8 @@ class BaseStrategy(RolloutStrategy):
                 with timer.section("telemetry"):
                     self._log_telemetry(obs_processed, action_dict, ctx.runtime)
 
-                # Service the text-query channel (/vqa answers, /autosteer turns) at
-                # the end of the tick; no-op when nothing is queued.
+                # 在节拍末尾处理文本查询通道（/vqa 回答、/autosteer 转向）；
+                # 队列为空时为空操作。
                 with timer.section("query"):
                     engine.pump_query(obs_processed)
 
@@ -88,7 +88,7 @@ class BaseStrategy(RolloutStrategy):
             timer.log_run_summary()
 
     def teardown(self, ctx: RolloutContext) -> None:
-        """Disconnect hardware and stop inference."""
+        """断开硬件连接并停止推理。"""
         self._teardown_hardware(
             ctx.hardware,
             return_to_initial_position=ctx.runtime.cfg.return_to_initial_position,

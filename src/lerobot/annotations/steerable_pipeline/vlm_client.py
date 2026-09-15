@@ -13,20 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Shared Qwen-VL client.
+"""共享的 Qwen-VL 客户端。
 
-The pipeline uses a single shared VLM across modules. vLLM is preferred when
-available (high throughput, JSON-guided decoding); transformers is the
-fallback. A ``stub`` backend is used for unit tests so fixtures never call
-into a real model.
+流水线在模块之间使用单个共享的 VLM。vLLM 在可用时是首选（高吞吐量、JSON 引导解码）；
+transformers 是回退方案。``stub`` 后端用于单元测试，因此夹具永远不会调用真实模型。
 
-The client speaks one method, :meth:`VlmClient.generate_json`, which:
+客户端只提供一个方法 :meth:`VlmClient.generate_json`，它：
 
-- accepts a list of OpenAI/HF-style multimodal messages,
-- requests JSON output from the server,
-- batches requests transparently,
-- and reprompts once on a JSON parse failure with an inline correction
-  message before raising.
+- 接受 OpenAI/HF 风格的多模态消息列表，
+- 向服务器请求 JSON 输出，
+- 透明地批处理请求，
+- 并在 JSON 解析失败时使用内联更正消息重新提示一次，然后再抛出。
 """
 
 from __future__ import annotations
@@ -52,7 +49,7 @@ from .config import VlmConfig
 
 
 class VlmClient(Protocol):
-    """Protocol every backend must implement."""
+    """每个后端必须实现的协议。"""
 
     def generate_json(
         self,
@@ -61,15 +58,15 @@ class VlmClient(Protocol):
         max_new_tokens: int | None = None,
         temperature: float | None = None,
     ) -> list[Any]:
-        """Generate one JSON-decoded response per messages list."""
+        """为每个消息列表生成一个 JSON 解码响应。"""
 
 
 @dataclass
 class StubVlmClient:
-    """Deterministic stub used in unit tests.
+    """单元测试中使用的确定性存根。
 
-    A test passes a callable that maps the *last user message text* (or, if
-    that is empty, the full message list) to a JSON-serializable response.
+    测试传递一个可调用对象，该对象将*最后一条用户消息文本*（或者如果为空，
+    则是完整消息列表）映射到 JSON 可序列化响应。
     """
 
     responder: Callable[[Sequence[dict[str, Any]]], Any]
@@ -86,12 +83,12 @@ class StubVlmClient:
 
 def _strip_to_json(text: str) -> Any:
     text = text.strip()
-    # Strip <think>...</think> blocks (Qwen3 Thinking style)
+    # 去除 <think>...</think> 块（Qwen3 Thinking 风格）
     while "<think>" in text and "</think>" in text:
         start = text.find("<think>")
         end = text.find("</think>", start) + len("</think>")
         text = (text[:start] + text[end:]).strip()
-    # Strip ```json ... ``` fences from chat-tuned backbones
+    # 从聊天调优的骨干网络中去除 ```json ... ``` 围栏
     if text.startswith("```"):
         first = text.find("\n")
         last = text.rfind("```")
@@ -101,7 +98,7 @@ def _strip_to_json(text: str) -> Any:
         return json.loads(text)
     except (ValueError, json.JSONDecodeError):
         pass
-    # Fall back to extracting the first balanced {...} block.
+    # 回退到提取第一个平衡的 {...} 块。
     obj_text = _extract_first_json_object(text)
     if obj_text is None:
         raise json.JSONDecodeError("No JSON object found", text, 0)
@@ -109,8 +106,8 @@ def _strip_to_json(text: str) -> Any:
 
 
 def _extract_first_json_object(text: str) -> str | None:
-    """Return the first balanced ``{...}`` substring, ignoring braces in
-    string literals. Returns ``None`` if no balanced block is found."""
+    """返回第一个平衡的 ``{...}`` 子串，忽略字符串字面量中的花括号。
+    如果未找到平衡块，则返回 ``None``。"""
     start = text.find("{")
     if start < 0:
         return None
@@ -125,8 +122,7 @@ def _extract_first_json_object(text: str) -> str | None:
         if ch == "\\":
             escape = True
             continue
-        # Note: ``escape`` is always False here — the ``if escape`` branch
-        # above already handled and reset it.
+        # 注意：``escape`` 在这里始终为 False——上面的 ``if escape`` 分支已经处理并重置了它。
         if ch == '"':
             in_string = not in_string
             continue
@@ -143,7 +139,7 @@ def _extract_first_json_object(text: str) -> str | None:
 
 @dataclass
 class _GenericTextClient:
-    """Wraps any text-generation callable in JSON-mode + one-retry semantics."""
+    """将任何文本生成可调用对象包装在 JSON 模式 + 一次重试语义中。"""
 
     generate_text: Callable[[Sequence[Sequence[dict[str, Any]]], int, float], list[str]]
     config: VlmConfig
@@ -179,8 +175,8 @@ class _GenericTextClient:
             try:
                 out.append(_strip_to_json(retry_text))
             except (ValueError, json.JSONDecodeError):
-                # After retry: log preview and return None instead of crashing
-                # the whole pipeline. Modules treat None as "skip".
+                # 重试后：记录预览并返回 None 而不是崩溃整个流水线。
+                # 模块将 None 视为"跳过"。
                 preview = retry_text.strip().replace("\n", " ")[:200]
                 print(
                     f"[vlm] WARNING: failed to parse JSON after retry; preview: {preview!r}",
@@ -191,19 +187,18 @@ class _GenericTextClient:
 
 
 def make_vlm_client(config: VlmConfig) -> VlmClient:
-    """Build the shared VLM client.
+    """构建共享的 VLM 客户端。
 
-    Only the ``openai`` backend is supported for now. The shipped workflow
-    is Hugging Face Jobs (``lerobot-annotate --job.target=<flavor>``): it
-    boots a vLLM server inside the ``vllm/vllm-openai`` image and the
-    pipeline talks to it over the OpenAI-compatible API
-    (``--vlm.backend=openai``, optionally auto-spawning the server via
-    ``auto_serve`` / ``serve_command``). The former in-process ``vllm`` /
-    ``transformers`` backends were removed to keep the support surface to
-    the HF Jobs path.
+    目前只支持 ``openai`` 后端。交付的工作流是
+    Hugging Face Jobs（``lerobot-annotate --job.target=<flavor>``）：它在
+    ``vllm/vllm-openai`` 镜像内启动一个 vLLM 服务器，流水线通过
+    兼容 OpenAI 的 API 与之通信（``--vlm.backend=openai``，可选地通过
+    ``auto_serve`` / ``serve_command`` 自动生成服务器）。以前的进程内
+    ``vllm`` / ``transformers`` 后端已被移除，以将支持面保持在
+    HF Jobs 路径上。
 
-    For ``stub``, construct :class:`StubVlmClient` directly with a responder
-    callable; it is rejected here to make accidental misuse obvious.
+    对于 ``stub``，直接使用响应器可调用对象构造 :class:`StubVlmClient`；
+    这里拒绝它以使意外误用变得明显。
     """
     if config.backend == "openai":
         return _make_openai_client(config)
@@ -222,18 +217,18 @@ def make_vlm_client(config: VlmConfig) -> VlmClient:
 
 
 def _make_openai_client(config: VlmConfig) -> VlmClient:
-    """Backend that talks to any OpenAI-compatible server.
+    """与任何兼容 OpenAI 的服务器通信的后端。
 
-    Compatible with ``vllm serve``, ``transformers serve``,
-    ``ktransformers serve``, and hosted endpoints. By default the server
-    is expected to be already running. Set ``auto_serve=True`` to have
-    this client spawn one (default: ``transformers serve``), wait until
-    it's ready, and tear it down on process exit.
+    兼容 ``vllm serve``、``transformers serve``、
+    ``ktransformers serve`` 和托管端点。默认情况下，服务器
+    应该已经在运行。设置 ``auto_serve=True`` 以使此客户端
+    生成一个（默认：``transformers serve``），等待直到就绪，
+    并在进程退出时关闭它。
 
-    Image blocks ``{"type":"image", "image":<PIL.Image>}`` are
-    auto-converted to ``image_url`` data-URLs. Video blocks
-    ``{"type":"video", "video":[<PIL>...]}`` are forwarded as
-    multi-frame ``video_url`` items where supported.
+    图像块 ``{"type":"image", "image":<PIL.Image>}`` 会被
+    自动转换为 ``image_url`` 数据 URL。视频块
+    ``{"type":"video", "video":[<PIL>...]}`` 在支持的地方
+    作为多帧 ``video_url`` 项转发。
     """
     try:
         from openai import OpenAI  # type: ignore[import-not-found]
@@ -268,12 +263,12 @@ def _make_openai_client(config: VlmConfig) -> VlmClient:
             print(f"[lerobot-annotate] server ready at {api_base}", flush=True)
 
     clients = [OpenAI(base_url=base, api_key=api_key) for base in api_bases]
-    # round-robin counter for parallel mode
+    # 并行模式的轮询计数器
     rr_counter = {"i": 0}
 
-    # ``mm_processor_kwargs`` is a vllm-specific extra; transformers serve
-    # rejects it with HTTP 422. Send it only when explicitly opted in via
-    # an env var (e.g. ``LEROBOT_OPENAI_SEND_MM_KWARGS=1`` for vllm).
+    # ``mm_processor_kwargs`` 是 vllm 特有的额外参数；transformers serve
+    # 会以 HTTP 422 拒绝它。仅当通过环境变量（例如用于 vllm 的
+    # ``LEROBOT_OPENAI_SEND_MM_KWARGS=1``）显式选择加入时才发送它。
     send_mm_kwargs = os.environ.get("LEROBOT_OPENAI_SEND_MM_KWARGS", "").lower() in {"1", "true", "yes"}
 
     rr_lock = threading.Lock()
@@ -299,10 +294,9 @@ def _make_openai_client(config: VlmConfig) -> VlmClient:
             chosen = clients[rr_counter["i"] % len(clients)]
             rr_counter["i"] += 1
         response = chosen.chat.completions.create(**kwargs)
-        # Some OpenAI-compatible servers can return a choice with no message
-        # (safety filter, or a "thinking" model that spends the whole budget
-        # before emitting content). Treat that as an empty reply so the
-        # JSON-retry path handles it instead of crashing the run.
+        # 某些兼容 OpenAI 的服务器可能返回没有消息的选择
+        # （安全过滤器，或在发射内容之前花费整个预算的"思考"模型）。
+        # 将其视为空回复，以便 JSON 重试路径处理它而不是崩溃运行。
         choice = response.choices[0] if response.choices else None
         message = choice.message if choice is not None else None
         return (message.content if message is not None else None) or ""
@@ -310,7 +304,7 @@ def _make_openai_client(config: VlmConfig) -> VlmClient:
     def _gen(batch: Sequence[Sequence[dict[str, Any]]], max_tok: int, temp: float) -> list[str]:
         if len(batch) <= 1 or config.client_concurrency <= 1:
             return [_one_call(messages, max_tok, temp) for messages in batch]
-        # Parallel fan-out — vllm batches these on the server side.
+        # 并行扇出——vllm 在服务器端对这些进行批处理。
         max_workers = min(config.client_concurrency, len(batch))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = [pool.submit(_one_call, messages, max_tok, temp) for messages in batch]
@@ -320,11 +314,10 @@ def _make_openai_client(config: VlmConfig) -> VlmClient:
 
 
 def _bind_serve_port(cmd: str, port: int) -> str:
-    """Bind a serve command to ``port``: substitute a ``{port}`` placeholder
-    if present, else append ``--port`` when the command omits it (leaving an
-    explicit ``--port`` untouched). Shared by the single- and parallel-server
-    paths so a serve_command never reaches the server with a literal
-    ``{port}``."""
+    """将 serve 命令绑定到 ``port``：如果存在则替换 ``{port}`` 占位符，
+    否则当命令省略时追加 ``--port``（保留显式的 ``--port`` 不变）。
+    单服务器和并行服务器路径共享此函数，因此 serve_command 永远不会
+    带着字面的 ``{port}`` 到达服务器。"""
     if "{port}" in cmd:
         return cmd.replace("{port}", str(port))
     if "--port" not in cmd:
@@ -333,32 +326,30 @@ def _bind_serve_port(cmd: str, port: int) -> str:
 
 
 def _spawn_parallel_inference_servers(config: VlmConfig) -> list[str]:
-    """Spawn ``config.parallel_servers`` independent vllm replicas.
+    """生成 ``config.parallel_servers`` 个独立的 vllm 副本。
 
-    Each replica:
-    - is pinned to a single GPU via ``CUDA_VISIBLE_DEVICES``
-    - listens on ``serve_port + i``
-    - is shut down via the same atexit hook as the single-server path
+    每个副本：
+    - 通过 ``CUDA_VISIBLE_DEVICES`` 固定到单个 GPU
+    - 在 ``serve_port + i`` 上监听
+    - 通过与单服务器路径相同的 atexit 钩子关闭
 
-    Returns the list of ``api_base`` URLs the client should round-robin
-    across.
+    返回客户端应该轮询的 ``api_base`` URL 列表。
     """
     n = config.parallel_servers
     api_bases: list[str] = []
     procs: list[subprocess.Popen] = []
     ready_events: list[threading.Event] = []
-    # Multiple readiness signals — uvicorn's own banner is suppressed at
-    # ``--uvicorn-log-level warning``, so we also accept vllm's own
-    # "Starting vLLM API server" line and the route-listing line. The
-    # HTTP probe below is the ultimate fallback.
+    # 多个就绪信号——uvicorn 自己的横幅在 ``--uvicorn-log-level warning`` 下被抑制，
+    # 因此我们也接受 vllm 自己的
+    # "Starting vLLM API server" 行和路由列表行。下面的 HTTP 探测是最终回退。
     ready_markers = (
         "Uvicorn running",
         "Application startup complete",
         "Starting vLLM API server",
         "Available routes are",
     )
-    # Single lock for all server-stream threads so multibyte chars from
-    # different servers don't interleave and tear UTF-8 sequences.
+    # 所有服务器流线程使用单个锁，以便来自不同服务器的多字节字符
+    # 不会交错并撕裂 UTF-8 序列。
     print_lock = threading.Lock()
 
     base_cmd = config.serve_command or (
@@ -391,8 +382,8 @@ def _spawn_parallel_inference_servers(config: VlmConfig) -> list[str]:
         ready_events.append(ready)
 
         def _stream(idx: int, p: subprocess.Popen, ev: threading.Event) -> None:
-            # Read whole lines and emit each line atomically under the
-            # shared print_lock so output from N servers stays readable.
+            # 读取整行并在共享 print_lock 下原子地发出每一行，
+            # 以便来自 N 个服务器的输出保持可读。
             assert p.stdout is not None
             for line in iter(p.stdout.readline, ""):
                 with print_lock:
@@ -444,12 +435,11 @@ def _spawn_parallel_inference_servers(config: VlmConfig) -> list[str]:
 
 
 def _server_is_up(api_base: str) -> bool:
-    """Return True if ``api_base/models`` answers 200 within 2 seconds."""
+    """如果 ``api_base/models`` 在 2 秒内响应 200，则返回 True。"""
     url = api_base.rstrip("/") + "/models"
-    # ``api_base`` is the user-configured local-server URL we just spawned
-    # or the user passed in via ``--vlm.api_base``; the bandit B310 warning
-    # is for arbitrary user-controlled URLs with file:/ schemes which
-    # cannot reach this code path.
+    # ``api_base`` 是用户配置的本地服务器 URL，我们刚生成的
+    # 或用户通过 ``--vlm.api_base`` 传入的；bandit B310 警告
+    # 是针对带有 file:/ 方案的任意用户控制 URL，这些无法到达此代码路径。
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310  # nosec B310
             return resp.status == 200
@@ -458,14 +448,13 @@ def _server_is_up(api_base: str) -> bool:
 
 
 def _spawn_inference_server(config: VlmConfig) -> str:
-    """Spawn ``transformers serve`` (or ``serve_command``), wait until it
-    accepts ``/v1/models``, and register a shutdown hook.
+    """生成 ``transformers serve``（或 ``serve_command``），等待直到
+    它接受 ``/v1/models``，并注册关闭钩子。
 
-    Streams the server's stdout/stderr to the parent terminal in
-    real-time on a background thread so users can see model-load
-    progress and errors as they happen.
+    在后台线程上将服务器的 stdout/stderr 实时流式传输到父终端，
+    以便用户可以在模型加载进度和错误发生时看到它们。
 
-    Returns the full ``api_base`` URL the OpenAI client should use.
+    返回 OpenAI 客户端应使用的完整 ``api_base`` URL。
     """
     cmd = config.serve_command
     if not cmd:
@@ -473,10 +462,9 @@ def _spawn_inference_server(config: VlmConfig) -> str:
             f"transformers serve {shlex.quote(config.model_id)} "
             f"--port {config.serve_port} --continuous-batching"
         )
-    # Bind the single server to ``serve_port`` (what ``api_base`` below
-    # targets): substitute a literal ``{port}`` placeholder, else append
-    # ``--port``. Without this a serve_command carrying ``{port}`` would
-    # reach the server unsubstituted and fail to parse.
+    # 将单个服务器绑定到 ``serve_port``（下面 ``api_base`` 所针对的）：
+    # 替换字面的 ``{port}`` 占位符，否则追加 ``--port``。
+    # 没有这个，带有 ``{port}`` 的 serve_command 会未替换地到达服务器并无法解析。
     cmd = _bind_serve_port(cmd, config.serve_port)
     api_base = f"http://localhost:{config.serve_port}/v1"
     print(f"[server] launching: {cmd}", flush=True)
@@ -488,12 +476,11 @@ def _spawn_inference_server(config: VlmConfig) -> str:
         bufsize=1,
     )
 
-    # Watch the server output for the uvicorn readiness banner. This is
-    # more reliable than polling /v1/models because transformers serve
-    # rescans its cache on every model-list request, which can exceed
-    # the urllib timeout and trigger an infinite probe loop.
+    # 监视服务器输出中的 uvicorn 就绪横幅。这比轮询 /v1/models 更可靠，
+    # 因为 transformers serve 会在每个模型列表请求时重新扫描其缓存，
+    # 这可能超过 urllib 超时并触发无限探测循环。
     ready_event = threading.Event()
-    # See _spawn_parallel_inference_servers for why we accept these.
+    # 参见 _spawn_parallel_inference_servers 了解为什么我们接受这些。
     ready_markers = (
         "Uvicorn running",
         "Application startup complete",
@@ -512,15 +499,14 @@ def _spawn_inference_server(config: VlmConfig) -> str:
     threading.Thread(target=_probe, daemon=True).start()
 
     def _stream_output() -> None:
-        # Read raw chunks instead of iterating lines so tqdm progress
-        # bars (which overwrite using \r) flush in real time.
+        # 读取原始块而不是迭代行，以便 tqdm 进度条（使用 \r 覆盖）实时刷新。
         assert proc.stdout is not None
         buf = ""
         prefix_started = False
         while True:
             ch = proc.stdout.read(1)
             if ch == "":
-                # process exited; flush any tail
+                # 进程退出；刷新任何尾部
                 if buf:
                     sys.stdout.write(buf)
                     sys.stdout.flush()
@@ -567,14 +553,14 @@ def _spawn_inference_server(config: VlmConfig) -> str:
 def _to_openai_messages(
     messages: Sequence[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Convert internal messages to OpenAI chat format.
+    """将内部消息转换为 OpenAI 聊天格式。
 
-    Returns ``(api_messages, mm_kwargs)``. Multimodal-processor kwargs
-    (``fps`` from ``video_url`` blocks) are extracted out so the caller
-    can pass them via ``extra_body.mm_processor_kwargs`` rather than
-    inside the content blocks (which transformers serve rejects).
+    返回 ``(api_messages, mm_kwargs)``。多模态处理器 kwargs
+    （来自 ``video_url`` 块的 ``fps``）被提取出来，以便调用者
+    可以通过 ``extra_body.mm_processor_kwargs`` 传递它们，而不是
+    在内容块内部传递（transformers serve 会拒绝）。
 
-    File-URL video blocks are inlined as base64 data URLs.
+    文件 URL 视频块被内联为 base64 数据 URL。
     """
     out_messages: list[dict[str, Any]] = []
     mm_kwargs: dict[str, Any] = {}
@@ -612,14 +598,14 @@ def _to_openai_messages(
 
 
 def _file_to_data_url(path: str) -> str:
-    """Read a local video file and return a base64 ``data:video/mp4`` URL."""
+    """读取本地视频文件并返回 base64 ``data:video/mp4`` URL。"""
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("ascii")
     return f"data:video/mp4;base64,{b64}"
 
 
 def _pil_to_data_url(image: Any) -> str:
-    """Encode a PIL.Image as a base64 data URL."""
+    """将 PIL.Image 编码为 base64 数据 URL。"""
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")

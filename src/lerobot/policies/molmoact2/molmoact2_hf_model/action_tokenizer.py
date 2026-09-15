@@ -66,11 +66,11 @@ class UniversalActionProcessor(ProcessorMixin):
         self.vocab_size = vocab_size
         self.min_token = min_token
 
-        # Action horizon and dimension needed during decoding. These can be specified
-        # in three ways (in order of priority):
-        # 1. passed in as kwargs to decode()
-        # 2. in the constructor
-        # 3. cached from the last time decode() was called
+        # 解码时需要用到动作时间跨度和维度。可以通过三种方式指定
+        # （按优先级排序）：
+        # 1. 作为 kwargs 传入 decode()
+        # 2. 在构造函数中指定
+        # 3. 使用上一次调用 decode() 时缓存的值
         self.time_horizon = time_horizon
         self.action_dim = action_dim
         self.called_time_horizon = time_horizon
@@ -86,7 +86,7 @@ class UniversalActionProcessor(ProcessorMixin):
         if action_chunk.ndim == 2:
             action_chunk = action_chunk[None, ...]
 
-        # Cache the time horizon and action dimension for decoding
+        # 缓存时间跨度和动作维度以供解码使用
         self.called_time_horizon = action_chunk.shape[-2]
         self.called_action_dim = action_chunk.shape[-1]
 
@@ -110,7 +110,7 @@ class UniversalActionProcessor(ProcessorMixin):
         self.time_horizon = time_horizon or self.time_horizon or self.called_time_horizon
         self.action_dim = action_dim or self.action_dim or self.called_action_dim
 
-        # Cache the time horizon and action dimension for the next call
+        # 缓存时间跨度和动作维度以供下次调用使用
         self.called_time_horizon = self.time_horizon
         self.called_action_dim = self.action_dim
 
@@ -148,10 +148,10 @@ class UniversalActionProcessor(ProcessorMixin):
     ) -> "UniversalActionProcessor":
         from scipy.fft import dct
 
-        # Run DCT over all inputs
+        # 对所有输入执行 DCT
         dct_tokens = [dct(a, axis=0, norm="ortho").flatten() for a in action_data]
 
-        # Quantize and find min token
+        # 量化并找出最小 token
         max_token = int(np.around(np.concatenate(dct_tokens) * scale).max())
         min_token = int(np.around(np.concatenate(dct_tokens) * scale).min())
         min_vocab_size = max_token - min_token
@@ -165,7 +165,7 @@ class UniversalActionProcessor(ProcessorMixin):
                 f"size {vocab_size}, consider increasing vocab size"
             )
 
-        # Make token iterator for BPE training
+        # 构造用于 BPE 训练的 token 迭代器
         def _token_iter():
             for tokens in dct_tokens:
                 rounded_tokens = np.around(tokens * scale) - min_token
@@ -173,10 +173,10 @@ class UniversalActionProcessor(ProcessorMixin):
                 string = "".join(map(chr, rounded_tokens))
                 yield string
 
-        # Train BPE tokenizer
+        # 训练 BPE 分词器
         bpe = ByteLevelBPETokenizer()
 
-        # Set up the entire range of possible tokens as the initial alphabet
+        # 将所有可能的 token 取值范围设为初始字母表
         alphabet = [chr(i) for i in range(max_token - min_token + 1)]
         trainer = BpeTrainer(
             vocab_size=vocab_size,
@@ -187,8 +187,8 @@ class UniversalActionProcessor(ProcessorMixin):
             max_token_length=10000,
         )
 
-        # Train the inner tokenizer (don't use ByteLevelBPETokenizer.train_from_iterator()
-        # because it doesn't support custom alphabets)
+        # 训练内部分词器（不使用 ByteLevelBPETokenizer.train_from_iterator()，
+        # 因为它不支持自定义字母表）
         bpe._tokenizer.train_from_iterator(_token_iter(), trainer=trainer)
 
         return cls(

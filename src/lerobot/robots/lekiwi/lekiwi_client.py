@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(aliberts, Steven, Pepijn): use gRPC calls instead of zmq?
+# TODO(aliberts, Steven, Pepijn): 使用 gRPC 调用代替 zmq？
 
 import json
 import logging
@@ -67,13 +67,13 @@ class LeKiwiClient(Robot):
 
         self.last_remote_state = {}
 
-        # Define three speed levels and a current index
+        # 定义三个速度档位和当前索引
         self.speed_levels = [
-            {"xy": 0.1, "theta": 30},  # slow
-            {"xy": 0.2, "theta": 60},  # medium
-            {"xy": 0.3, "theta": 90},  # fast
+            {"xy": 0.1, "theta": 30},  # 慢
+            {"xy": 0.2, "theta": 60},  # 中
+            {"xy": 0.3, "theta": 90},  # 快
         ]
-        self.speed_index = 0  # Start at slow
+        self.speed_index = 0  # 从慢速开始
 
         self._is_connected = False
         self.logs = {}
@@ -121,7 +121,7 @@ class LeKiwiClient(Robot):
 
     @check_if_already_connected
     def connect(self) -> None:
-        """Establishes ZMQ sockets with the remote mobile robot"""
+        """与远程移动机器人建立 ZMQ 套接字"""
 
         zmq = self._zmq
         self.zmq_context = zmq.Context()
@@ -133,8 +133,8 @@ class LeKiwiClient(Robot):
         self.zmq_observation_socket = self.zmq_context.socket(zmq.PULL)
         zmq_observations_locator = f"tcp://{self.remote_ip}:{self.port_zmq_observations}"
         self.zmq_observation_socket.connect(zmq_observations_locator)
-        # CONFLATE does not support multipart messages; a small receive queue plus
-        # the existing drain-to-latest loop keeps newest-only semantics.
+        # CONFLATE 不支持多部分消息；小的接收队列加上
+        # 现有的排空到最新消息的循环，保持了只保留最新值的语义。
         self.zmq_observation_socket.setsockopt(zmq.RCVHWM, 2)
 
         poller = zmq.Poller()
@@ -149,7 +149,7 @@ class LeKiwiClient(Robot):
         pass
 
     def _poll_and_get_latest_message(self) -> list[bytes] | None:
-        """Polls the ZMQ socket for a limited time and returns the latest message's frames."""
+        """在限定时间内轮询 ZMQ 套接字，并返回最新消息的帧。"""
         zmq = self._zmq
         poller = zmq.Poller()
         poller.register(self.zmq_observation_socket, zmq.POLLIN)
@@ -178,7 +178,7 @@ class LeKiwiClient(Robot):
         return last_msg
 
     def _parse_observation(self, frames: list[bytes]) -> RobotObservation | None:
-        """Parses a multipart observation: JSON header + one raw JPEG frame per camera."""
+        """解析多部分观测：JSON 头部 + 每个相机一个原始 JPEG 帧。"""
         try:
             header = json.loads(frames[0])
             cam_names = header.pop("_cams")
@@ -191,7 +191,7 @@ class LeKiwiClient(Robot):
             return None
 
     def _decode_image(self, jpeg: bytes) -> np.ndarray | None:
-        """Decodes a raw JPEG buffer to an OpenCV image."""
+        """将原始 JPEG 缓冲区解码为 OpenCV 图像。"""
         if not jpeg:
             return None
         frame = cv2.imdecode(np.frombuffer(jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -202,7 +202,7 @@ class LeKiwiClient(Robot):
     def _remote_state_from_obs(
         self, observation: RobotObservation
     ) -> tuple[dict[str, np.ndarray], RobotObservation]:
-        """Extracts frames, and state from the parsed observation."""
+        """从解析后的观测中提取帧和状态。"""
 
         flat_state = {key: observation.get(key, 0.0) for key in self._state_order}
 
@@ -210,7 +210,7 @@ class LeKiwiClient(Robot):
 
         obs_dict: RobotObservation = {**flat_state, OBS_STATE: state_vec}
 
-        # Decode images
+        # 解码图像
         current_frames: dict[str, np.ndarray] = {}
         for cam_name, jpeg in observation.items():
             if cam_name not in self._cameras_ft:
@@ -223,28 +223,28 @@ class LeKiwiClient(Robot):
 
     def _get_data(self) -> tuple[dict[str, np.ndarray], RobotObservation]:
         """
-        Polls the video socket for the latest observation data.
+        轮询视频套接字以获取最新的观测数据。
 
-        Attempts to retrieve and decode the latest message within a short timeout.
-        If successful, updates and returns the new frames, speed, and arm state.
-        If no new data arrives or decoding fails, returns the last known values.
+        尝试在短超时内获取并解码最新消息。
+        如果成功，更新并返回新的帧、速度和机械臂状态。
+        如果没有新数据到达或解码失败，返回最后已知的值。
         """
 
-        # 1. Get the latest message's frames from the socket
+        # 1. 从套接字获取最新消息的帧
         latest_frames = self._poll_and_get_latest_message()
 
-        # 2. If no message, return cached data
+        # 2. 如果没有消息，返回缓存数据
         if latest_frames is None:
             return self.last_frames, self.last_remote_state
 
-        # 3. Parse the multipart message
+        # 3. 解析多部分消息
         observation = self._parse_observation(latest_frames)
 
-        # 4. If JSON parsing failed, return cached data
+        # 4. 如果 JSON 解析失败，返回缓存数据
         if observation is None:
             return self.last_frames, self.last_remote_state
 
-        # 5. Process the valid observation data
+        # 5. 处理有效的观测数据
         try:
             new_frames, new_state = self._remote_state_from_obs(observation)
         except Exception as e:
@@ -259,14 +259,14 @@ class LeKiwiClient(Robot):
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
         """
-        Capture observations from the remote robot: current follower arm positions,
-        present wheel speeds (converted to body-frame velocities: x, y, theta),
-        and a camera frame. Receives over ZMQ, translate to body-frame vel
+        从远程机器人捕获观测：当前从动机械臂位置、
+        当前车轮速度（转换为机体系速度：x、y、theta），
+        以及相机帧。通过 ZMQ 接收，并转换为机体系速度
         """
 
         frames, obs_dict = self._get_data()
 
-        # Loop over each configured camera
+        # 遍历每个已配置的相机
         for cam_name, frame in frames.items():
             if frame is None:
                 logging.warning("Frame is None")
@@ -276,18 +276,18 @@ class LeKiwiClient(Robot):
         return obs_dict
 
     def _from_keyboard_to_base_action(self, pressed_keys: np.ndarray):
-        # Speed control
+        # 速度控制
         if self.teleop_keys["speed_up"] in pressed_keys:
             self.speed_index = min(self.speed_index + 1, 2)
         if self.teleop_keys["speed_down"] in pressed_keys:
             self.speed_index = max(self.speed_index - 1, 0)
         speed_setting = self.speed_levels[self.speed_index]
-        xy_speed = speed_setting["xy"]  # e.g. 0.1, 0.25, or 0.4
-        theta_speed = speed_setting["theta"]  # e.g. 30, 60, or 90
+        xy_speed = speed_setting["xy"]  # 例如 0.1、0.25 或 0.4
+        theta_speed = speed_setting["theta"]  # 例如 30、60 或 90
 
-        x_cmd = 0.0  # m/s forward/backward
-        y_cmd = 0.0  # m/s lateral
-        theta_cmd = 0.0  # deg/s rotation
+        x_cmd = 0.0  # m/s 前进/后退
+        y_cmd = 0.0  # m/s 横向
+        theta_cmd = 0.0  # deg/s 旋转
 
         if self.teleop_keys["forward"] in pressed_keys:
             x_cmd += xy_speed
@@ -312,24 +312,24 @@ class LeKiwiClient(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Command lekiwi to move to a target joint configuration. Translates to motor space + sends over ZMQ
+        """命令 lekiwi 移动到目标关节配置。转换到电机空间 + 通过 ZMQ 发送
 
         Args:
-            action (RobotAction): array containing the goal positions for the motors.
+            action (RobotAction): 包含电机目标位置的数组。
         Raises:
-            RobotDeviceNotConnectedError: if robot is not connected.
+            RobotDeviceNotConnectedError: 如果机器人未连接。
 
         Returns:
-            np.ndarray: the action sent to the motors, potentially clipped.
+            np.ndarray: 发送给电机的动作，可能已被裁剪。
         """
 
-        # Action values may be torch tensors (e.g. replayed from a dataset) or numpy
-        # scalars; json.dumps only serializes Python primitives, so coerce each value to a
-        # plain float before sending.
+        # 动作值可能是 torch 张量（例如从数据集回放）或 numpy
+        # 标量；json.dumps 只能序列化 Python 原生类型，因此在发送前
+        # 将每个值强制转换为普通浮点数。
         action = {key: float(value) for key, value in action.items()}
-        self.zmq_cmd_socket.send_string(json.dumps(action))  # action is in motor space
+        self.zmq_cmd_socket.send_string(json.dumps(action))  # 动作位于电机空间
 
-        # TODO(Steven): Remove the np conversion when it is possible to record a non-numpy array value
+        # TODO(Steven): 当可以录制非 numpy 数组值时，移除 np 转换
         actions = np.array([action.get(k, 0.0) for k in self._state_order], dtype=np.float32)
 
         action_sent = {key: actions[i] for i, key in enumerate(self._state_order)}
@@ -338,7 +338,7 @@ class LeKiwiClient(Robot):
 
     @check_if_not_connected
     def disconnect(self):
-        """Cleans ZMQ comms"""
+        """清理 ZMQ 通信"""
 
         self.zmq_observation_socket.close()
         self.zmq_cmd_socket.close()

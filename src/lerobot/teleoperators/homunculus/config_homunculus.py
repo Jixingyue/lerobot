@@ -22,7 +22,7 @@ from ..config import TeleoperatorConfig
 @TeleoperatorConfig.register_subclass("homunculus_glove")
 @dataclass
 class HomunculusGloveConfig(TeleoperatorConfig):
-    port: str  # Port to connect to the glove
+    port: str  # 连接手套的端口
     side: str  # "left" / "right"
     baud_rate: int = 115_200
 
@@ -34,5 +34,5 @@ class HomunculusGloveConfig(TeleoperatorConfig):
 @TeleoperatorConfig.register_subclass("homunculus_arm")
 @dataclass
 class HomunculusArmConfig(TeleoperatorConfig):
-    port: str  # Port to connect to the arm
+    port: str  # 连接手臂的端口
     baud_rate: int = 115_200

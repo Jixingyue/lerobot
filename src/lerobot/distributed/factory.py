@@ -13,12 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""The `Accelerator` factory — the only place accelerate gets configured.
+"""`Accelerator` 工厂 —— 唯一配置 accelerate 的地方。
 
-`torchrun` is the launcher; every accelerate parameter comes from `TrainPipelineConfig`
-(`cfg.parallelism` + `cfg.accelerator`) so a run is reproducible from its `train_config.json`
-alone. `accelerate launch` without a `--config_file` remains equivalent (it only sets rendezvous
-env vars in that mode); the yaml flow is superseded.
+`torchrun` 是启动器；所有 accelerate 参数都来自 `TrainPipelineConfig`
+（`cfg.parallelism` + `cfg.accelerator`），因此仅凭 `train_config.json`
+即可复现一次运行。不带 `--config_file` 的 `accelerate launch` 保持等价
+（该模式下它只设置 rendezvous 环境变量）；yaml 流程已被取代。
 """
 
 import os
@@ -32,8 +32,8 @@ if TYPE_CHECKING:
 
     from lerobot.policies.pretrained import PreTrainedPolicy
 
-# Env vars through which `accelerate launch --config_file` (or a stray shell) would configure
-# accelerate behind the config system's back, making train_config.json lie about what ran.
+# 以下环境变量会让 `accelerate launch --config_file`（或残留的 shell）
+# 在配置系统背后配置 accelerate，使 train_config.json 无法如实反映实际运行。
 _ACCELERATE_ENV_VARS = (
     "ACCELERATE_USE_FSDP",
     "ACCELERATE_USE_PARALLELISM_CONFIG",
@@ -43,15 +43,15 @@ _ENV_OVERRIDE = "LEROBOT_ALLOW_ACCELERATE_ENV"
 
 
 def guard_against_env_interference() -> None:
-    """Hard-error when accelerate-configuring env vars are set.
+    """当设置了用于配置 accelerate 的环境变量时，硬性报错。
 
-    A silently env-overridden "reproducible" config is worse than a stop: users migrating from
-    the old `accelerate launch --config_file fsdp.yaml` flow get a precise error instead of a
-    config that lies. Set LEROBOT_ALLOW_ACCELERATE_ENV=1 to acknowledge and proceed.
+    被环境变量静默覆盖的"可复现"配置比直接停止更糟糕：从旧的
+    `accelerate launch --config_file fsdp.yaml` 流程迁移的用户会得到精确的错误提示，
+    而不是一个说谎的配置。设置 LEROBOT_ALLOW_ACCELERATE_ENV=1 以确认并继续。
 
     Raises:
-        RuntimeError: If any accelerate-configuring environment variable is set and the
-            LEROBOT_ALLOW_ACCELERATE_ENV override is not.
+        RuntimeError: 如果设置了任何用于配置 accelerate 的环境变量，
+            且未设置 LEROBOT_ALLOW_ACCELERATE_ENV 覆盖。
     """
     if os.environ.get(_ENV_OVERRIDE):
         return
@@ -67,28 +67,28 @@ def guard_against_env_interference() -> None:
 
 
 def make_accelerator(cfg: TrainPipelineConfig) -> "Accelerator":
-    """Resolve the topology against the launched world and build the `Accelerator`.
+    """根据已启动的 world 解析拓扑，并构建 `Accelerator`。
 
-    Must run once per process, before any other component needs the device or the process
-    group (`Accelerator.__init__` initializes both and builds the device mesh).
+    必须在每个进程中运行一次，且在任何其他组件需要设备或进程组之前
+    （`Accelerator.__init__` 会初始化两者并构建设备网格）。
 
     Args:
-        cfg (TrainPipelineConfig): The full training config; `cfg.parallelism` is resolved in
-            place against the launched world size and `cfg.accelerator` builds the result.
+        cfg (TrainPipelineConfig): 完整的训练配置；`cfg.parallelism` 会根据
+            已启动的 world size 原地解析，`cfg.accelerator` 用于构建结果。
 
     Returns:
-        Accelerator: The configured accelerator, with device and process group initialized.
+        Accelerator: 配置好的 accelerator，设备和进程组已初始化。
 
     Raises:
-        ValueError: If `cfg.checkpoint_format` requires DCP but the topology resolved to a
-            non-sharded run.
+        ValueError: 如果 `cfg.checkpoint_format` 需要 DCP，但拓扑解析为
+            非分片运行。
     """
     guard_against_env_interference()
     cfg.parallelism.resolve(world_size_from_env())
-    # The parse-time format check ran against the declared degrees, where the dp_shard=-1
-    # sentinel counts as sharded; it may resolve to an unsharded run (e.g. -1 at world size 1).
-    # Re-check against the concrete degrees so the recorded format never lies about the
-    # artifacts a checkpoint will actually contain.
+    # 解析时的格式检查是针对声明的并行度运行的，其中 dp_shard=-1
+    # 哨兵值被视为分片；但它可能解析为非分片运行（例如 world size 为 1 时的 -1）。
+    # 针对具体的并行度重新检查，使记录的格式永远不会与检查点
+    # 实际包含的产物不符。
     if cfg.checkpoint_format.wants_dcp and not cfg.parallelism.is_sharded:
         raise ValueError(
             f"checkpoint_format={cfg.checkpoint_format.value} requires a sharded run, but the "
@@ -102,32 +102,30 @@ def make_accelerator(cfg: TrainPipelineConfig) -> "Accelerator":
 
 
 def set_fsdp_wrap_modules(accelerator: "Accelerator", policy: "PreTrainedPolicy") -> None:
-    """Resolve the FSDP wrap-unit class names onto the plugin before `accelerator.prepare()`.
+    """在 `accelerator.prepare()` 之前，将 FSDP wrap 单元类名解析到插件上。
 
-    Resolution order: user override (`--accelerator.fsdp.wrap_modules`, already on the plugin)
-    -> the policy's `_fsdp_wrap_modules` declaration -> hard error. Root-only wrapping — the
-    silent default when no wrap source exists — is never accepted: it quietly forfeits all
-    sharding memory savings.
+    解析顺序：用户覆盖（`--accelerator.fsdp.wrap_modules`，已在插件上）
+    -> 策略的 `_fsdp_wrap_modules` 声明 -> 硬性报错。仅包装根节点 —— 即不存在
+    wrap 来源时的静默默认行为 —— 绝不被接受：它会悄然放弃所有分片带来的内存节省。
 
-    No-op for the size-based policy (`--accelerator.fsdp.min_num_params`), which needs no class
-    names, and for non-sharded runs (no fsdp plugin).
+    对于基于大小的策略（`--accelerator.fsdp.min_num_params`，不需要类名）
+    以及非分片运行（无 fsdp 插件）为空操作。
 
     Args:
-        accelerator (Accelerator): The accelerator whose FSDP plugin receives the wrap-unit
-            class names.
-        policy (PreTrainedPolicy): The trainable whose class may declare `_fsdp_wrap_modules`.
+        accelerator (Accelerator): 其 FSDP 插件将接收 wrap 单元类名的 accelerator。
+        policy (PreTrainedPolicy): 其类可能声明了 `_fsdp_wrap_modules` 的可训练对象。
 
     Raises:
-        ValueError: If sharded class-based wrapping is configured but neither a user override
-            nor a policy declaration supplies wrap-unit class names.
+        ValueError: 如果配置了分片的基于类的包装，但用户覆盖和策略声明
+            都未提供 wrap 单元类名。
     """
     plugin = getattr(accelerator.state, "fsdp_plugin", None)
     if plugin is None or plugin.min_num_params:
         return
-    if plugin.transformer_cls_names_to_wrap:  # user override, set at build time
+    if plugin.transformer_cls_names_to_wrap:  # 用户覆盖，在构建时设置
         return
-    # getattr, not attribute access: non-policy trainables (no `_fsdp_wrap_modules` attribute)
-    # must reach the actionable error below, not an AttributeError.
+    # 使用 getattr 而非属性访问：非策略类可训练对象（没有 `_fsdp_wrap_modules` 属性）
+    # 必须到达下方可操作的错误，而不是 AttributeError。
     declared = getattr(type(policy), "_fsdp_wrap_modules", None)
     if not declared:
         raise ValueError(

@@ -22,7 +22,7 @@ import numpy as np
 
 NUM_MOTORS = 29
 
-# Joint-order permutation between IsaacLab and Mujoco convention
+# IsaacLab 与 Mujoco 约定之间的关节顺序置换
 ISAACLAB_TO_MUJOCO = np.array(
     [
         0,
@@ -65,12 +65,12 @@ REMOTE_KEYS = REMOTE_AXES + REMOTE_BUTTONS
 
 
 def default_remote_input() -> dict[str, float]:
-    """Return a zeroed-out remote input dict (axes + buttons)."""
+    """返回一个全零的遥控器输入字典（摇杆轴 + 按键）。"""
     return dict.fromkeys(REMOTE_KEYS, 0.0)
 
 
 def get_gravity_orientation(quaternion: list[float] | np.ndarray) -> np.ndarray:
-    """Get gravity orientation from quaternion [w, x, y, z]."""
+    """根据四元数 [w, x, y, z] 计算重力方向。"""
     qw, qx, qy, qz = quaternion
     gravity_orientation = np.zeros(3, dtype=np.float32)
     gravity_orientation[0] = 2 * (-qz * qx + qw * qy)
@@ -80,7 +80,7 @@ def get_gravity_orientation(quaternion: list[float] | np.ndarray) -> np.ndarray:
 
 
 class G1_29_JointArmIndex(IntEnum):
-    # Left arm
+    # 左臂
     kLeftShoulderPitch = 15
     kLeftShoulderRoll = 16
     kLeftShoulderYaw = 17
@@ -89,7 +89,7 @@ class G1_29_JointArmIndex(IntEnum):
     kLeftWristPitch = 20
     kLeftWristYaw = 21
 
-    # Right arm
+    # 右臂
     kRightShoulderPitch = 22
     kRightShoulderRoll = 23
     kRightShoulderYaw = 24
@@ -100,7 +100,7 @@ class G1_29_JointArmIndex(IntEnum):
 
 
 class G1_29_JointIndex(IntEnum):
-    # Left leg
+    # 左腿
     kLeftHipPitch = 0
     kLeftHipRoll = 1
     kLeftHipYaw = 2
@@ -108,7 +108,7 @@ class G1_29_JointIndex(IntEnum):
     kLeftAnklePitch = 4
     kLeftAnkleRoll = 5
 
-    # Right leg
+    # 右腿
     kRightHipPitch = 6
     kRightHipRoll = 7
     kRightHipYaw = 8
@@ -120,7 +120,7 @@ class G1_29_JointIndex(IntEnum):
     kWaistRoll = 13
     kWaistPitch = 14
 
-    # Left arm
+    # 左臂
     kLeftShoulderPitch = 15
     kLeftShoulderRoll = 16
     kLeftShoulderYaw = 17
@@ -129,7 +129,7 @@ class G1_29_JointIndex(IntEnum):
     kLeftWristPitch = 20
     kLeftWristYaw = 21
 
-    # Right arm
+    # 右臂
     kRightShoulderPitch = 22
     kRightShoulderRoll = 23
     kRightShoulderYaw = 24

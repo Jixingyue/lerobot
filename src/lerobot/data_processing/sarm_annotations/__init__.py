@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-SARM subtask annotation tools.
+SARM 子任务标注工具。
 
-Available modules (import directly)::
+可用模块（直接导入）::
 
     from lerobot.data_processing.sarm_annotations.subtask_annotation import ...
 """

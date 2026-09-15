@@ -13,22 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""LingBot-VA policy: an autoregressive video-action world model on the Wan2.2 stack.
+"""LingBot-VA 策略：构建在 Wan2.2 技术栈上的自回归视频-动作世界模型。
 
-The sampling loop is a faithful re-implementation of the upstream streaming server
-(``wan_va/wan_va_server.py``) and LIBERO client (``evaluation/libero/client.py``), adapted
-to LeRobot's ``select_action`` interface:
+该采样循环是对上游流式服务器（``wan_va/wan_va_server.py``）和 LIBERO 客户端
+（``evaluation/libero/client.py``）的忠实重新实现，并适配到 LeRobot 的
+``select_action`` 接口：
 
-  * the trainable dual-stream transformer is owned as a sub-module and round-trips in the
-    single ``model.safetensors`` checkpoint;
-  * the frozen Wan VAE + UMT5 text encoder + tokenizer are *lazily pulled* from
-    ``config.wan_pretrained_path`` (not bundled), so the LeRobot checkpoint stays small;
-  * ``predict_action_chunk`` runs one autoregressive chunk (video stream then action
-    stream, each with CFG and its own flow-matching scheduler) and updates the KV cache;
-  * ``select_action`` drains a per-step action queue and records the real observed
-    keyframes that are fed back into the KV cache when the queue is refilled.
+  * 可训练的双流 transformer 作为子模块持有，并随单个
+    ``model.safetensors`` 检查点一起保存/加载；
+  * 冻结的 Wan VAE + UMT5 文本编码器 + tokenizer 从
+    ``config.wan_pretrained_path`` *惰性拉取*（不打包在内），从而让 LeRobot
+    检查点保持小巧；
+  * ``predict_action_chunk`` 运行一个自回归分块（先视频流后动作流，各自带
+    CFG 和独立的 flow-matching 调度器），并更新 KV cache；
+  * ``select_action`` 逐步消费动作队列，并记录真实观测到的关键帧；当队列
+    需要重新填充时，这些关键帧会被反馈回 KV cache。
 
-NOTE: The streaming path is written for single-environment eval (``--eval.batch_size=1``).
+注意：流式路径是为单环境评估（``--eval.batch_size=1``）编写的。
 """
 
 from collections import deque
@@ -60,7 +61,7 @@ from .utils import (
 
 
 class LingBotVAPolicy(PreTrainedPolicy):
-    """LeRobot wrapper for the LingBot-VA autoregressive video-action world model."""
+    """LingBot-VA 自回归视频-动作世界模型的 LeRobot 封装。"""
 
     config_class = LingBotVAConfig
     name = "lingbot_va"
@@ -74,7 +75,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
         self.dtype = _torch_dtype(config.dtype)
 
-        # Trainable dual-stream transformer (the only sub-module saved in the LeRobot checkpoint).
+        # 可训练的双流 transformer（LeRobot 检查点中唯一保存的子模块）。
         self.transformer = WanTransformer3DModel(
             patch_size=tuple(config.patch_size),
             num_attention_heads=config.num_attention_heads,
@@ -91,32 +92,32 @@ class LingBotVAPolicy(PreTrainedPolicy):
             rope_max_seq_len=config.rope_max_seq_len,
             attn_mode=config.attn_mode,
         )
-        # Run the transformer in config.dtype (bf16); norm/modulation paths upcast to fp32 internally.
+        # transformer 以 config.dtype（bf16）运行；norm/modulation 路径在内部上转为 fp32。
         self.transformer = self.transformer.to(self.dtype)
 
-        # Frozen modules are stored OUTSIDE the nn.Module registry (plain dict) so they are
-        # neither saved into model.safetensors nor moved by ``.to()``. They are lazily loaded
-        # from ``config.wan_pretrained_path`` the first time inference runs.
+        # 冻结模块存放在 nn.Module 注册表之外（普通 dict），因此它们既不会被
+        # 保存到 model.safetensors，也不会被 ``.to()`` 移动。它们在第一次运行
+        # 推理时从 ``config.wan_pretrained_path`` 惰性加载。
         self._frozen: dict = {}
 
         self.last_predicted_frames: Tensor | None = None
         self.last_predicted_latents: Tensor | None = None
         self.reset()
 
-    # Frozen-module lazy loading (VAE + UMT5 + tokenizer)
+    # 冻结模块的惰性加载（VAE + UMT5 + tokenizer）
     def _ensure_frozen_modules(self):
         if self._frozen:
             return
         path = self.config.wan_pretrained_path
         device = self.config.device
 
-        # The frozen modules always live in ``vae/``, ``text_encoder/`` and ``tokenizer/``
-        # sub-folders -- both in the released diffusers-style HF repos and in the local
-        # ``--bundle-frozen`` output dir. ``from_pretrained(path, subfolder=...)`` resolves
-        # them for either a HF repo id or a local directory.
+        # 冻结模块总是位于 ``vae/``、``text_encoder/`` 和 ``tokenizer/``
+        # 子目录中——无论是已发布的 diffusers 风格 HF 仓库，还是本地的
+        # ``--bundle-frozen`` 输出目录都是如此。``from_pretrained(path, subfolder=...)``
+        # 对 HF 仓库 id 或本地目录都能正确解析它们。
         vae = load_vae(path, torch_dtype=self.dtype, torch_device=device, subfolder="vae")
-        # The UMT5-XXL text encoder (~11 GB) runs once per episode; keep it on its own
-        # (CPU by default) device so the 5B transformer + VAE fit on a single GPU.
+        # UMT5-XXL 文本编码器（约 11 GB）每个 episode 只运行一次；将其放在
+        # 独立的（默认为 CPU）设备上，以便 5B 的 transformer + VAE 能放进单张 GPU。
         text_encoder = load_text_encoder(
             path,
             torch_dtype=self.dtype,
@@ -130,8 +131,8 @@ class LingBotVAPolicy(PreTrainedPolicy):
             "text_encoder": text_encoder.eval(),
             "tokenizer": tokenizer,
         }
-        # RoboTwin's T-shape layout encodes the half-resolution wrist cameras through a second
-        # streaming VAE (separate causal cache) alongside the full-res head camera.
+        # RoboTwin 的 T 形布局会通过第二个流式 VAE（独立的因果缓存）编码
+        # 半分辨率腕部相机，与全分辨率头部相机并行。
         if self.config.camera_layout == "robotwin_tshape":
             vae_half = load_vae(path, torch_dtype=self.dtype, torch_device=device, subfolder="vae")
             self._frozen["streaming_vae_half"] = WanVAEStreamingWrapper(vae_half.eval())
@@ -146,24 +147,24 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     # PreTrainedPolicy API
     def get_optim_params(self) -> dict:
-        # Only the transformer is trainable; the VAE / text encoder stay frozen (kept outside the
-        # nn.Module registry). With PEFT/LoRA this naturally returns just the adapter params.
+        # 只有 transformer 可训练；VAE / 文本编码器保持冻结（存放在 nn.Module
+        # 注册表之外）。使用 PEFT/LoRA 时，这里自然只返回 adapter 参数。
         return [p for p in self.transformer.parameters() if p.requires_grad]
 
     def reset(self):
-        """Reset all per-episode streaming state (KV cache, queues, frame counter)."""
+        """重置所有逐 episode 的流式状态（KV cache、队列、帧计数器）。"""
         cfg = self.config
         self._action_queue: deque = deque(maxlen=cfg.n_action_steps)
-        self._obs_buffer: list = []  # raw keyframe obs (one per env substep) observed this chunk
+        self._obs_buffer: list = []  # 本分块内观测到的原始关键帧 obs（每个环境子步一个）
         self._executed_actions: Tensor | None = (
-            None  # last chunk's actions (model-normalized) for KV feedback
+            None  # 上一分块的动作（模型归一化空间），用于 KV 反馈
         )
-        self._started = False  # first select_action call uses the obs as the conditioning frame
-        self._exec_step = 0  # index of the action being executed within the current chunk
-        self._prev_j = 0  # sub-step index (within a predicted frame) of the last executed action
-        # Sample one keyframe every ``action_per_frame / temporal_downsample`` executed sub-steps so
-        # that exactly ``frame_chunk_size * temporal_downsample`` frames are VAE-encoded per chunk
-        # (the Wan2.2 VAE temporal downsample is 4 -> ``frame_chunk_size`` latent frames).
+        self._started = False  # 第一次 select_action 调用将该 obs 作为条件帧
+        self._exec_step = 0  # 当前分块内正在执行的动作索引
+        self._prev_j = 0  # 上一个已执行动作在预测帧内的子步索引
+        # 每执行 ``action_per_frame / temporal_downsample`` 个子步采样一个关键帧，
+        # 使得每个分块恰好有 ``frame_chunk_size * temporal_downsample`` 帧被 VAE 编码
+        # （Wan2.2 VAE 的时间下采样倍率为 4 -> 得到 ``frame_chunk_size`` 个潜变量帧）。
         self._keyframe_stride = max(1, cfg.action_per_frame // 4)
         self._frame_st_id = 0
         self._first_chunk = True
@@ -173,7 +174,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
         self.last_predicted_frames = None
         self.last_predicted_latents = None
         self._use_cfg = (cfg.guidance_scale > 1) or (cfg.action_guidance_scale > 1)
-        # Two independent flow-matching schedulers (video latent + action streams).
+        # 两个相互独立的 flow-matching 调度器（视频潜变量流 + 动作流）。
         self._scheduler = FlowMatchScheduler(shift=cfg.snr_shift, sigma_min=0.0, extra_one_step=True)
         self._action_scheduler = FlowMatchScheduler(
             shift=cfg.action_snr_shift, sigma_min=0.0, extra_one_step=True
@@ -181,18 +182,18 @@ class LingBotVAPolicy(PreTrainedPolicy):
         self._scheduler.set_timesteps(1000, training=True)
         self._action_scheduler.set_timesteps(1000, training=True)
         self._cache_initialised = False
-        # Clear KV cache on the (already-built) transformer, if present.
+        # 若 transformer 已构建，则清空其上的 KV cache。
         if hasattr(self, "transformer"):
             self.transformer.clear_cache("pos")
-        # Reset the causal streaming-VAE feat cache between episodes (mirrors upstream ``_reset``).
-        # Without this the encoder carries over the previous episode's temporal state, corrupting the
-        # latent frame counts on the next episode's first encode.
+        # 在 episode 之间重置因果流式 VAE 的 feat 缓存（对应上游的 ``_reset``）。
+        # 否则编码器会延续上一个 episode 的时序状态，导致下一个 episode 首次
+        # 编码时潜变量帧的数量出错。
         if self._frozen:
             self._frozen["streaming_vae"].clear_cache()
             if "streaming_vae_half" in self._frozen:
                 self._frozen["streaming_vae_half"].clear_cache()
 
-    # Training (flow-matching dual-stream loss). Requires attn_mode="flex".
+    # 训练（flow-matching 双流损失）。需要 attn_mode="flex"。
     def _ensure_train_schedulers(self):
         if getattr(self, "_train_sched_latent", None) is None:
             cfg = self.config
@@ -207,7 +208,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def _add_noise_stream(self, latent, scheduler, action_mask, action_mode, noisy_cond_prob):
-        """Flow-matching noising of one stream (port of upstream ``Trainer._add_noise``)."""
+        """对单个流做 flow-matching 加噪（移植自上游 ``Trainer._add_noise``）。"""
         device = latent.device
         b, _c, f, _h, _w = latent.shape
         p = self.config.patch_size
@@ -258,7 +259,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
         }
 
     def _flow_matching_loss(self, input_dict, pred):
-        """Dual-stream flow-matching loss (port of upstream ``Trainer.compute_loss``)."""
+        """双流 flow-matching 损失（移植自上游 ``Trainer.compute_loss``）。"""
         latent_pred, action_pred = pred
         ld, ad = input_dict["latent_dict"], input_dict["action_dict"]
         action_pred = rearrange(action_pred, "b (f n) c -> b c f n 1", f=ad["targets"].shape[-3])
@@ -290,11 +291,12 @@ class LingBotVAPolicy(PreTrainedPolicy):
         return latent_loss, action_loss
 
     def training_loss_from_streams(self, latents, actions, actions_mask, text_emb):
-        """Core dual-stream training loss given prepared latents / actions / text embeddings.
+        """在已准备好的潜变量/动作/文本嵌入上计算核心双流训练损失。
 
-        ``latents``: ``[B, in_channels, F, h, w]`` (normalized video latents).
-        ``actions`` / ``actions_mask``: ``[B, action_dim, F, action_per_frame, 1]``.
-        ``text_emb``: ``[B, seq_len, text_dim]``. Returns ``(loss, {latent_loss, action_loss})``.
+        ``latents``：``[B, in_channels, F, h, w]``（归一化后的视频潜变量）。
+        ``actions`` / ``actions_mask``：``[B, action_dim, F, action_per_frame, 1]``。
+        ``text_emb``：``[B, seq_len, text_dim]``。返回
+        ``(loss, {latent_loss, action_loss})``。
         """
         if self.config.attn_mode != "flex":
             raise ValueError(
@@ -323,11 +325,11 @@ class LingBotVAPolicy(PreTrainedPolicy):
         return loss, {"latent_loss": latent_loss.item(), "action_loss": action_loss.item()}
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict | None]:
-        """Training forward: dual-stream flow-matching loss.
+        """训练前向：双流 flow-matching 损失。
 
-        Builds the (video-latent, action, text) training streams from a LeRobot batch
-        (VAE-encoding the camera frames and UMT5-encoding the task), then runs the flow-matching
-        dual-stream loss. Requires the policy to be built with ``attn_mode='flex'``.
+        从 LeRobot batch 构建（视频潜变量、动作、文本）训练流（对相机帧做
+        VAE 编码、对任务做 UMT5 编码），然后计算 flow-matching 双流损失。
+        要求策略以 ``attn_mode='flex'`` 构建。
         """
         self._ensure_frozen_modules()
         latents, actions, actions_mask, text_emb = self._build_training_streams(batch)
@@ -335,24 +337,25 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def _build_training_streams(self, batch):
-        """Build (latents, actions, actions_mask, text_emb) from a LeRobot training batch.
+        """从 LeRobot 训练 batch 构建（latents, actions, actions_mask, text_emb）。
 
-        Camera frames per ``obs_cam_keys`` are expected as a temporal clip ``[B, C, T, H, W]`` (or
-        ``[B, T, C, H, W]``); they are VAE-encoded into ``F = T / temporal_downsample`` latent frames.
-        Actions ``[B, F*action_per_frame, n_used]`` are scattered into the model's ``action_dim`` space.
+        ``obs_cam_keys`` 对应的相机帧应为时序片段 ``[B, C, T, H, W]``（或
+        ``[B, T, C, H, W]``）；它们经 VAE 编码为
+        ``F = T / temporal_downsample`` 个潜变量帧。动作
+        ``[B, F*action_per_frame, n_used]`` 会被散布到模型的 ``action_dim`` 空间中。
         """
         cfg = self.config
         device = cfg.device
-        # text embeddings
+        # 文本嵌入
         task = batch.get("task")
         if isinstance(task, str):
             task = [task]
         text_emb = self._get_t5_prompt_embeds(list(task), cfg.max_sequence_length)
 
-        # video latents (VAE-encode the camera clips)
+        # 视频潜变量（对相机片段做 VAE 编码）
         latents = self._encode_training_latents(batch)
 
-        # actions -> [B, action_dim, F, action_per_frame, 1]
+        # 动作 -> [B, action_dim, F, action_per_frame, 1]
         act = batch[ACTION].to(device)  # [B, F*apf, n_used]
         b = act.shape[0]
         used = cfg.used_action_channel_ids
@@ -369,12 +372,12 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def _encode_training_latents(self, batch) -> Tensor:
-        """VAE-encode the per-camera training clips into normalized video latents [B, C, F, h, w]."""
+        """将逐相机的训练片段 VAE 编码为归一化视频潜变量 [B, C, F, h, w]。"""
         vae_device = next(self._vae.parameters()).device
 
         def _clip(key):
             x = batch[key].to(vae_device)
-            if x.dim() == 4:  # [B, C, H, W] -> single frame clip
+            if x.dim() == 4:  # [B, C, H, W] -> 单帧片段
                 x = x.unsqueeze(2)
             elif x.shape[1] not in (1, 3) and x.shape[2] in (1, 3):  # [B, T, C, H, W] -> [B, C, T, H, W]
                 x = x.permute(0, 2, 1, 3, 4)
@@ -401,32 +404,32 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], **kwargs) -> Tensor:
-        """Return one action, refilling the chunk (and feeding back observed keyframes) as needed.
+        """返回单个动作，并在需要时重新填充分块（同时反馈观测到的关键帧）。
 
-        Mirrors the upstream LIBERO client loop (``evaluation/libero/client.py``): the first obs is
-        the conditioning frame; every observation produced afterwards is buffered as a keyframe and,
-        once the chunk's actions are exhausted, the buffered frames + executed actions are fed back
-        into the KV cache before the next chunk is predicted.
+        对应上游 LIBERO 客户端循环（``evaluation/libero/client.py``）：第一个
+        obs 是条件帧；此后产生的每个观测都作为关键帧缓存，当分块的动作全部
+        执行完后，在预测下一个分块之前，将缓存的帧 + 已执行动作反馈回
+        KV cache。
         """
         self.eval()
         self._ensure_frozen_modules()
         self._maybe_init_prompt(batch)
 
         if not self._started:
-            # First call: this observation conditions the first chunk (it is *not* a keyframe).
+            # 第一次调用：该观测作为第一个分块的条件（它*不是*关键帧）。
             self._started = True
             actions = self.predict_action_chunk(batch)  # [B, chunk_size, n_used]
             self._action_queue.extend(actions.transpose(0, 1))  # [chunk_size, B, n_used]
             self._obs_buffer = []
             self._exec_step = 0
         else:
-            # This observation is the result of the previously executed action -> a candidate
-            # keyframe. Buffer it on the sub-step boundary the upstream client samples on.
+            # 该观测是上一个已执行动作的结果 -> 关键帧候选。
+            # 在上游客户端采样关键帧的子步边界上将其缓存。
             if (self._prev_j + 1) % self._keyframe_stride == 0:
                 self._obs_buffer.append(self._extract_raw_obs(batch))
             if len(self._action_queue) == 0:
-                # All actions for the current chunk have been executed; feed the observed
-                # keyframes + executed actions back and predict the next chunk.
+                # 当前分块的所有动作都已执行；将观测到的关键帧 + 已执行
+                # 动作反馈回去，并预测下一个分块。
                 actions = self.predict_action_chunk(None)
                 self._action_queue.extend(actions.transpose(0, 1))
                 self._exec_step = 0
@@ -437,7 +440,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs) -> Tensor:
-        """Run one autoregressive chunk and return actions ``[B, chunk_size, n_used]`` (normalized)."""
+        """运行一个自回归分块，返回动作 ``[B, chunk_size, n_used]``（已归一化）。"""
         self.eval()
         self._ensure_frozen_modules()
         self._maybe_init_prompt(batch)
@@ -447,35 +450,35 @@ class LingBotVAPolicy(PreTrainedPolicy):
             init_latent = self._encode_frames([self._extract_raw_obs(batch)])
             self._init_latent = init_latent
             self._init_streaming_cache(init_latent)
-            self._obs_buffer = []  # frame 0 (the init obs) conditions the chunk; it is not fed back
+            self._obs_buffer = []  # 第 0 帧（初始 obs）作为分块条件；不反馈回去
             actions, latents = self._infer(init_latent, frame_st_id=0)
             self._first_chunk = False
         else:
-            # Feed the real observed keyframes + the executed actions back into the KV cache.
+            # 将真实观测到的关键帧 + 已执行动作反馈回 KV cache。
             self._compute_kv_cache(self._obs_buffer, self._executed_actions)
             self._obs_buffer = []
             actions, latents = self._infer(None, frame_st_id=self._frame_st_id)
 
-        # actions: [B, action_dim, F, action_per_frame, 1] (model-normalized). Keep for KV feedback.
+        # actions: [B, action_dim, F, action_per_frame, 1]（模型归一化空间）。保留用于 KV 反馈。
         self._executed_actions = actions
 
         if self.config.save_predicted_video:
-            # Match upstream LingBot-VA visualization: collect chunk latents and decode the
-            # concatenated latent sequence once after the rollout finishes.
+            # 与上游 LingBot-VA 的可视化一致：收集各分块潜变量，在 rollout
+            # 结束后一次性解码拼接起来的潜变量序列。
             self.last_predicted_frames = None
             self.last_predicted_latents = latents.detach().to("cpu")
 
-        # On the first chunk, frame 0 is the conditioning frame (already "known"): the upstream
-        # LIBERO client skips it (start_idx=1), so we drop the first frame's actions here.
+        # 在第一个分块中，第 0 帧是条件帧（已经是“已知”的）：上游 LIBERO
+        # 客户端会跳过它（start_idx=1），因此这里丢弃第一帧对应的动作。
         used = self.config.used_action_channel_ids
         a = actions[:, used]  # [B, n_used, F, action_per_frame, 1]
         if is_first:
-            a = a[:, :, 1:]  # drop frame 0 -> (F-1) frames of actions
+            a = a[:, :, 1:]  # 丢弃第 0 帧 -> (F-1) 帧的动作
         a = a.squeeze(-1).flatten(2)  # [B, n_used, n_steps]
         a = a.transpose(1, 2).contiguous()  # [B, n_steps, n_used]
         return a.to(torch.float32)
 
-    # Prompt / text encoding
+    # Prompt / 文本编码
     def _maybe_init_prompt(self, batch):
         if self._prompt_embeds is not None or batch is None:
             return
@@ -522,20 +525,20 @@ class LingBotVAPolicy(PreTrainedPolicy):
             negative_prompt_embeds = self._get_t5_prompt_embeds("", max_len)
         return prompt_embeds, negative_prompt_embeds
 
-    # Observation (image) encoding -> normalized video latents
+    # 观测（图像）编码 -> 归一化视频潜变量
     def _extract_raw_obs(self, batch) -> dict[str, Tensor]:
-        """Snapshot the configured camera images from a batch (kept raw for later VAE encoding)."""
+        """从 batch 中快照所配置的相机图像（保持原始形式，供后续 VAE 编码）。"""
         return {k: batch[k].detach() for k in self.config.obs_cam_keys}
 
     def _camera_frame(self, raw_obs, key, size=None) -> Tensor:
-        """Return a single-frame camera tensor [1, C, 1, H, W] resized + scaled to [-1, 1]."""
+        """返回单帧相机张量 [1, C, 1, H, W]，已缩放尺寸并映射到 [-1, 1]。"""
         img = raw_obs[key]
         if img.dim() == 3:  # [C, H, W]
             img = img.unsqueeze(0)
-        # LeRobot images arrive as float in [0, 1], shape [B, C, H, W].
+        # LeRobot 的图像是取值在 [0, 1] 的 float，形状为 [B, C, H, W]。
         img = img.to(self.config.device, torch.float32)
         if self.config.image_hflip:
-            img = torch.flip(img, dims=[-1])  # undo the env processor's horizontal flip
+            img = torch.flip(img, dims=[-1])  # 撤销环境处理器的水平翻转
         if size is None:
             size = (self.config.height, self.config.width)
         img = F.interpolate(img, size=size, mode="bilinear", align_corners=False)
@@ -543,7 +546,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
         return img.unsqueeze(2).to(self.dtype)  # [1, C, F=1, H, W]
 
     def _normalize_vae_latent(self, enc_out: Tensor) -> Tensor:
-        """Take the mean of a VAE encoder output and channel-normalize it (matches upstream)."""
+        """取 VAE 编码器输出的均值并按通道归一化（与上游一致）。"""
         mu, _logvar = torch.chunk(enc_out, 2, dim=1)
         latents_mean = torch.tensor(self._vae.config.latents_mean).to(mu.device)
         latents_std = torch.tensor(self._vae.config.latents_std).to(mu.device)
@@ -553,13 +556,13 @@ class LingBotVAPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def _encode_frames(self, raw_frames: list) -> Tensor:
-        """VAE-encode a temporal clip of observed frames and concat the per-camera latents on width.
+        """对观测帧的时序片段做 VAE 编码，并沿宽度方向拼接逐相机潜变量。
 
-        ``raw_frames`` is a list of per-frame obs dicts (one per env sub-step). Each configured
-        camera is stacked along the temporal axis into a ``[1, C, F, H, W]`` clip and encoded in a
-        single streaming ``encode_chunk`` call so the VAE temporal downsample (x4) collapses the F
-        input frames into ``F / 4`` latent frames, with the causal ``feat_cache`` carried across
-        chunks (mirrors upstream ``_encode_obs``).
+        ``raw_frames`` 是逐帧 obs 字典组成的列表（每个环境子步一个）。每个所
+        配置的相机会沿时间轴堆叠为 ``[1, C, F, H, W]`` 片段，并通过一次流式
+        ``encode_chunk`` 调用完成编码，使 VAE 的时间下采样（x4）把 F 个输入帧
+        压缩为 ``F / 4`` 个潜变量帧，同时因果 ``feat_cache`` 会跨分块保留
+        （对应上游 ``_encode_obs``）。
         """
         vae_device = next(self._vae.parameters()).device
         if self.config.camera_layout == "robotwin_tshape":
@@ -571,16 +574,16 @@ class LingBotVAPolicy(PreTrainedPolicy):
         videos = torch.cat(per_cam_videos, dim=0)  # [num_cam, C, F, H, W]
         enc_out = self._streaming_vae.encode_chunk(videos.to(vae_device).to(self.dtype))
         mu_norm = self._normalize_vae_latent(enc_out)
-        # Concatenate the per-camera latents along width.
+        # 沿宽度方向拼接逐相机潜变量。
         video_latent = torch.cat(mu_norm.split(1, dim=0), dim=-1)
         return video_latent.to(self.config.device)
 
     @torch.no_grad()
     def _encode_frames_tshape(self, raw_frames: list, vae_device) -> Tensor:
-        """RoboTwin T-shape latent assembly: full-res head + half-res wrists (second streaming VAE).
+        """RoboTWin T 形潜变量装配：全分辨率头部相机 + 半分辨率腕部相机（第二个流式 VAE）。
 
-        The two wrist latents are concatenated on width and stacked (on the height axis) on top of
-        the head latent, mirroring upstream ``_encode_obs`` for ``env_type='robotwin_tshape'``.
+        两个腕部潜变量先沿宽度方向拼接，再（沿高度轴）堆叠到头部潜变量上方，
+        对应上游 ``env_type='robotwin_tshape'`` 时的 ``_encode_obs``。
         """
         cfg = self.config
         h, w = cfg.height, cfg.width
@@ -595,16 +598,16 @@ class LingBotVAPolicy(PreTrainedPolicy):
         wrists = torch.cat([left, right], dim=0)  # [2, C, F, H/2, W/2]
         enc_high = self._streaming_vae.encode_chunk(head.to(vae_device).to(self.dtype))
         enc_lr = self._frozen["streaming_vae_half"].encode_chunk(wrists.to(vae_device).to(self.dtype))
-        # wrists side-by-side on width, then stacked on top of the head latent on the height axis.
+        # 两个腕部相机沿宽度并排放置，再沿高度轴堆叠到头部潜变量上方。
         enc_out = torch.cat([torch.cat(enc_lr.split(1, dim=0), dim=-1), enc_high], dim=-2)
         video_latent = self._normalize_vae_latent(enc_out)
         return video_latent.to(self.config.device)
 
-    # KV cache management
+    # KV cache 管理
     @property
     def _latent_hw(self):
         if self.config.camera_layout == "robotwin_tshape":
-            # head (full) on the bottom, two half-res wrists side-by-side on top -> 1.5x height.
+            # 头部相机（全分辨率）在底部，两个半分辨率腕部相机并排在上方 -> 高度为 1.5 倍。
             return ((self.config.height // 16) * 3) // 2, self.config.width // 16
         h = self.config.height // 16
         w = (self.config.width // 16) * len(self.config.obs_cam_keys)
@@ -704,25 +707,26 @@ class LingBotVAPolicy(PreTrainedPolicy):
         mask[self.config.used_action_channel_ids] = True
         return mask
 
-    # Action conditioning (executed action history) (de)normalization
+    # 动作条件（已执行动作历史）的（反）归一化
     def _preprocess_action_state(self, action_norm: Tensor) -> Tensor:
-        """Build the action-conditioning tensor from the already-normalized executed actions.
+        """从已经归一化的已执行动作构建动作条件张量。
 
-        ``action_norm`` is the model-space action chunk ``[B, action_dim, F, action_per_frame, 1]``.
-        Upstream re-derives the conditioning from the raw executed action via quantile norm; here
-        the executed actions are already in the model-normalized space, so we pass them through.
+        ``action_norm`` 是模型空间的动作分块
+        ``[B, action_dim, F, action_per_frame, 1]``。上游通过分位数归一化从
+        原始已执行动作重新推导条件；这里的已执行动作已经处于模型归一化空间，
+        因此直接透传。
         """
         return action_norm.to(self.config.device, self.dtype)
 
     def _compute_kv_cache(self, obs_buffer, executed_actions):
-        """Feed real observed keyframes + executed actions back into the KV cache."""
+        """将真实观测到的关键帧 + 已执行动作反馈回 KV cache。"""
         if not obs_buffer or executed_actions is None:
             return
         self.transformer.clear_pred_cache("pos")
-        # Encode the buffered keyframe clip in one streaming call (carries the causal VAE cache).
+        # 通过一次流式调用编码缓存的关键帧片段（携带因果 VAE 缓存）。
         latent_model_input = self._encode_frames(obs_buffer)
-        # On the first feedback, prepend the init latent so the latent/action frame counts align
-        # (upstream prepends ``init_latent`` to the observed keyframes when frame_st_id == 0).
+        # 第一次反馈时，在前面补上初始潜变量，使潜变量/动作的帧计数对齐
+        # （上游在 frame_st_id == 0 时会把 ``init_latent`` 补到观测关键帧前面）。
         if self._frame_st_id == 0 and getattr(self, "_init_latent", None) is not None:
             latent_model_input = torch.cat([self._init_latent, latent_model_input], dim=2)
         action_model_input = self._preprocess_action_state(executed_actions)
@@ -745,7 +749,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
             )
         self._frame_st_id += latent_model_input.shape[2]
 
-    # The core dual-stream denoising loop (one chunk)
+    # 核心双流去噪循环（一个分块）
     @torch.no_grad()
     def _infer(self, init_latent, frame_st_id=0):
         cfg = self.config
@@ -765,7 +769,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
             timesteps = timesteps[: cfg.video_exec_step]
         action_timesteps = F.pad(self._action_scheduler.timesteps, (0, 1), mode="constant", value=0)
 
-        # 1. Video-latent denoising loop
+        # 1. 视频潜变量去噪循环
         for i, t in enumerate(timesteps):
             last_step = i == len(timesteps) - 1
             latent_cond = (
@@ -801,7 +805,7 @@ class LingBotVAPolicy(PreTrainedPolicy):
             if frame_st_id == 0 and latent_cond is not None:
                 latents[:, :, 0:1] = latent_cond
 
-        # 2. Action denoising loop
+        # 2. 动作去噪循环
         for i, t in enumerate(action_timesteps):
             last_step = i == len(action_timesteps) - 1
             action_cond = (
@@ -833,15 +837,15 @@ class LingBotVAPolicy(PreTrainedPolicy):
         actions[:, ~self._action_mask] *= 0
         return actions, latents
 
-    # Predicted-video decoding (opt-in)
+    # 预测视频解码（可选启用）
     @torch.no_grad()
     def decode_predicted_latents(self, latents) -> Tensor:
-        """Decode a concatenated predicted-latent sequence into ``[T, H, W, 3]`` uint8 frames."""
+        """将拼接的预测潜变量序列解码为 ``[T, H, W, 3]`` uint8 帧。"""
         return self._decode_predicted_video(latents)
 
     @torch.no_grad()
     def _decode_predicted_video(self, latents) -> Tensor:
-        """VAE-decode predicted latents into a uint8 frame stack ``[T, H, W, 3]`` on CPU."""
+        """在 CPU 上将预测潜变量经 VAE 解码为 uint8 帧栈 ``[T, H, W, 3]``。"""
         vae = self._vae
         z_dim = vae.config.z_dim
         vae_device = next(vae.parameters()).device

@@ -13,19 +13,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""``lerobot-annotate`` — populate ``language_persistent`` and
-``language_events`` columns on a LeRobot dataset.
+"""``lerobot-annotate`` — 为 LeRobot 数据集填充 ``language_persistent`` 和
+``language_events`` 列。
 
-Annotations live directly in ``data/chunk-*/file-*.parquet``.
+标注内容直接存放在 ``data/chunk-*/file-*.parquet`` 中。
 
-Example:
+示例：
 
   uv run lerobot-annotate \\
       --root=/path/to/dataset \\
       --vlm.model_id=Qwen/Qwen2.5-VL-7B-Instruct
 
-Pass ``--job.target=<flavor>`` to run the same command on a Hugging Face
-Jobs GPU instead of this machine (see ``lerobot.jobs.annotate``):
+传入 ``--job.target=<flavor>`` 可以在 Hugging Face Jobs 的 GPU 上
+运行相同的命令，而不是在本机运行（参见 ``lerobot.jobs.annotate``）：
 
   uv run lerobot-annotate \\
       --repo_id=user/dataset \\
@@ -74,12 +74,12 @@ def _resolve_root(cfg: AnnotationPipelineConfig) -> Path:
 
 @parser.wrap()
 def annotate(cfg: AnnotationPipelineConfig) -> None:
-    """Run the steerable annotation pipeline against a dataset."""
+    """对数据集运行可配置的标注流水线。"""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     if cfg.job.is_remote:
-        # Imported lazily: the submitter pulls in LeRobotDataset (the `dataset`
-        # extra), which a local annotation run over --root doesn't need.
+        # 延迟导入：提交器会引入 LeRobotDataset（即 `dataset` 附加依赖），
+        # 而基于 --root 的本地标注运行并不需要它。
         from lerobot.jobs.annotate import submit_annotate_to_hf
 
         return submit_annotate_to_hf(cfg)
@@ -89,9 +89,9 @@ def annotate(cfg: AnnotationPipelineConfig) -> None:
 
     vlm = make_vlm_client(cfg.vlm)
     frame_provider = make_frame_provider(root, camera_key=cfg.vlm.camera_key, video_backend=cfg.video_backend)
-    # Surface the resolved cameras up front so a silent vqa-module no-op
-    # is obvious in job output rather than discovered post-hoc by counting
-    # parquet rows.
+    # 预先展示解析出的相机，这样 vqa 模块静默无操作的情况
+    # 能在任务输出中一目了然，而不是事后通过统计
+    # parquet 行数才发现。
     cam_keys = list(getattr(frame_provider, "camera_keys", []) or [])
     logger.info(
         "annotate: frame_provider default camera=%r, all cameras=%s",
@@ -145,9 +145,9 @@ def annotate(cfg: AnnotationPipelineConfig) -> None:
 
 
 def _push_to_hub(root: Path, cfg: AnnotationPipelineConfig) -> None:
-    """Upload the annotated dataset directory to the Hub.
+    """将标注后的数据集目录上传到 Hub。
 
-    Pushes to ``cfg.new_repo_id`` when set, otherwise back to ``cfg.repo_id``.
+    若设置了 ``cfg.new_repo_id`` 则推送到该仓库，否则推回 ``cfg.repo_id``。
     """
     require_package("datasets", "dataset")
 
@@ -167,9 +167,9 @@ def _push_to_hub(root: Path, cfg: AnnotationPipelineConfig) -> None:
         repo_id=repo_id,
         repo_type="dataset",
         commit_message=commit_message,
-        # README.md is excluded because when pushing to ``new_repo_id`` the
-        # source card's links (e.g. the visualize badge) would keep pointing
-        # at the source dataset; a fresh card is generated below instead.
+        # 排除 README.md，因为当推送到 ``new_repo_id`` 时，
+        # 源数据集卡片的链接（例如可视化徽章）会继续指向
+        # 源数据集；下面会改为生成一份全新的卡片。
         ignore_patterns=[".annotate_staging/**", "**/.DS_Store", "README.md"],
     )
     logger.info(f"[lerobot-annotate] uploaded to https://huggingface.co/datasets/{repo_id}")
@@ -178,12 +178,12 @@ def _push_to_hub(root: Path, cfg: AnnotationPipelineConfig) -> None:
     card = create_lerobot_dataset_card(dataset_info=dataset_info, license="apache-2.0", repo_id=repo_id)
     card.push_to_hub(repo_id=repo_id, repo_type="dataset")
 
-    # Tag the upload with the codebase version. ``LeRobotDatasetMetadata``
-    # resolves the dataset revision via ``get_safe_version`` which scans
-    # for tags like ``v3.0``; without a tag it raises
-    # ``RevisionNotFoundError``. Read the version straight from the
-    # dataset's own ``meta/info.json`` so we tag whatever the writer
-    # actually wrote (no accidental drift if the codebase floor moves).
+    # 用代码库版本为上传内容打标签。``LeRobotDatasetMetadata``
+    # 通过 ``get_safe_version`` 解析数据集的 revision，该方法会扫描
+    # 形如 ``v3.0`` 的标签；没有标签时会抛出
+    # ``RevisionNotFoundError``。直接从数据集自身的
+    # ``meta/info.json`` 读取版本，这样打标签的对象就是 writer
+    # 实际写入的内容（即使代码库基线版本变动也不会意外漂移）。
     version_tag = (
         dataset_info.codebase_version if dataset_info.codebase_version.startswith("v") else CODEBASE_VERSION
     )

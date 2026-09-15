@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Policy deployment engine with pluggable rollout strategies.
+"""带有可插拔 rollout 策略的策略部署引擎。
 
-An interactive rollout is built from four components: :class:`InferenceEngine` (owns the policy),
-:class:`RolloutStrategy` (the real-time tick loop), :class:`RolloutController` (lifecycle state machine)
-and :class:`InteractiveSession` (text I/O over the controller).  Calls point downward only — session ->
-controller -> {strategy, engine}, strategy -> engine — and nothing under ``strategies/`` or ``inference/``
-references the controller, so strategies stay usable non-interactively.  Controller commands only record
-intent under the controller lock; ``serve()`` is the only place intent becomes motion.
+一个交互式 rollout 由四个组件构成：:class:`InferenceEngine`（持有策略）、
+:class:`RolloutStrategy`（实时 tick 循环）、:class:`RolloutController`（生命周期状态机）
+以及 :class:`InteractiveSession`（基于控制器的文本 I/O）。调用关系只指向下方——session ->
+controller -> {strategy, engine}，strategy -> engine——并且 ``strategies/`` 和 ``inference/``
+下的任何内容都不会引用控制器，因此策略在非交互模式下依然可用。控制器命令只在控制器锁下
+记录意图；``serve()`` 是唯一将意图转化为动作的地方。
 """
 
 from lerobot.utils.import_utils import require_package

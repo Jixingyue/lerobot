@@ -15,33 +15,33 @@
 # limitations under the License.
 
 """
-Edit LeRobot datasets using various transformation tools.
+使用各种转换工具编辑 LeRobot 数据集。
 
-Requires: pip install 'lerobot[dataset]'
+需要：pip install 'lerobot[dataset]'
 
-This script allows you to delete episodes, split datasets, merge datasets,
-remove features, modify tasks, recompute stats, and convert image datasets to video format.
-When new_repo_id is specified, creates a new dataset.
+此脚本允许你删除 episode、拆分数据集、合并数据集、
+移除特征、修改任务、重新计算统计信息，以及将图像数据集转换为视频格式。
+指定 new_repo_id 时，会创建一个新数据集。
 
-Path semantics (v2): --root and --new_root are exact dataset folders containing
-meta/, data/, videos/. When omitted, defaults to $HF_LEROBOT_HOME/{repo_id}.
+路径语义（v2）：--root 和 --new_root 是包含
+meta/、data/、videos/ 的确切数据集文件夹。省略时默认为 $HF_LEROBOT_HOME/{repo_id}。
 
-Usage Examples:
+用法示例：
 
-Delete episodes 0, 2, and 5 from a dataset:
+从数据集中删除 episode 0、2 和 5：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type delete_episodes \
         --operation.episode_indices "[0, 2, 5]"
 
-Delete episodes from a local dataset at a specific path:
+从指定路径的本地数据集中删除 episode：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --root /path/to/pusht \
         --operation.type delete_episodes \
         --operation.episode_indices "[0, 2, 5]"
 
-Delete episodes and save to a new dataset at a specific path and with a new repo_id:
+删除 episode，并将结果保存为指定路径下的新数据集（使用新的 repo_id）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_repo_id lerobot/pusht_filtered \
@@ -49,52 +49,52 @@ Delete episodes and save to a new dataset at a specific path and with a new repo
         --operation.type delete_episodes \
         --operation.episode_indices "[0, 2, 5]"
 
-Split dataset by fractions (pusht_train, pusht_val):
+按比例拆分数据集（pusht_train、pusht_val）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type split \
         --operation.splits '{"train": 0.8, "val": 0.2}'
 
-Split dataset by fractions and save split datasets to a specific folder (base_folder/train, base_folder/val):
+按比例拆分数据集，并将拆分后的数据集保存到指定文件夹（base_folder/train、base_folder/val）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_root /path/to/base_folder \
         --operation.type split \
         --operation.splits '{"train": 0.8, "val": 0.2}'
 
-Split dataset by episode indices:
+按 episode 索引拆分数据集：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type split \
         --operation.splits '{"train": [0, 1, 2, 3], "val": [4, 5]}'
 
-Split into more than two splits:
+拆分为两个以上的分片：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type split \
         --operation.splits '{"train": 0.6, "val": 0.2, "test": 0.2}'
 
-Merge multiple datasets:
+合并多个数据集：
     lerobot-edit-dataset \
         --new_repo_id lerobot/pusht_merged \
         --operation.type merge \
         --operation.repo_ids "['lerobot/pusht_train', 'lerobot/pusht_val']"
 
-Merge multiple datasets to a specific output path:
+合并多个数据集到指定输出路径：
     lerobot-edit-dataset \
         --new_repo_id lerobot/pusht_merged \
         --new_root /path/to/pusht_merged \
         --operation.type merge \
         --operation.repo_ids "['lerobot/pusht_train', 'lerobot/pusht_val']"
 
-Merge multiple datasets from a list of local dataset paths:
+根据一组本地数据集路径合并多个数据集：
     lerobot-edit-dataset \
         --new_repo_id lerobot/pusht_merged \
         --operation.type merge \
         --operation.repo_ids "['pusht_train', 'pusht_val']" \
         --operation.roots "['/path/to/pusht_train', '/path/to/pusht_val']"
 
-Merge multiple datasets while keeping one file per source file (no video/data stitching):
+合并多个数据集，同时保持每个源文件对应一个文件（不拼接视频/数据）：
     lerobot-edit-dataset \
         --new_repo_id lerobot/pusht_merged \
         --operation.type merge \
@@ -102,44 +102,44 @@ Merge multiple datasets while keeping one file per source file (no video/data st
         --operation.concatenate_videos false \
         --operation.concatenate_data false
 
-Remove camera feature:
+移除相机特征：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type remove_feature \
         --operation.feature_names "['observation.image']"
 
-Modify tasks - set a single task for all episodes (WARNING: modifies in-place):
+修改任务——为所有 episode 设置同一个任务（警告：就地修改）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type modify_tasks \
         --operation.new_task "Pick up the cube and place it"
 
-Modify tasks - set different tasks for specific episodes (WARNING: modifies in-place):
+修改任务——为指定 episode 设置不同的任务（警告：就地修改）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type modify_tasks \
         --operation.episode_tasks '{"0": "Task A", "1": "Task B", "2": "Task A"}'
 
-Modify tasks - set default task with overrides for specific episodes (WARNING: modifies in-place):
+修改任务——设置默认任务，并对指定 episode 进行覆盖（警告：就地修改）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type modify_tasks \
         --operation.new_task "Default task" \
         --operation.episode_tasks '{"5": "Special task for episode 5"}'
 
-Modify tasks - replace existing task strings in-place (WARNING: modifies in-place):
+修改任务——就地替换已有的任务字符串（警告：就地修改）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type modify_tasks \
         --operation.task_replacements '{"Pick up the red cube": "Lift the red cube"}'
 
-Convert image dataset to video format and save locally:
+将图像数据集转换为视频格式并保存到本地：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --new_root /path/to/output/pusht_video \
         --operation.type convert_image_to_video
 
-Convert image dataset (with depth maps) to video format, customizing the depth encoder:
+将图像数据集（含深度图）转换为视频格式，并自定义深度编码器：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --new_root /path/to/output/pusht_video \
@@ -148,50 +148,50 @@ Convert image dataset (with depth maps) to video format, customizing the depth e
         --operation.depth_encoder.depth_max 10.0 \
         --operation.depth_encoder.use_log true
 
-Convert image dataset to video format and save with new repo_id:
+将图像数据集转换为视频格式，并使用新的 repo_id 保存：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --new_repo_id lerobot/pusht_video \
         --operation.type convert_image_to_video
 
-Convert image dataset to video format and push to hub:
+将图像数据集转换为视频格式并推送到 hub：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --new_repo_id lerobot/pusht_video \
         --operation.type convert_image_to_video \
         --push_to_hub true
 
-Show dataset information:
+显示数据集信息：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --operation.type info \
         --operation.show_features true
 
-Show dataset information without feature details:
+显示数据集信息但不包含特征详情：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_image \
         --operation.type info \
         --operation.show_features false
 
-Recompute dataset statistics (saves to lerobot/pusht_recomputed_stats by default):
+重新计算数据集统计信息（默认保存到 lerobot/pusht_recomputed_stats）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type recompute_stats
 
-Recompute stats and save to a specific new repo_id:
+重新计算统计信息并保存到指定的新 repo_id：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_repo_id lerobot/pusht_new_stats \
         --operation.type recompute_stats
 
-Recompute stats in-place (overwrites original dataset stats):
+就地重新计算统计信息（覆盖原始数据集的统计信息）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_repo_id lerobot/pusht \
         --operation.type recompute_stats \
         --operation.overwrite true
 
-Recompute stats for relative actions and push to hub:
+为相对动作重新计算统计信息并推送到 hub：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type recompute_stats \
@@ -201,7 +201,7 @@ Recompute stats for relative actions and push to hub:
         --operation.num_workers 4 \
         --push_to_hub true
 
-Re-encode all videos in a dataset (saves to lerobot/pusht_reencoded by default):
+重新编码数据集中的所有视频（默认保存到 lerobot/pusht_reencoded）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --operation.type reencode_videos \
@@ -209,7 +209,7 @@ Re-encode all videos in a dataset (saves to lerobot/pusht_reencoded by default):
         --operation.rgb_encoder.pix_fmt yuv420p \
         --operation.rgb_encoder.crf 23
 
-Re-encode videos into a new dataset using 4 parallel processes:
+使用 4 个并行进程将视频重新编码到一个新数据集中：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_repo_id lerobot/pusht_h264 \
@@ -218,7 +218,7 @@ Re-encode videos into a new dataset using 4 parallel processes:
         --operation.rgb_encoder.crf 23 \
         --operation.num_workers 4
 
-Re-encode videos in-place (overwrites original dataset):
+就地重新编码视频（覆盖原始数据集）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht \
         --new_repo_id lerobot/pusht \
@@ -226,14 +226,14 @@ Re-encode videos in-place (overwrites original dataset):
         --operation.rgb_encoder.vcodec h264 \
         --operation.overwrite true
 
-Re-encode both RGB and depth videos in a dataset (depth quantization params are preserved):
+重新编码数据集中的 RGB 和深度视频（深度量化参数会被保留）：
     lerobot-edit-dataset \
         --repo_id lerobot/pusht_depth \
         --operation.type reencode_videos \
         --operation.rgb_encoder.vcodec h264 \
         --operation.depth_encoder.extra_options '{"x265-params": "lossless=1"}'
 
-Using JSON config file:
+使用 JSON 配置文件：
     lerobot-edit-dataset \
         --config_path path/to/edit_config.json
 """
@@ -294,7 +294,7 @@ class SplitConfig(OperationConfig):
 class MergeConfig(OperationConfig):
     repo_ids: list[str] | None = None
     roots: list[str] | None = None
-    # When False, keep one file per source file instead of packing into shards.
+    # 为 False 时，每个源文件保留为一个文件，而不是打包成分片（shard）。
     concatenate_videos: bool = True
     concatenate_data: bool = True
 
@@ -354,17 +354,17 @@ class InfoConfig(OperationConfig):
 
 @dataclass
 class EditDatasetConfig:
-    # Operation configuration.
+    # 操作配置。
     operation: OperationConfig
-    # Input dataset identifier. Always required unless for Merge operation.
+    # 输入数据集标识符。除 Merge 操作外始终必填。
     repo_id: str | None = None
-    # Root directory where the input dataset is stored. If not specified, defaults to $HF_LEROBOT_HOME/repo_id.
+    # 输入数据集所在的根目录。若未指定，默认为 $HF_LEROBOT_HOME/repo_id。
     root: str | None = None
-    # Edited dataset identifier. When both new_repo_id (resp. new_root) and repo_id (resp. root) are identical, modifications are applied in-place and a backup of the original dataset is created. Required for Merge operation.
+    # 编辑后数据集的标识符。当 new_repo_id（相应地 new_root）与 repo_id（相应地 root）完全相同时，将就地执行修改，并为原始数据集创建备份。Merge 操作必填。
     new_repo_id: str | None = None
-    # Root directory where the edited dataset will be stored. If not specified, defaults to $HF_LEROBOT_HOME/new_repo_id. For Split operation, this is the base directory for the split datasets.
+    # 编辑后数据集的存储根目录。若未指定，默认为 $HF_LEROBOT_HOME/new_repo_id。对于 Split 操作，这是拆分后各个数据集的基础目录。
     new_root: str | None = None
-    # Upload dataset to Hugging Face hub.
+    # 将数据集上传到 Hugging Face hub。
     push_to_hub: bool = False
 
 
@@ -375,9 +375,9 @@ def _resolve_io_paths(
     new_root: Path | str | None,
     default_new_repo_id: str | None = None,
 ) -> tuple[str, Path, Path]:
-    """Resolve input/output paths and repo_id for dataset operations.
+    """为数据集操作解析输入/输出路径和 repo_id。
 
-    Returns (output_repo_id, input_path, output_path) with resolved (symlink-safe) paths.
+    返回 (output_repo_id, input_path, output_path)，其中路径均经过 resolve（对符号链接安全）。
     """
     input_path = (Path(root) if root else HF_LEROBOT_HOME / repo_id).resolve()
     output_repo_id = new_repo_id or default_new_repo_id or repo_id
@@ -386,10 +386,10 @@ def _resolve_io_paths(
 
 
 def _is_in_place(input_path: Path, output_path: Path) -> bool:
-    """Whether both paths point to the same dataset directory.
+    """判断两个路径是否指向同一个数据集目录。
 
-    Uses os.path.samefile (device+inode) which is robust to case-insensitive filesystems, hardlinks
-    and symlinks.
+    使用 os.path.samefile（设备号 + inode），能够可靠地处理不区分大小写的文件系统、
+    硬链接和符号链接。
     """
     try:
         return os.path.samefile(input_path, output_path)
@@ -405,7 +405,7 @@ def get_output_path(
 ) -> tuple[str, Path, Path | None]:
     output_repo_id, input_path, output_path = _resolve_io_paths(repo_id, new_repo_id, root, new_root)
 
-    # In case of in-place modification, create a backup of the original dataset (if it exists).
+    # 就地修改时，为原始数据集创建备份（如果它存在）。
     backup_path: Path | None = None
     if _is_in_place(input_path, output_path):
         backup_path = input_path.with_name(input_path.name + "_old")
@@ -431,7 +431,7 @@ def handle_delete_episodes(cfg: EditDatasetConfig) -> None:
         new_root=cfg.new_root,
     )
 
-    # In case of in-place modification, make the dataset point to the backup directory
+    # 就地修改时，让数据集指向备份目录
     if backup_path is not None:
         dataset.root = backup_path
 
@@ -544,7 +544,7 @@ def handle_remove_feature(cfg: EditDatasetConfig) -> None:
         new_root=cfg.new_root,
     )
 
-    # In case of in-place modification, make the dataset point to the backup directory
+    # 就地修改时，让数据集指向备份目录
     if backup_path is not None:
         dataset.root = backup_path
 
@@ -585,7 +585,7 @@ def handle_modify_tasks(cfg: EditDatasetConfig) -> None:
     dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
     logging.warning(f"Modifying dataset in-place at {dataset.root}. Original data will be overwritten.")
 
-    # Convert episode_tasks keys from string to int if needed (CLI passes strings)
+    # 如有必要，将 episode_tasks 的键从字符串转换为整数（CLI 传入的是字符串）
     episode_tasks: dict[int, str] | None = None
     if episode_tasks_raw is not None:
         episode_tasks = {int(k): v for k, v in episode_tasks_raw.items()}
@@ -614,12 +614,12 @@ def handle_modify_tasks(cfg: EditDatasetConfig) -> None:
 
 
 def handle_convert_image_to_video(cfg: EditDatasetConfig) -> None:
-    # Note: Parser may create any config type with the right fields, so we access fields directly
-    # instead of checking isinstance()
+    # 注意：解析器可能会创建任何具有相应字段的配置类型，因此我们直接访问字段，
+    # 而不检查 isinstance()
     dataset = LeRobotDataset(cfg.repo_id, root=cfg.root)
 
-    # Determine output directory and repo_id
-    # Priority: 1) new_root, 2) new_repo_id, 3) operation.output_dir, 4) auto-generated name
+    # 确定输出目录和 repo_id
+    # 优先级：1) new_root，2) new_repo_id，3) operation.output_dir，4) 自动生成的名称
     output_dir_config = getattr(cfg.operation, "output_dir", None)
     if output_dir_config:
         logging.warning(
@@ -675,7 +675,7 @@ def handle_recompute_stats(cfg: EditDatasetConfig) -> None:
     if not isinstance(cfg.operation, RecomputeStatsConfig):
         raise ValueError("Operation config must be RecomputeStatsConfig")
 
-    # Determine whether this is an in-place operation
+    # 判断这是否为就地操作
     output_repo_id, input_root, output_root = _resolve_io_paths(
         cfg.repo_id,
         cfg.new_repo_id,

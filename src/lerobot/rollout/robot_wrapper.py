@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Thread-safe robot wrapper for concurrent observation/action access."""
+"""用于并发观测/动作访问的线程安全机器人包装器。"""
 
 from __future__ import annotations
 
@@ -23,22 +23,21 @@ from lerobot.robots import Robot
 
 
 class ThreadSafeRobot:
-    """Lock-protected wrapper around a :class:`Robot` for use with background threads.
+    """围绕 :class:`Robot` 的锁保护包装器，供后台线程使用。
 
-    When RTC inference runs in a background thread while the main loop
-    executes actions, both threads may access the robot concurrently.
-    This wrapper serialises ``get_observation`` and ``send_action`` calls.
+    当 RTC 推理在后台线程运行而主循环在执行动作时，
+    两个线程可能同时访问机器人。
+    此包装器将 ``get_observation`` 和 ``send_action`` 调用串行化。
 
-    Read-only properties are proxied without the lock since they don't
-    mutate hardware state.
+    只读属性无需加锁即可代理，因为它们不会
+    改变硬件状态。
     """
 
     def __init__(self, robot: Robot) -> None:
         self._robot = robot
         self._lock = Lock()
 
-    # -- Lock-protected I/O --------------------------------------------------
-
+    #  -- 锁保护的 I/O --------------------------------------------------
     def get_observation(self) -> dict[str, Any]:
         with self._lock:
             return self._robot.get_observation()
@@ -47,8 +46,7 @@ class ThreadSafeRobot:
         with self._lock:
             return self._robot.send_action(action)
 
-    # -- Read-only proxies (no lock needed) -----------------------------------
-
+    #  -- 只读代理（无需锁）-----------------------------------
     @property
     def observation_features(self) -> dict:
         return self._robot.observation_features
@@ -75,5 +73,5 @@ class ThreadSafeRobot:
 
     @property
     def inner(self) -> Robot:
-        """Access the underlying robot (e.g. for connect/disconnect)."""
+        """访问底层机器人（例如用于连接/断开连接）。"""
         return self._robot

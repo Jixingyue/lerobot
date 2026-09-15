@@ -20,15 +20,15 @@ from lerobot.utils.decorators import check_if_already_connected, check_if_not_co
 
 
 class BimanualMixin:
-    """Lifecycle delegation for bimanual robots and teleoperators.
+    """双臂机器人和遥操作设备的生命周期委托。
 
-    Concrete subclasses must populate ``self.left_arm`` and ``self.right_arm`` in
-    their own ``__init__``. They retain ownership of feature dicts and the
-    data-routing methods (``get_action`` / ``send_action`` / ``get_observation`` /
-    ``send_feedback``), which vary per-embodiment.
+    具体子类必须在自己的 ``__init__`` 中填充 ``self.left_arm`` 和 ``self.right_arm``。
+    它们保留对特征字典和数据路由方法（``get_action`` / ``send_action`` /
+    ``get_observation`` / ``send_feedback``）的所有权，
+    因为这些方法因本体形态而异。
 
-    Inherit before the ``Robot`` / ``Teleoperator`` base so the mixin's methods
-    take precedence in the MRO::
+    继承时应放在 ``Robot`` / ``Teleoperator`` 基类之前，
+    使混入类的方法在 MRO 中优先::
 
         class BiFooFollower(BimanualMixin, Robot): ...
     """

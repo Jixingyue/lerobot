@@ -28,13 +28,13 @@ from .utils import read_json
 logger = logging.getLogger(__name__)
 
 GROOT_N1_7 = "n1.7"
-# Legacy GR00T N1.5 identifier. N1.5 is NOT a supported model_version (it is
-# intentionally absent from _GROOT_MODEL_VERSION_ALIASES so normalize_groot_model_version
-# still rejects it). It is retained only so that infer_groot_model_version can recognise
-# an N1.5 base path/checkpoint and the N1.7 config/loader can reject the mismatch.
+# 旧版 GR00T N1.5 标识符。N1.5 不是受支持的 model_version（它被有意排除在
+# _GROOT_MODEL_VERSION_ALIASES 之外，因此 normalize_groot_model_version
+# 仍会拒绝它）。保留它只是为了让 infer_groot_model_version 能够识别
+# N1.5 的基础路径/检查点，从而让 N1.7 的配置/加载器拒绝这种不匹配。
 GROOT_N1_5 = "n1.5"
-# Canonical guidance appended to every error raised when an N1.5 checkpoint, config,
-# or processor pipeline is detected. Keep this message in sync with docs/source/groot.mdx.
+# 当检测到 N1.5 检查点、配置或处理器流水线时，附加到每个抛出错误上的
+# 规范指引信息。请保持该消息与 docs/source/groot.mdx 同步。
 GROOT_N1_5_REMOVAL_GUIDANCE = (
     "GR00T N1.5 support was removed from LeRobot. "
     "To keep using an N1.5 checkpoint, pin the last release that supports it: "
@@ -43,14 +43,16 @@ GROOT_N1_5_REMOVAL_GUIDANCE = (
 )
 GROOT_N1_7_BASE_MODEL = "nvidia/GR00T-N1.7-3B"
 GROOT_N1_7_BACKBONE_MODEL = "nvidia/Cosmos-Reason2-2B"
-# Default GR00T N1.7 training resolution. Fallback if processor_config lacks sizing. Prevents mismatched
-# full-res patchification by forcing a resize. Mirrored by GR00T_N1_7_DEFAULTS in groot_n1_7.py.
+# GR00T N1.7 的默认训练分辨率。当 processor_config 缺少尺寸信息时作为回退值。
+# 通过强制缩放来防止全分辨率下的 patch 化不匹配。与 groot_n1_7.py 中的
+# GR00T_N1_7_DEFAULTS 保持一致。
 N1_7_DEFAULT_IMAGE_TARGET_SIZE = (256, 256)
 N1_7_DEFAULT_IMAGE_CROP_SIZE = (230, 230)
 GROOT_ACTION_DECODE_TRANSFORM_LIBERO = "libero"
-# Sentinel meaning "the user did not pick an action decode transform": __post_init__ resolves it
-# to the embodiment default ('libero' for 'libero_sim', otherwise None). It is distinct from an
-# explicit 'none' (resolved to None) so an opt-out survives a draccus save/load round-trip.
+# 哨兵值，表示"用户未选择动作解码变换"：__post_init__ 会将其解析为
+# 对应具身（embodiment）的默认值（'libero_sim' 对应 'libero'，其他为 None）。
+# 它与显式的 'none'（解析为 None）不同，这样显式禁用的选择才能在
+# draccus 的保存/加载往返中保留下来。
 GROOT_ACTION_DECODE_TRANSFORM_AUTO = "auto"
 
 _GROOT_MODEL_VERSION_ALIASES = {
@@ -61,8 +63,9 @@ _GROOT_MODEL_VERSION_ALIASES = {
     "1.7": GROOT_N1_7,
 }
 
-# Legacy N1.5 spellings, kept ONLY so they can be detected and rejected with
-# GROOT_N1_5_REMOVAL_GUIDANCE (see GROOT_N1_5 above). Never map these to a supported version.
+# 旧版 N1.5 的各种写法，保留它们只是为了检测并以
+# GROOT_N1_5_REMOVAL_GUIDANCE 拒绝（见上方的 GROOT_N1_5）。
+# 切勿将这些映射到受支持的版本。
 _GROOT_N1_5_VERSION_ALIASES = {"n1.5", "n1_5", "n1d5", "n15", "1.5"}
 
 _GROOT_ACTION_DECODE_TRANSFORM_ALIASES = {
@@ -105,9 +108,9 @@ def infer_groot_model_version(model_path: str | None) -> str | None:
     model_path_lower = model_path.lower()
     if "gr00t-n1.7" in model_path_lower or "gr00t_n1.7" in model_path_lower:
         return GROOT_N1_7
-    # Detect legacy N1.5 paths so the N1.7 config/loader can reject the mismatch.
-    # N1.5 is unsupported, but it must still be recognised here to fail loudly
-    # rather than silently treating an N1.5 checkpoint as N1.7.
+    # 检测旧版 N1.5 路径，以便 N1.7 的配置/加载器拒绝这种不匹配。
+    # N1.5 不受支持，但这里仍必须识别它，以便明确报错，
+    # 而不是悄悄地把 N1.5 检查点当作 N1.7 处理。
     if "gr00t-n1.5" in model_path_lower or "gr00t_n1.5" in model_path_lower:
         return GROOT_N1_5
     config_version = _infer_groot_model_version_from_local_config(model_path)
@@ -192,8 +195,8 @@ def infer_groot_n1_7_action_execution_horizon(
     if embodiment_tag is None:
         embodiment_tag = infer_groot_n1_7_embodiment_tag(model_path)
     if embodiment_tag == "libero_sim":
-        # NVIDIA's N1.7 LIBERO rollout wrapper replans after 8 of the 16 decoded
-        # actions. Keeping that execution cadence avoids stale open-loop chunks.
+        # NVIDIA 的 N1.7 LIBERO rollout 封装会在解码出的 16 个动作执行 8 个后
+        # 重新规划。保持该执行节奏可以避免使用过时的开环动作块。
         return min(action_horizon, 8)
     return action_horizon
 
@@ -231,7 +234,7 @@ def _infer_groot_model_version_from_config(config: dict) -> str | None:
             return GROOT_N1_5
     if config.get("model_name") == GROOT_N1_7_BACKBONE_MODEL:
         return GROOT_N1_7
-    # The Eagle VLM backbone is specific to pre-N1.7 GR00T checkpoints (N1.7 uses Cosmos/Qwen3-VL).
+    # Eagle VLM 主干是 N1.7 之前的 GR00T 检查点特有的（N1.7 使用 Cosmos/Qwen3-VL）。
     backbone_cfg = config.get("backbone_cfg")
     if isinstance(backbone_cfg, dict) and "eagle_path" in backbone_cfg:
         return GROOT_N1_5
@@ -241,25 +244,25 @@ def _infer_groot_model_version_from_config(config: dict) -> str | None:
 @PreTrainedConfig.register_subclass("groot")
 @dataclass
 class GrootConfig(PreTrainedConfig):
-    """Configuration for Groot policy wrapper."""
+    """Groot 策略封装的配置。"""
 
-    # Basic policy settings
+    # 基本策略设置
     n_obs_steps: int = 1
     chunk_size: int = 40
     n_action_steps: int = 40
 
-    # Dimension settings (must match pretrained GR00T model expectations)
-    # Maximum state dimension. Shorter states will be zero-padded.
+    # 维度设置（必须与预训练 GR00T 模型的期望一致）
+    # 最大状态维度。较短的状态会被零填充。
     max_state_dim: int = 132
 
-    # Maximum action dimension. Shorter actions will be zero-padded.
+    # 最大动作维度。较短的动作会被零填充。
     max_action_dim: int = 132
 
-    # GR00T normalizes state/action internally in its processor steps (min/max with
-    # q01/q99 percentiles, per embodiment), and the Qwen3-VL backbone's image processor
-    # handles image normalization. The policy therefore does NOT use LeRobot's
-    # NormalizerProcessorStep/UnnormalizerProcessorStep, so this mapping is intentionally
-    # IDENTITY for every feature and is not consulted by make_groot_pre_post_processors.
+    # GR00T 在其处理器步骤内部对状态/动作进行归一化（按具身使用
+    # q01/q99 百分位数的 min/max 归一化），而 Qwen3-VL 主干的图像处理器
+    # 负责图像归一化。因此该策略不使用 LeRobot 的
+    # NormalizerProcessorStep/UnnormalizerProcessorStep，所以此映射对每个特征
+    # 都有意设为 IDENTITY，且 make_groot_pre_post_processors 不会参考它。
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.IDENTITY,
@@ -268,92 +271,90 @@ class GrootConfig(PreTrainedConfig):
         }
     )
 
-    # Groot-specific model parameters
+    # Groot 特有的模型参数
 
-    # Path or HuggingFace model ID for the base GR00T N1.7 model whose backbone weights and
-    # checkpoint sidecars (statistics.json, processor_config.json, ...) are loaded. This is the
-    # model *source*, and is intentionally distinct from the inherited `pretrained_path`:
-    # `pretrained_path` (`--policy.path`) points at a saved LeRobot checkpoint directory whose
-    # `config.json` carries a `type` field, whereas a raw NVIDIA GR00T checkpoint has no such
-    # field and so can only be loaded through `base_model_path` (`--policy.base_model_path`).
-    # Defaults to GROOT_N1_7_BASE_MODEL when unset (resolved in __post_init__).
+    # 基础 GR00T N1.7 模型的路径或 HuggingFace 模型 ID，将加载其主干权重和
+    # 检查点附属文件（statistics.json、processor_config.json 等）。这是模型的
+    # *来源*，有意与继承的 `pretrained_path` 区分开：
+    # `pretrained_path`（`--policy.path`）指向已保存的 LeRobot 检查点目录，其
+    # `config.json` 带有 `type` 字段；而原始的 NVIDIA GR00T 检查点没有该字段，
+    # 因此只能通过 `base_model_path`（`--policy.base_model_path`）加载。
+    # 未设置时默认为 GROOT_N1_7_BASE_MODEL（在 __post_init__ 中解析）。
     base_model_path: str | None = None
 
-    # Optional named action transform applied after raw N1.7 checkpoint decoding and before env.step().
-    # 'auto' (default) resolves to the embodiment default ('libero' for 'libero_sim', otherwise no
-    # transform). Pass 'none' to explicitly disable the transform, including for 'libero_sim'.
+    # 可选的具名动作变换，在原始 N1.7 检查点解码之后、env.step() 之前应用。
+    # 'auto'（默认）解析为具身默认值（'libero_sim' 对应 'libero'，其他不做变换）。
+    # 传入 'none' 可显式禁用该变换，对 'libero_sim' 同样有效。
     action_decode_transform: str | None = GROOT_ACTION_DECODE_TRANSFORM_AUTO
 
-    # Embodiment tag to use for training (e.g. 'new_embodiment', 'gr1')
+    # 训练时使用的具身标签（例如 'new_embodiment'、'gr1'）
     embodiment_tag: str = "new_embodiment"
 
-    # Fine-tuning control arguments
+    # 微调控制参数
 
-    # Whether to fine-tune the llm backbone
+    # 是否微调 llm 主干
     tune_llm: bool = False
 
-    # Whether to fine-tune the vision tower
+    # 是否微调视觉塔
     tune_visual: bool = False
 
-    # Whether to fine-tune the projector
+    # 是否微调投影器
     tune_projector: bool = True
 
-    # Whether to fine-tune the diffusion model
+    # 是否微调扩散模型
     tune_diffusion_model: bool = True
 
-    # Whether to fine-tune the VL LayerNorm + VL self-attention projector in the action head.
+    # 是否微调动作头中的 VL LayerNorm + VL 自注意力投影器。
     tune_vlln: bool = True
 
-    # Number of top LLM backbone layers to fine-tune (0 = none). Lets you adapt just the final
-    # language layers without unfreezing the whole backbone; independent of `tune_llm`, which tunes
-    # the entire LLM.
+    # 要微调的 LLM 主干顶层数量（0 = 不微调）。允许只调整最后的语言层，
+    # 而不解冻整个主干；与 `tune_llm` 相互独立，后者会调整整个 LLM。
     tune_top_llm_layers: int = 0
 
-    # Inference-time knob: Number of flow-matching denoising steps used to decode an action chunk.
-    # Trades inference latency for action quality.
-    # None keeps the checkpoint value (GR00T N1.7 default: 4).
+    # 推理时参数：用于解码动作块的 flow-matching 去噪步数。
+    # 在推理延迟与动作质量之间权衡。
+    # None 表示保留检查点中的值（GR00T N1.7 默认：4）。
     num_inference_timesteps: int | None = None
 
-    # Inference-time knob: Real-Time Chunking (RTC) overlap-blend ramp rate, used when the RTC engine
-    # supplies a previous-chunk prefix. Higher values blend the overlapping prefix more aggressively.
-    # None keeps the checkpoint value (GR00T N1.7 default: 6.0).
+    # 推理时参数：实时分块（RTC）重叠混合的渐变率，在 RTC 引擎提供
+    # 上一块前缀时使用。值越大，对重叠前缀的混合越激进。
+    # None 表示保留检查点中的值（GR00T N1.7 默认：6.0）。
     rtc_ramp_rate: float | None = None
 
-    # Inference-time knob: Whether to request the flash-attention-2 kernel for the Qwen3-VL backbone.
-    # flash-attn is an optional, user-managed optimization; when it is absent (the default),
-    # the backbone transparently falls back to SDPA, which is numerically equivalent.
-    # Set to True only after installing a flash-attn build matching your torch/CUDA env.
+    # 推理时参数：是否为 Qwen3-VL 主干请求 flash-attention-2 核。
+    # flash-attn 是可选的、由用户自行管理的优化；当它不存在时（默认情况），
+    # 主干会透明地回退到数值等价的 SDPA。
+    # 只有在安装了与你的 torch/CUDA 环境匹配的 flash-attn 构建后才设为 True。
     use_flash_attention: bool = False
 
-    # Enable GR00T-style state-relative action chunks (action chunk expressed relative to the current
-    # observation state).
+    # 启用 GR00T 风格的状态相对动作块（动作块以当前观测状态为参照表达）。
     use_relative_actions: bool = False
 
-    # relative_exclude_joints names the action dimensions that stay absolute; the
-    # match is substring/case-insensitive against the dataset action feature names. With the empty
-    # default every dimension is treated as relative, including the gripper -- set e.g. ["gripper"] to
-    # keep the gripper absolute, matching the Isaac-GR00T single-arm + absolute-gripper convention.
+    # relative_exclude_joints 指定保持绝对值的动作维度；匹配方式为
+    # 针对数据集动作特征名的子串匹配且大小写不敏感。默认为空时，所有维度
+    # 都被视为相对值（包括夹爪）——例如设为 ["gripper"] 可让夹爪保持绝对值，
+    # 与 Isaac-GR00T 的单臂 + 绝对夹爪约定一致。
     relative_exclude_joints: list[str] = field(default_factory=list)
 
-    # Training parameters
+    # 训练参数
     optimizer_lr: float = 1e-4
-    # Isaac-GR00T N1.7 fine-tunes with AdamW betas (0.9, 0.999).
+    # Isaac-GR00T N1.7 微调使用 AdamW，betas 为 (0.9, 0.999)。
     optimizer_betas: tuple[float, float] = (0.9, 0.999)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 1e-5
     warmup_ratio: float = 0.05
     use_bf16: bool = True
-    # The native N1.7 fine-tuning recipe keeps model parameters in FP32 and computes under BF16 autocast.
+    # 原生 N1.7 微调方案将模型参数保持为 FP32，并在 BF16 autocast 下计算。
     model_params_fp32: bool = True
 
-    # TODO(Steven): Remove these deprecated fields in a future release.
-    # Deprecated Isaac-GR00T runner / GR00T N1.5 fields, plus the (never-wired) LoRA fields — all
-    # unused by the LeRobot N1.7 implementation except the `tokenizer_assets_repo` N1.5 tripwire and
-    # the `image_size` legacy remap in __post_init__. They are kept ONLY so a config.json saved by an
-    # earlier lerobot release (notably a GR00T N1.5 checkpoint) still parses under draccus — which
-    # rejects unknown fields — and is then rejected with a clear N1.5 removal message rather than an
-    # opaque draccus decoding error.
-    image_size: tuple[int, int] = (256, 256)  # image sizing is handled by the backbone's image processor.
+    # TODO(Steven)：在未来的版本中移除这些已弃用的字段。
+    # 已弃用的 Isaac-GR00T runner / GR00T N1.5 字段，以及（从未接线的）LoRA 字段——
+    # 除 `tokenizer_assets_repo` 的 N1.5 绊线检测和 __post_init__ 中 `image_size` 的
+    # 旧值重映射外，LeRobot 的 N1.7 实现均不使用它们。保留它们只是为了让早期
+    # lerobot 版本保存的 config.json（尤其是 GR00T N1.5 检查点）仍能被 draccus 解析
+    # ——它会拒绝未知字段——随后以清晰的 N1.5 移除提示拒绝，而不是抛出
+    # 难以理解的 draccus 解码错误。
+    image_size: tuple[int, int] = (256, 256)  # 图像尺寸调整由主干的图像处理器处理。
     tokenizer_assets_repo: str | None = None
     lora_rank: int = 0
     lora_alpha: int = 16
@@ -382,23 +383,23 @@ class GrootConfig(PreTrainedConfig):
         if self.base_model_path is None:
             self.base_model_path = GROOT_N1_7_BASE_MODEL
 
-        # The N1.7 LIBERO checkpoints emit a [0, 1] gripper action, but the LIBERO
-        # simulator expects the OpenVLA/[-1, 1] sign convention. NVIDIA's rollout
-        # wrapper applies this conversion; mirror it here so eval on the
-        # 'libero_sim' embodiment grasps correctly instead of scoring 0% success.
-        # This matches the embodiment-specific handling already done for the
-        # action execution horizon (see infer_groot_n1_7_action_execution_horizon).
-        # Only the 'auto' sentinel resolves to the embodiment default; an explicit
-        # 'none' (normalized to None above) keeps the transform disabled.
+        # N1.7 LIBERO 检查点输出的夹爪动作范围为 [0, 1]，但 LIBERO
+        # 仿真器期望的是 OpenVLA/[-1, 1] 的符号约定。NVIDIA 的 rollout
+        # 封装会应用这一转换；这里照搬该做法，使在 'libero_sim' 具身上的
+        # 评估能够正确抓取，而不是得到 0% 的成功率。
+        # 这与针对动作执行范围已经做的具身特定处理一致
+        # （见 infer_groot_n1_7_action_execution_horizon）。
+        # 只有 'auto' 哨兵值会解析为具身默认值；显式的 'none'
+        # （上面已归一化为 None）会保持该变换处于禁用状态。
         if self.action_decode_transform == GROOT_ACTION_DECODE_TRANSFORM_AUTO:
             self.action_decode_transform = (
                 GROOT_ACTION_DECODE_TRANSFORM_LIBERO if self.embodiment_tag == "libero_sim" else None
             )
 
-        # GR00T N1.5-era default values (e.g. --policy.chunk_size=50 from old commands or
-        # stale configs) are migrated to the values the N1.7 checkpoints expect, with a
-        # warning. The dataclass defaults are already the N1.7 values, so a plain
-        # GrootConfig() never triggers this.
+        # GR00T N1.5 时代的默认值（例如来自旧命令或过期配置的
+        # --policy.chunk_size=50）会被迁移为 N1.7 检查点所期望的值，并给出警告。
+        # dataclass 的默认值已经是 N1.7 的值，因此普通的
+        # GrootConfig() 永远不会触发此逻辑。
         legacy_default_remaps = (
             ("max_state_dim", 64, 132),
             ("max_action_dim", 32, 132),
@@ -439,7 +440,7 @@ class GrootConfig(PreTrainedConfig):
             )
 
     def validate_features(self) -> None:
-        """Validate and set up input/output features for Groot."""
+        """校验并设置 Groot 的输入/输出特征。"""
         image_features = [key for key, feat in self.input_features.items() if feat.type == FeatureType.VISUAL]
         if not image_features:
             raise ValueError(
@@ -478,7 +479,7 @@ class GrootConfig(PreTrainedConfig):
                 )
 
     def get_optimizer_preset(self) -> AdamWConfig:
-        """Return optimizer configuration."""
+        """返回优化器配置。"""
         return AdamWConfig(
             lr=self.optimizer_lr,
             betas=self.optimizer_betas,
@@ -488,12 +489,12 @@ class GrootConfig(PreTrainedConfig):
         )
 
     def get_scheduler_preset(self) -> DiffuserSchedulerConfig:
-        """Return scheduler configuration.
+        """返回调度器配置。
 
-        Isaac-GR00T uses the HF Trainer cosine schedule with ~5% warmup over the
-        actual training update count; DiffuserSchedulerConfig wraps the same
-        diffusers/transformers `get_scheduler("cosine")` implementation and
-        derives num_training_steps from the outer --steps value at runtime.
+        Isaac-GR00T 使用 HF Trainer 的 cosine 调度，并基于实际训练更新次数
+        进行约 5% 的预热；DiffuserSchedulerConfig 封装了相同的
+        diffusers/transformers `get_scheduler("cosine")` 实现，并在运行时
+        从外层的 --steps 值推导 num_training_steps。
         """
         return DiffuserSchedulerConfig(
             name="cosine",
@@ -502,12 +503,12 @@ class GrootConfig(PreTrainedConfig):
 
     @property
     def observation_delta_indices(self) -> None:
-        """Return indices for delta observations (None for Groot)."""
+        """返回增量观测的索引（Groot 为 None）。"""
         return None
 
     @property
     def action_delta_indices(self) -> list[int]:
-        """Return indices for delta actions."""
+        """返回增量动作的索引。"""
         model_action_horizon = (
             infer_groot_n1_7_action_horizon(self.base_model_path, self.embodiment_tag) or 40
         )
@@ -515,10 +516,10 @@ class GrootConfig(PreTrainedConfig):
 
     @property
     def drop_n_last_frames(self) -> int:
-        """Exclude episode tails that cannot supply a complete N1.7 action chunk."""
+        """排除无法提供完整 N1.7 动作块的回合尾部。"""
         return max(0, len(self.action_delta_indices) - 1)
 
     @property
     def reward_delta_indices(self) -> None:
-        """Return indices for delta rewards (None for Groot)."""
+        """返回增量奖励的索引（Groot 为 None）。"""
         return None

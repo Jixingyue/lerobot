@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Wall-X Constants and Configuration Data.
+Wall-X 常量与配置数据。
 """
 
 CAMERA_NAME_MAPPING = {
@@ -30,7 +30,7 @@ CAMERA_NAME_MAPPING = {
 
 RESOLUTION = 256
 
-# Parameters for preprocessing
+# 预处理参数
 MAX_PIXELS = 16384 * 28 * 28
 MIN_PIXELS = 4 * 28 * 28
 IMAGE_FACTOR = 28

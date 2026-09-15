@@ -23,7 +23,7 @@ from ..so_leader import SOLeaderConfig
 @TeleoperatorConfig.register_subclass("bi_so_leader")
 @dataclass
 class BiSOLeaderConfig(TeleoperatorConfig):
-    """Configuration class for Bi SO Leader teleoperators."""
+    """双臂 SO Leader 遥操作设备的配置类。"""
 
     left_arm_config: SOLeaderConfig
     right_arm_config: SOLeaderConfig

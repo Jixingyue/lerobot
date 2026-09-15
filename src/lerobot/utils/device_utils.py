@@ -21,7 +21,7 @@ import torch
 
 
 def auto_select_torch_device() -> torch.device:
-    """Tries to select automatically a torch device."""
+    """尝试自动选择一个 torch 设备。"""
     if torch.cuda.is_available():
         logging.info("Cuda backend detected, using cuda.")
         return torch.device("cuda")
@@ -36,14 +36,14 @@ def auto_select_torch_device() -> torch.device:
         return torch.device("cpu")
 
 
-# TODO(Steven): Remove log. log shouldn't be an argument, this should be handled by the logger level
+# TODO(Steven): 移除 log。log 不应作为参数，这应该由 logger 级别来处理
 def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
-    """Given a string, return a torch.device with checks on whether the device is available.
+    """给定一个字符串，返回一个 torch.device，并检查该设备是否可用。
 
-    Raises:
-        ValueError: If the requested device family is known but not available on
-            this machine (``AssertionError`` was previously used and is easy to
-            mistake for a programmer bug under ``python -O`` where asserts vanish).
+    抛出异常：
+        ValueError：当请求的设备类别已知但在本机不可用时
+            （此前使用 ``AssertionError``，但在 ``python -O`` 下断言会消失，
+            容易被误认为是程序员的 bug）。
     """
     try_device = str(try_device)
     if try_device.startswith("cuda"):
@@ -70,12 +70,12 @@ def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
 
 
 def resolve_safetensors_device(map_location: str | torch.device) -> str:
-    """Resolve a device string for a safetensors load, working around a device-mapping quirk.
+    """为 safetensors 加载解析设备字符串，绕开一个设备映射的怪癖。
 
-    safetensors' load maps the bare string "cuda" to cuda:0 regardless of the current device
-    (unlike torch's .to("cuda"), which honors torch.cuda.current_device()). Under multi-GPU
-    accelerate/FSDP every rank would then load its weights onto GPU 0, OOMing it before sharding.
-    Resolve "cuda" to the concrete current-device index so each rank loads onto its own GPU.
+    safetensors 的加载会把裸字符串 "cuda" 映射到 cuda:0，而不管当前设备是什么
+    （不像 torch 的 .to("cuda") 会遵循 torch.cuda.current_device()）。在多 GPU 的
+    accelerate/FSDP 下，每个 rank 都会把权重加载到 GPU 0 上，在分片之前就把它撑爆。
+    将 "cuda" 解析为具体的当前设备索引，使每个 rank 加载到自己的 GPU 上。
     """
     map_location = str(map_location)
     if map_location == "cuda" and torch.cuda.is_available():
@@ -85,7 +85,7 @@ def resolve_safetensors_device(map_location: str | torch.device) -> str:
 
 def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
     """
-    mps is currently not compatible with float64
+    mps 目前与 float64 不兼容
     """
     if isinstance(device, torch.device):
         device = device.type
@@ -94,9 +94,9 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
     if device == "xpu" and dtype == torch.float64:
         if hasattr(torch.xpu, "get_device_capability"):
             device_capability = torch.xpu.get_device_capability()
-            # NOTE: Some Intel XPU devices do not support double precision (FP64).
-            # The `has_fp64` flag is returned by `torch.xpu.get_device_capability()`
-            # when available; if False, we fall back to float32 for compatibility.
+            # 注意：部分 Intel XPU 设备不支持双精度（FP64）。
+            # `has_fp64` 标志由 `torch.xpu.get_device_capability()`
+            # 在可用时返回；若为 False，为兼容性回退到 float32。
             if not device_capability.get("has_fp64", False):
                 logging.warning(f"Device {device} does not support float64, using float32 instead.")
                 return torch.float32
@@ -111,7 +111,7 @@ def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
 
 
 def is_torch_device_available(try_device: str) -> bool:
-    try_device = str(try_device)  # Ensure try_device is a string
+    try_device = str(try_device)  # 确保 try_device 是字符串
     if try_device.startswith("cuda"):
         return torch.cuda.is_available()
     elif try_device == "mps":
@@ -134,15 +134,15 @@ def is_amp_available(device: str):
 
 
 def get_autocast_context(device_type: str, dtype: torch.dtype = torch.bfloat16):
-    """Return a device-safe autocast context manager.
+    """返回一个设备安全的 autocast 上下文管理器。
 
-    A hardcoded `torch.autocast(dtype=torch.bfloat16)` breaks on backends without AMP (MPS) and
-    misbehaves on pre-Ampere CUDA. Instead:
-      - no AMP support (e.g. mps): `nullcontext()`, i.e. the tensors' native dtype
-      - CPU with a dtype its autocast does not implement (notably float32): `nullcontext()`, since
-        `torch.autocast` would accept it and then warn-and-disable on every call
-      - CUDA asking for bf16 on compute capability < 8.0: fall back to fp16
-      - otherwise: `torch.autocast(device_type, dtype)`
+    硬编码的 `torch.autocast(dtype=torch.bfloat16)` 在没有 AMP 的后端（MPS）上会报错，
+    在 Ampere 之前的 CUDA 上也会行为异常。因此改为：
+      - 不支持 AMP（例如 mps）：`nullcontext()`，即使用张量的原生 dtype
+      - CPU 且 dtype 是其 autocast 未实现的（尤其是 float32）：`nullcontext()`，因为
+        `torch.autocast` 会接受它，然后在每次调用时发出警告并禁用
+      - CUDA 在计算能力 < 8.0 时请求 bf16：回退到 fp16
+      - 其他情况：`torch.autocast(device_type, dtype)`
     """
     if not is_amp_available(device_type):
         return nullcontext()

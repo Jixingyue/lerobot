@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Provides the RealSenseCamera class for capturing frames from Intel RealSense cameras.
+提供 RealSenseCamera 类，用于从 Intel RealSense 相机捕获帧。
 """
 
 import logging
@@ -22,9 +22,9 @@ import time
 from threading import Event, Lock, Thread
 from typing import TYPE_CHECKING, Any
 
-import cv2  # type: ignore  # TODO: add type stubs for OpenCV
-import numpy as np  # type: ignore  # TODO: add type stubs for numpy
-from numpy.typing import NDArray  # type: ignore  # TODO: add type stubs for numpy.typing
+import cv2  # type: ignore  # TODO: 为 OpenCV 添加类型存根
+import numpy as np  # type: ignore  # TODO: 为 numpy 添加类型存根
+from numpy.typing import NDArray  # type: ignore  # TODO: 为 numpy.typing 添加类型存根
 
 from lerobot.utils.import_utils import _pyrealsense2_available, require_package
 
@@ -47,79 +47,79 @@ pkg_name = "pyrealsense2-macosx" if sys.platform == "darwin" else "pyrealsense2"
 
 class RealSenseCamera(Camera):
     """
-    Manages interactions with Intel RealSense cameras for frame and depth recording.
+    管理与 Intel RealSense 相机的交互，用于记录帧和深度。
 
-    This class provides an interface similar to `OpenCVCamera` but tailored for
-    RealSense devices, leveraging the `pyrealsense2` library. It uses the camera's
-    unique serial number for identification, offering more stability than device
-    indices, especially on Linux. It also supports capturing depth maps alongside
-    color frames.
+    该类提供了与 `OpenCVCamera` 类似的接口，但专为
+    RealSense 设备定制，利用 `pyrealsense2` 库。它使用相机
+    唯一的序列号进行标识，比设备索引更稳定，
+    尤其是在 Linux 上。它还支持在捕获彩色帧的同时
+    捕获深度图。
 
-    Use the provided utility script to find available camera indices and default profiles:
+    使用提供的工具脚本查找可用的相机索引和默认配置：
     ```bash
     lerobot-find-cameras realsense
     ```
 
-    A `RealSenseCamera` instance requires a configuration object specifying the
-    camera's serial number or a unique device name. If using the name, ensure only
-    one camera with that name is connected.
+    `RealSenseCamera` 实例需要一个配置对象，用于指定
+    相机的序列号或唯一的设备名称。如果使用名称，请确保
+    只连接了一个具有该名称的相机。
 
-    The camera's default settings (FPS, resolution, color mode) from the stream
-    profile are used unless overridden in the configuration.
+    除非在配置中覆盖，否则使用流配置中相机的
+    默认设置（FPS、分辨率、颜色模式）。
 
-    Example:
+    示例：
         ```python
         from lerobot.cameras.realsense import RealSenseCamera, RealSenseCameraConfig
         from lerobot.cameras import ColorMode, Cv2Rotation
 
-        # Basic usage with serial number
-        config = RealSenseCameraConfig(serial_number_or_name="0123456789") # Replace with actual SN
+        # 使用序列号的基本用法
+        config = RealSenseCameraConfig(serial_number_or_name="0123456789") # 替换为实际序列号
         camera = RealSenseCamera(config)
         camera.connect()
 
-        # Read 1 frame synchronously (blocking)
+        # 同步读取 1 帧（阻塞）
         color_image = camera.read()
 
-        # Read 1 frame asynchronously (waits for new frame with a timeout)
+        # 异步读取 1 帧（带超时等待新帧）
         async_image = camera.async_read()
 
-        # Get the latest frame immediately (no wait, returns timestamp)
+        # 立即获取最新帧（不等待，返回时间戳）
         latest_image, timestamp = camera.read_latest()
 
-        # Example with depth capture and custom settings
+        # 带深度捕获和自定义设置的示例
         custom_config = RealSenseCameraConfig(
-            serial_number_or_name="0123456789", # Replace with actual SN
+            serial_number_or_name="0123456789", # 替换为实际序列号
             fps=30,
             width=1280,
             height=720,
-            color_mode=ColorMode.BGR, # Request BGR output
+            color_mode=ColorMode.BGR, # 请求 BGR 输出
             rotation=Cv2Rotation.NO_ROTATION,
             use_depth=True
         )
         depth_camera = RealSenseCamera(custom_config)
         depth_camera.connect()
 
-        # Read 1 depth frame
+        # 读取 1 帧深度帧
         depth_map = depth_camera.read_depth()
 
-        # Example using a unique camera name
-        name_config = RealSenseCameraConfig(serial_number_or_name="Intel RealSense D435") # If unique
+        # 使用唯一相机名称的示例
+        name_config = RealSenseCameraConfig(serial_number_or_name="Intel RealSense D435") # 如果名称唯一
         name_camera = RealSenseCamera(name_config)
-        # ... connect, read, disconnect ...
+        # ... 连接、读取、断开 ...
         ```
     """
 
-    # Maximum number of warmup attempts made by connect(). A failed attempt is first
-    # retried with a plain pipeline stop/start, which is usually enough to recover the
-    # stream; a USB hardware reset is performed before the final attempt as a last resort.
+    # connect() 执行的最大预热尝试次数。失败的尝试首先
+    # 通过简单的 pipeline 停止/启动来重试，这通常足以恢复
+    # 流；作为最后手段，在最终尝试前执行 USB 硬件复位。
     _MAX_CONNECT_ATTEMPTS = 3
 
     def __init__(self, config: RealSenseCameraConfig):
         """
-        Initializes the RealSenseCamera instance.
+        初始化 RealSenseCamera 实例。
 
-        Args:
-            config: The configuration settings for the camera.
+        参数：
+            config: 相机的配置项。
         """
         require_package(pkg_name, extra="intelrealsense", import_name="pyrealsense2")
         super().__init__(config)
@@ -164,7 +164,7 @@ class RealSenseCamera(Camera):
         return f"{self.__class__.__name__}({self.serial_number})"
 
     def _reset_connection_settings(self) -> None:
-        """Restore settings that may have been auto-detected during a failed connection."""
+        """恢复可能在连接失败期间被自动检测到的设置。"""
         self.fps = self.config.fps
         self.width = self.config.width
         self.height = self.config.height
@@ -175,11 +175,11 @@ class RealSenseCamera(Camera):
 
     @property
     def is_connected(self) -> bool:
-        """Checks if the camera pipeline is started and streams are active."""
+        """检查相机 pipeline 是否已启动且流是否处于活动状态。"""
         return self.rs_pipeline is not None and self.rs_profile is not None
 
     def _hardware_reset(self, wait_s: float = 5.0) -> None:
-        """Issue a USB hardware reset to recover an unresponsive device (common on D405)."""
+        """发出 USB 硬件复位以恢复无响应的设备（在 D405 上常见）。"""
         context = rs.context()
         for device in context.query_devices():
             if device.get_info(rs.camera_info.serial_number) == self.serial_number:
@@ -190,13 +190,13 @@ class RealSenseCamera(Camera):
         logger.warning(f"{self} device not found for hardware reset, skipping.")
 
     def _open_pipeline(self) -> None:
-        """Initializes the RealSense pipeline, starts it, and starts the background read thread.
+        """初始化 RealSense pipeline，启动它，并启动后台读取线程。
 
-        Raises:
-            ValueError: If the configuration is invalid, a requested sensor option is unsupported,
-                or a requested sensor value is invalid.
-            ConnectionError: If the camera is found but fails to start the pipeline or no RealSense devices are detected at all.
-            RuntimeError: If the pipeline starts but fails to apply requested settings.
+        异常：
+            ValueError: 如果配置无效、请求的传感器选项不受支持，
+                或请求的传感器值无效。
+            ConnectionError: 如果找到了相机但无法启动 pipeline，或完全未检测到 RealSense 设备。
+            RuntimeError: 如果 pipeline 启动但未能应用请求的设置。
         """
         rs_pipeline = rs.pipeline()
         rs_config = rs.config()
@@ -221,12 +221,12 @@ class RealSenseCamera(Camera):
             raise
 
     def _run_warmup(self) -> None:
-        """Blocks until at least one valid frame has been captured by the background thread.
+        """阻塞直到后台线程至少捕获到一个有效帧。
 
-        Raises:
-            ConnectionError: If no frame arrives before ``warmup_s`` elapses.
+        异常：
+            ConnectionError: 如果在 ``warmup_s`` 结束前没有帧到达。
         """
-        # NOTE(Steven/Caroline): Enforcing at least one second of warmup as RS cameras need a bit of time before the first read. If we don't wait, the first read from the warmup will raise.
+        # 注意(Steven/Caroline)：强制至少一秒的预热，因为 RS 相机在第一次读取前需要一点时间。如果不等待，预热的第一次读取会抛出异常。
         self.warmup_s = max(self.warmup_s, 1)
 
         warmup_read = self.async_read if self.use_rgb else self.async_read_depth
@@ -241,7 +241,7 @@ class RealSenseCamera(Camera):
                 raise ConnectionError(f"{self} failed to capture frames during warmup.")
 
     def _release_after_failed_setup(self) -> None:
-        """Releases the device handle and restores auto-detected settings after a failed attempt."""
+        """在失败的尝试后释放设备句柄并恢复自动检测到的设置。"""
         try:
             self._cleanup_resources()
         except Exception:
@@ -251,24 +251,24 @@ class RealSenseCamera(Camera):
     @check_if_already_connected
     def connect(self, warmup: bool = True) -> None:
         """
-        Connects to the RealSense camera specified in the configuration.
+        连接到配置中指定的 RealSense 相机。
 
-        Initializes the RealSense pipeline, configures the required streams (color
-        and optionally depth), starts the pipeline, and validates the actual stream settings.
+        初始化 RealSense pipeline，配置所需的流（彩色流
+        以及可选的深度流），启动 pipeline，并验证实际的流设置。
 
-        If the pipeline starts but no frames arrive during warmup, retries up to
-        ``_MAX_CONNECT_ATTEMPTS`` times, performing a USB hardware reset before the
-        final attempt.
+        如果 pipeline 启动但预热期间没有帧到达，最多重试
+        ``_MAX_CONNECT_ATTEMPTS`` 次，并在最终尝试前
+        执行 USB 硬件复位。
 
-        Args:
-            warmup (bool): If True, waits at connect() time until at least one valid frame
-                           has been captured by the background thread. Defaults to True.
+        参数：
+            warmup (bool): 如果为 True，在 connect() 时等待，直到后台线程
+                           至少捕获到一个有效帧。默认为 True。
 
-        Raises:
-            DeviceAlreadyConnectedError: If the camera is already connected.
-            ValueError: If the configuration is invalid (e.g., missing serial/name, name not unique).
-            ConnectionError: If the camera is found but fails to start the pipeline or no RealSense devices are detected at all.
-            RuntimeError: If the pipeline starts but fails to apply requested settings.
+        异常：
+            DeviceAlreadyConnectedError: 如果相机已连接。
+            ValueError: 如果配置无效（如缺少序列号/名称、名称不唯一）。
+            ConnectionError: 如果找到了相机但无法启动 pipeline，或完全未检测到 RealSense 设备。
+            RuntimeError: 如果 pipeline 启动但未能应用请求的设置。
         """
 
         if not warmup:
@@ -307,16 +307,16 @@ class RealSenseCamera(Camera):
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:
         """
-        Detects available Intel RealSense cameras connected to the system.
+        检测连接到系统的可用 Intel RealSense 相机。
 
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries,
-            where each dictionary contains 'type', 'id' (serial number), 'name',
-            firmware version, USB type, and other available specs, and the default profile properties (width, height, fps, format).
+        返回：
+            List[Dict[str, Any]]: 一个字典列表，
+            每个字典包含 'type'、'id'（序列号）、'name'、
+            固件版本、USB 类型及其他可用规格，以及默认配置属性（width、height、fps、format）。
 
-        Raises:
-            OSError: If pyrealsense2 is not installed.
-            ImportError: If pyrealsense2 is not installed.
+        异常：
+            OSError: 如果未安装 pyrealsense2。
+            ImportError: 如果未安装 pyrealsense2。
         """
         found_cameras_info = []
         context = rs.context()
@@ -334,7 +334,7 @@ class RealSenseCamera(Camera):
                 "product_line": device.get_info(rs.camera_info.product_line),
             }
 
-            # Get stream profiles for each sensor
+            # 获取每个传感器的流配置
             sensors = device.query_sensors()
             for sensor in sensors:
                 profiles = sensor.get_stream_profiles()
@@ -356,7 +356,7 @@ class RealSenseCamera(Camera):
         return found_cameras_info
 
     def _find_serial_number_from_name(self, name: str) -> str:
-        """Finds the serial number for a given unique camera name."""
+        """根据给定的唯一相机名称查找序列号。"""
         camera_infos = self.find_cameras()
         found_devices = [cam for cam in camera_infos if str(cam["name"]) == name]
 
@@ -377,7 +377,7 @@ class RealSenseCamera(Camera):
         return serial_number
 
     def _configure_rs_pipeline_config(self, rs_config: Any) -> None:
-        """Creates and configures the RealSense pipeline configuration object."""
+        """创建并配置 RealSense pipeline 配置对象。"""
         rs.config.enable_device(rs_config, self.serial_number)
 
         if self.width and self.height and self.fps:
@@ -397,14 +397,14 @@ class RealSenseCamera(Camera):
 
     @check_if_not_connected
     def _configure_capture_settings(self) -> None:
-        """Sets fps, width, and height from device stream if not already configured.
+        """如果尚未配置，则从设备流中设置 fps、width 和 height。
 
-        Uses the color stream profile (or the depth stream profile when the color
-        stream is disabled) to update unset attributes. Handles rotation by swapping
-        width/height when needed. Original capture dimensions are always stored.
+        使用彩色流配置（或在彩色流被禁用时使用深度流配置）
+        来更新未设置的属性。通过在需要时交换
+        宽度/高度来处理旋转。始终存储原始捕获尺寸。
 
-        Raises:
-            DeviceNotConnectedError: If device is not connected.
+        异常：
+            DeviceNotConnectedError: 如果设备未连接。
         """
 
         if self.rs_profile is None:
@@ -427,7 +427,7 @@ class RealSenseCamera(Camera):
                 self.capture_width, self.capture_height = actual_width, actual_height
 
     def _read(self, read_depth: bool = False) -> NDArray[Any]:
-        """Shared helper for :meth:`read`/:meth:`read_depth`: wait for a fresh color or depth frame."""
+        """:meth:`read`/:meth:`read_depth` 的共享辅助方法：等待一个新鲜的彩色帧或深度帧。"""
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
 
@@ -435,12 +435,12 @@ class RealSenseCamera(Camera):
         return self._async_read(timeout_ms=10000, read_depth=read_depth)
 
     def _get_color_sensor(self) -> "rs.sensor":
-        """Returns the dedicated "RGB Camera" sensor that controls the color stream.
+        """返回控制彩色流的专用 "RGB Camera" 传感器。
 
-        Manual color controls are only applied to a dedicated RGB module. Cameras
-        without one (e.g. the D405, whose color stream comes from the shared
-        "Stereo Module") are unsupported, so we never fall back to another sensor
-        to avoid altering the depth stream.
+        手动彩色控制仅应用于专用的 RGB 模块。没有该模块的相机
+        （如 D405，其彩色流来自共享的
+        "Stereo Module"）不受支持，因此我们绝不回退到其他传感器，
+        以避免影响深度流。
         """
         if self.rs_profile is None:
             raise RuntimeError(f"{self}: rs_profile must be initialized before use.")
@@ -458,7 +458,7 @@ class RealSenseCamera(Camera):
         )
 
     def _set_sensor_option(self, sensor: "rs.sensor", option: "rs.option", value: float, label: str) -> None:
-        """Sets a sensor option, re-raising range errors with actionable diagnostics."""
+        """设置传感器选项，在范围错误时重新抛出并附带可操作的诊断信息。"""
         try:
             sensor.set_option(option, value)
         except Exception as e:
@@ -476,16 +476,16 @@ class RealSenseCamera(Camera):
             ) from e
 
     def _configure_sensor_options(self) -> None:
-        """Applies manual sensor options (exposure, gain, white balance) to the color sensor.
+        """将手动传感器选项（曝光、增益、白平衡）应用到彩色传感器。
 
-        When exposure or gain is set, auto-exposure is disabled first. When white_balance
-        is set, auto white balance is disabled first. An omitted option is left unchanged,
-        and configuration is skipped entirely if all options are omitted.
+        当设置了 exposure 或 gain 时，会先禁用自动曝光。当设置了
+        white_balance 时，会先禁用自动白平衡。省略的选项保持不变，
+        如果所有选项都被省略，则完全跳过配置。
 
-        Raises:
-            ValueError: If the sensor does not support a requested option or a requested
-                value is invalid. Invalid-value errors include the option name, requested
-                value, and supported range when available.
+        异常：
+            ValueError: 如果传感器不支持请求的选项，或请求的
+                值无效。无效值错误会包含选项名称、请求的
+                值以及可用时的支持范围。
         """
         if self.exposure is None and self.gain is None and self.white_balance is None:
             return
@@ -545,18 +545,18 @@ class RealSenseCamera(Camera):
     @check_if_not_connected
     def read_depth(self, timeout_ms: int = 200) -> NDArray[Any]:
         """
-        Reads a single frame (depth) synchronously from the camera.
+        以同步方式从相机读取单帧（深度）。
 
-        This is a blocking call. It waits for a coherent set of frames (depth)
-        from the camera hardware via the RealSense pipeline.
+        这是一个阻塞调用。它通过 RealSense pipeline 等待来自
+        相机硬件的一组一致的帧（深度）。
 
-        Returns:
-            np.ndarray: The depth map as a NumPy array (height, width, 1)
-                  of type `np.uint16` (raw depth values in millimeters).
+        返回：
+            np.ndarray: 深度图（NumPy 数组），形状为 (height, width, 1)，
+                  类型为 `np.uint16`（原始深度值，单位为毫米）。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If reading frames from the pipeline fails or frames are invalid.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果从 pipeline 读取帧失败或帧无效。
         """
         if timeout_ms:
             logger.warning(
@@ -584,19 +584,19 @@ class RealSenseCamera(Camera):
     @check_if_not_connected
     def read(self, color_mode: ColorMode | None = None, timeout_ms: int = 0) -> NDArray[Any]:
         """
-        Reads a single frame (color) synchronously from the camera.
+        以同步方式从相机读取单帧（彩色）。
 
-        This is a blocking call. It waits for a coherent set of frames (color)
-        from the camera hardware via the RealSense pipeline.
+        这是一个阻塞调用。它通过 RealSense pipeline 等待来自
+        相机硬件的一组一致的帧（彩色）。
 
-        Returns:
-            np.ndarray: The captured color frame as a NumPy array
-              (height, width, channels), processed according to `color_mode` and rotation.
+        返回：
+            np.ndarray: 捕获的彩色帧（NumPy 数组），
+              形状为 (height, width, channels)，已按 `color_mode` 和旋转处理。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If reading frames from the pipeline fails or frames are invalid.
-            ValueError: If an invalid `color_mode` is requested.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果从 pipeline 读取帧失败或帧无效。
+            ValueError: 如果请求了无效的 `color_mode`。
         """
 
         start_time = time.perf_counter()
@@ -623,18 +623,18 @@ class RealSenseCamera(Camera):
 
     def _postprocess_image(self, image: NDArray[Any], depth_frame: bool = False) -> NDArray[Any]:
         """
-        Applies color conversion, dimension validation, and rotation to a raw color frame.
+        对原始彩色帧应用颜色转换、尺寸验证和旋转。
 
-        Args:
-            image (np.ndarray): The raw image frame (expected RGB format from RealSense).
+        参数：
+            image (np.ndarray): 原始图像帧（预期为来自 RealSense 的 RGB 格式）。
 
-        Returns:
-            np.ndarray: The processed image frame according to `self.color_mode` and `self.rotation`.
+        返回：
+            np.ndarray: 按 `self.color_mode` 和 `self.rotation` 处理后的图像帧。
 
-        Raises:
-            ValueError: If the requested `color_mode` is invalid.
-            RuntimeError: If the raw frame dimensions do not match the configured
-                          `width` and `height`.
+        异常：
+            ValueError: 如果请求的 `color_mode` 无效。
+            RuntimeError: 如果原始帧的尺寸与配置的
+                          `width` 和 `height` 不匹配。
         """
 
         if self.color_mode and self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
@@ -666,14 +666,14 @@ class RealSenseCamera(Camera):
 
     def _read_loop(self) -> None:
         """
-        Internal loop run by the background thread for asynchronous reading.
+        后台线程运行的内部循环，用于异步读取。
 
-        On each iteration:
-        1. Reads a color/depth frame (blocking call with 10s timeout)
-        2. Stores result in latest_color_frame/latest_depth_frame and updates timestamp (thread-safe)
-        3. Sets new_frame_event to notify listeners
+        每次迭代：
+        1. 读取一个彩色/深度帧（阻塞调用，10 秒超时）
+        2. 将结果存入 latest_color_frame/latest_depth_frame 并更新时间戳（线程安全）
+        3. 设置 new_frame_event 以通知监听者
 
-        Stops on DeviceNotConnectedError, logs other errors and continues.
+        遇到 DeviceNotConnectedError 时停止，记录其他错误并继续。
         """
         stop_event = self.stop_event
         if stop_event is None:
@@ -699,7 +699,7 @@ class RealSenseCamera(Camera):
                 capture_time = time.perf_counter()
 
                 with self.frame_lock:
-                    # Under the lock, so a late frame cannot resurrect the buffer _stop_read_thread() cleared.
+                    # 在锁内执行，这样迟到的帧不会复活已被 _stop_read_thread() 清空的缓冲区。
                     if stop_event.is_set():
                         break
                     if self.use_rgb:
@@ -720,7 +720,7 @@ class RealSenseCamera(Camera):
                     raise RuntimeError(f"{self} exceeded maximum consecutive read failures.") from e
 
     def _start_read_thread(self) -> None:
-        """Starts or restarts the background read thread if it's not running."""
+        """如果后台读取线程未运行，则启动或重启它。"""
         self._stop_read_thread()
 
         self.stop_event = Event()
@@ -729,7 +729,7 @@ class RealSenseCamera(Camera):
         self.thread.start()
 
     def _stop_read_thread(self) -> None:
-        """Signals the background read thread to stop and waits for it to join."""
+        """通知后台读取线程停止，并等待其结束。"""
         if self.stop_event is not None:
             self.stop_event.set()
 
@@ -748,7 +748,7 @@ class RealSenseCamera(Camera):
             self.new_frame_event.clear()
 
     def _cleanup_resources(self) -> None:
-        """Stop background reads and stop the pipeline, including after partial setup."""
+        """停止后台读取并停止 pipeline，包括在部分设置完成后的清理。"""
         read_thread = self.thread
         rs_pipeline = self.rs_pipeline
 
@@ -761,15 +761,15 @@ class RealSenseCamera(Camera):
                 if rs_pipeline is not None:
                     rs_pipeline.stop()
             finally:
-                # Stopping the pipeline may unblock a hardware read that outlived
-                # the first bounded join in _stop_read_thread().
+                # 停止 pipeline 可能会解除一个硬件读取的阻塞，该读取可能
+                # 在 _stop_read_thread() 中第一次有限 join 之后仍然存活。
                 if read_thread is not None and read_thread.is_alive():
                     read_thread.join(timeout=2.0)
                     if read_thread.is_alive():  # pragma: no cover
                         logger.warning(f"{self} read thread remained alive after stopping the pipeline.")
 
     def _async_read(self, timeout_ms: float, read_depth: bool = False) -> NDArray[Any]:
-        """Shared helper for :meth:`async_read`/:meth:`async_read_depth`: return the latest buffered frame."""
+        """:meth:`async_read`/:meth:`async_read_depth` 的共享辅助方法：返回最新缓冲的帧。"""
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
 
@@ -791,25 +791,25 @@ class RealSenseCamera(Camera):
     @check_if_not_connected
     def async_read(self, timeout_ms: float = 200) -> NDArray[Any]:
         """
-        Reads the latest available frame data (color) asynchronously.
+        以异步方式读取最新可用的帧数据（彩色）。
 
-        This method retrieves the most recent color frame captured by the background
-        read thread. It does not block waiting for the camera hardware directly,
-        but may wait up to timeout_ms for the background thread to provide a frame.
-        It is “best effort” under high FPS.
+        此方法获取后台读取线程捕获的最新彩色帧。
+        它不会直接阻塞等待相机硬件，
+        但可能会等待至多 timeout_ms 让后台线程提供一帧。
+        在高 FPS 下是"尽力而为"的。
 
-        Args:
-            timeout_ms (float): Maximum time in milliseconds to wait for a frame
-                to become available. Defaults to 200ms (0.2 seconds).
+        参数：
+            timeout_ms (float): 等待帧可用的最长时间（毫秒）。
+                默认为 200ms（0.2 秒）。
 
-        Returns:
+        返回：
             np.ndarray:
-            The latest captured frame data (color image), processed according to configuration.
+            最新捕获的帧数据（彩色图像），已按配置处理。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            TimeoutError: If no frame data becomes available within the specified timeout.
-            RuntimeError: If the background thread died unexpectedly or another error occurs.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            TimeoutError: 如果在指定超时内没有帧数据可用。
+            RuntimeError: 如果后台线程意外终止或发生其他错误。
         """
 
         if not self.use_rgb:
@@ -818,7 +818,7 @@ class RealSenseCamera(Camera):
         return self._async_read(timeout_ms=timeout_ms)
 
     def _read_latest(self, max_age_ms: int, read_depth: bool = False) -> NDArray[Any]:
-        """Shared helper for :meth:`read_latest`/:meth:`read_latest_depth`: peek the latest buffered frame."""
+        """:meth:`read_latest`/:meth:`read_latest_depth` 的共享辅助方法：窥视最新缓冲的帧。"""
         if self.thread is None or not self.thread.is_alive():
             raise RuntimeError(f"{self} read thread is not running.")
 
@@ -839,19 +839,19 @@ class RealSenseCamera(Camera):
 
     @check_if_not_connected
     def read_latest(self, max_age_ms: int = 500) -> NDArray[Any]:
-        """Return the most recent (color) frame captured immediately (Peeking).
+        """立即返回最近捕获的（彩色）帧（窥视模式）。
 
-        This method is non-blocking and returns whatever is currently in the
-        memory buffer. The frame may be stale,
-        meaning it could have been captured a while ago (hanging camera scenario e.g.).
+        此方法是非阻塞的，直接返回当前内存缓冲区中的内容。
+        该帧可能已过期，
+        即它可能是很久之前捕获的（例如相机挂起的场景）。
 
-        Returns:
-            NDArray[Any]: The frame image (numpy array).
+        返回：
+            NDArray[Any]: 帧图像（numpy 数组）。
 
-        Raises:
-            TimeoutError: If the latest frame is older than `max_age_ms`.
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If the camera is connected but has not captured any frames yet.
+        异常：
+            TimeoutError: 如果最新帧的年龄超过 `max_age_ms`。
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果相机已连接但尚未捕获任何帧。
         """
         if not self.use_rgb:
             raise RuntimeError(f"{self}: cannot read color — camera was configured with use_rgb=False.")
@@ -860,17 +860,17 @@ class RealSenseCamera(Camera):
 
     @check_if_not_connected
     def async_read_depth(self, timeout_ms: float = 200) -> NDArray[np.uint16]:
-        """Read the latest depth frame asynchronously, in millimeters.
+        """以异步方式读取最新深度帧，单位为毫米。
 
-        Mirrors :meth:`async_read` but returns the depth stream rather than the
-        color stream. Output is ``np.uint16`` of shape ``(H, W, 1)``, where each
-        pixel is the distance from the sensor in millimeters.
+        与 :meth:`async_read` 类似，但返回深度流而非
+        彩色流。输出为形状 ``(H, W, 1)`` 的 ``np.uint16``，其中每个
+        像素是到传感器的距离（毫米）。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If ``use_depth`` is ``False`` for this camera, or if
-                the background read thread is not running.
-            TimeoutError: If no frame becomes available within ``timeout_ms``.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果该相机的 ``use_depth`` 为 ``False``，或
+                后台读取线程未运行。
+            TimeoutError: 如果在 ``timeout_ms`` 内没有帧可用。
         """
         if not self.use_depth:
             raise RuntimeError(f"{self}: cannot read depth — camera was configured with use_depth=False.")
@@ -879,17 +879,17 @@ class RealSenseCamera(Camera):
 
     @check_if_not_connected
     def read_latest_depth(self, max_age_ms: int = 500) -> NDArray[Any]:
-        """Return the most recent depth frame in millimeters (peeking).
+        """立即返回最新的深度帧（窥视模式），单位为毫米。
 
-        Non-blocking counterpart of :meth:`read_latest` for the depth stream.
-        Output is ``np.uint16`` of shape ``(H, W, 1)``, where each pixel is the
-        distance from the sensor in millimeters.
+        :meth:`read_latest` 针对深度流的非阻塞对应方法。
+        输出为形状 ``(H, W, 1)`` 的 ``np.uint16``，其中每个像素是
+        到传感器的距离（毫米）。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If ``use_depth`` is ``False`` for this camera, or if
-                no depth frame has been captured yet.
-            TimeoutError: If the latest depth frame is older than ``max_age_ms``.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果该相机的 ``use_depth`` 为 ``False``，或
+                尚未捕获任何深度帧。
+            TimeoutError: 如果最新深度帧的年龄超过 ``max_age_ms``。
         """
         if not self.use_depth:
             raise RuntimeError(f"{self}: cannot read depth — camera was configured with use_depth=False.")
@@ -898,12 +898,12 @@ class RealSenseCamera(Camera):
 
     def disconnect(self) -> None:
         """
-        Disconnects from the camera, stops the pipeline, and cleans up resources.
+        断开与相机的连接，停止 pipeline，并清理资源。
 
-        Stops the background read thread (if running) and stops the RealSense pipeline.
+        停止后台读取线程（如果正在运行）并停止 RealSense pipeline。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is already disconnected (pipeline not running).
+        异常：
+            DeviceNotConnectedError: 如果相机已断开连接（pipeline 未运行）。
         """
 
         if not self.is_connected and self.thread is None:

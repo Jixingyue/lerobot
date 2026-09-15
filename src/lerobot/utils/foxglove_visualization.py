@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Foxglove visualization backend.
+"""Foxglove 可视化后端。
 
-Live control-loop streaming (:func:`log_foxglove_data`) and seekable dataset playback
-(:func:`serve_foxglove_dataset_playback`) over a Foxglove WebSocket server. Callers usually select a
-backend at runtime through the dispatch in :mod:`lerobot.utils.visualization_utils` rather than
-importing from here directly. Requires the ``viz`` extra (``pip install 'lerobot[viz]'``).
+通过 Foxglove WebSocket 服务器提供实时控制循环流式传输
+（:func:`log_foxglove_data`）和可寻址的数据集回放
+（:func:`serve_foxglove_dataset_playback`）。调用方通常在运行时通过
+:mod:`lerobot.utils.visualization_utils` 中的分派来选择
+后端，而不是直接从这里导入。需要 ``viz`` 附加依赖
+（``pip install 'lerobot[viz]'``）。
 """
 
 import logging
@@ -43,11 +45,11 @@ from .constants import (
 )
 from .import_utils import require_package
 
-# Static schema shared by all scalar topics. Each message carries a flat list of ``{label, value}``
-# pairs rather than one field per feature, so the same schema fits any robot regardless of which
-# observation/action features it reports. The ``label`` field name is what Foxglove looks for to name
-# each series automatically, so a single filtered path plots every feature, e.g.
-# ``/observation/state.scalars[:]``.
+# 所有标量话题共享的静态模式。每条消息携带一个由 ``{label, value}``
+# 键值对组成的扁平列表，而不是每个特征一个字段，因此无论机器人报告哪些
+# 观测/动作特征，同一模式都适用。``label`` 字段名正是 Foxglove 用来
+# 自动命名各条序列的依据，因此单个过滤路径即可绘制每个特征，例如
+# ``/observation/state.scalars[:]``。
 _SCALARS_SCHEMA = {
     "type": "object",
     "title": "lerobot.Scalars",
@@ -74,22 +76,22 @@ def _is_scalar(x):
 
 def init_foxglove(host: str = "127.0.0.1", port: int | None = 8765) -> None:
     """
-    Starts a Foxglove WebSocket server for visualizing the control loop.
+    启动一个 Foxglove WebSocket 服务器以可视化控制循环。
 
-    Connect to it from the Foxglove app at ``ws://<host>:<port>``. Calling this
-    more than once is a no-op while a server is already running.
+    在 Foxglove 应用中通过 ``ws://<host>:<port>`` 连接。当已有
+    服务器在运行时，多次调用此函数为空操作。
 
-    Args:
-        host: Host interface to bind the WebSocket server to.
-        port: Port to bind the WebSocket server to (defaults to 8765).
+    参数:
+        host: WebSocket 服务器绑定的主机接口。
+        port: WebSocket 服务器绑定的端口（默认 8765）。
     """
 
     require_package("foxglove-sdk", extra="viz", import_name="foxglove")
     import foxglove
 
-    # Live-stream state lives as attributes on ``log_foxglove_data``:
-    # ``.server`` is the shared WebSocket server and
-    # ``.channels`` caches one Foxglove channel per topic
+    # 实时流式传输状态作为 ``log_foxglove_data`` 的属性存在：
+    # ``.server`` 是共享的 WebSocket 服务器，
+    # ``.channels`` 为每个话题缓存一个 Foxglove 频道
     if getattr(log_foxglove_data, "server", None) is not None:
         return
     log_foxglove_data.server = foxglove.start_server(host=host, port=port or 8765)
@@ -97,7 +99,7 @@ def init_foxglove(host: str = "127.0.0.1", port: int | None = 8765) -> None:
 
 
 def shutdown_foxglove() -> None:
-    """Stops the Foxglove WebSocket server and clears cached channels."""
+    """停止 Foxglove WebSocket 服务器并清空已缓存的频道。"""
 
     server = getattr(log_foxglove_data, "server", None)
     if server is not None:
@@ -107,21 +109,21 @@ def shutdown_foxglove() -> None:
 
 
 def _foxglove_safe_name(name: str) -> str:
-    """Replace ``.`` with ``_`` so a feature name is a single Foxglove topic-path segment.
+    """将 ``.`` 替换为 ``_``，使特征名称成为单个 Foxglove 话题路径段。
 
-    Foxglove treats ``.`` as a path separator, so an unsanitized name like ``observation.images.front``
-    would split into nested segments instead of naming one topic.
+    Foxglove 把 ``.`` 视为路径分隔符，因此像 ``observation.images.front``
+    这样未经处理的名称会被拆分成嵌套的路径段，而不是命名一个话题。
     """
 
     return name.replace(".", "_")
 
 
 def _foxglove_topic(key: str, *, is_image: bool = False) -> str:
-    """Build the Foxglove topic for a feature ``key``.
+    """为特征 ``key`` 构造 Foxglove 话题。
 
-    Camera features map to a per-source image topic (``/observation/images/<name>``); scalar features
-    share one aggregate topic per source: ``/observation/state`` for observations, ``/action/state``
-    for actions.
+    相机特征映射为每个来源独立的图像话题（``/observation/images/<name>``）；标量特征
+    则按来源共享一个聚合话题：观测为 ``/observation/state``，动作为
+    ``/action/state``。
     """
 
     if is_image:
@@ -138,14 +140,15 @@ def _foxglove_topic(key: str, *, is_image: bool = False) -> str:
 def _log_foxglove_scalars(
     topic: str, values: dict[str, float], *, channels: dict | None = None, log_time: int | None = None
 ) -> None:
-    """Log scalars on a typed JSON channel using the static :data:`_SCALARS_SCHEMA`.
+    """使用静态 :data:`_SCALARS_SCHEMA` 在带类型的 JSON 频道上记录标量。
 
-    ``values`` is an ordered mapping of feature name to value; it is emitted as a ``scalars`` array of
-    ``{label, value}`` objects. Insertion order is preserved so series stay stable across messages.
+    ``values`` 是一个从特征名称到值的有序映射；它会以 ``scalars`` 数组的形式
+    发出，数组元素为 ``{label, value}`` 对象。插入顺序会被保留，因此各条序列
+    在不同消息之间保持稳定。
 
-    ``channels`` is the per-topic channel cache to reuse (defaults to the live-stream cache on
-    :func:`log_foxglove_data`; dataset playback passes its own local cache to stay self-contained).
-    ``log_time`` is the message time in nanoseconds; when ``None`` the server's receive time is used.
+    ``channels`` 是要复用的逐话题频道缓存（默认为
+    :func:`log_foxglove_data` 上的实时流缓存；数据集回放会传入自己的本地缓存以保持自包含）。
+    ``log_time`` 是消息时间（纳秒）；为 ``None`` 时使用服务器的接收时间。
     """
 
     if not values:
@@ -166,7 +169,7 @@ def _log_foxglove_scalars(
 
 
 def _labeled_scalars(name: str, values, labels: list[str] | None = None) -> dict[str, float]:
-    """Expand a 1D sequence into ``{label: value}`` entries with a consistent fallback."""
+    """将一维序列展开为 ``{label: value}`` 条目，并使用一致的回退命名。"""
 
     flat = [float(v) for v in values]
     if labels is None or len(labels) != len(flat):
@@ -185,26 +188,26 @@ def _log_foxglove_image(
     depth_range: tuple[float, float] | None = None,
     raw_depth_values: bool = False,
 ) -> None:
-    """Log an image on a cached per-topic channel.
+    """在缓存的逐话题频道上记录一幅图像。
 
-    The encoding is chosen from the channel count and dtype: a single-channel ``float`` or ``uint16``
-    frame is a depth map (``32FC1``/``16UC1``), single-channel ``uint8`` is ``mono8``, 3 => ``rgb8``
-    (float input assumed in [0, 1], cast to uint8), 4 => ``rgba8``; other counts are skipped with a
-    warning. When ``compress_images`` is set, ``rgb8`` is JPEG-encoded instead.
+    编码方式根据通道数和 dtype 选择：单通道 ``float`` 或 ``uint16``
+    帧为深度图（``32FC1``/``16UC1``），单通道 ``uint8`` 为 ``mono8``，3 通道为 ``rgb8``
+    （float 输入假定在 [0, 1] 范围内，转换为 uint8），4 通道为 ``rgba8``；其他通道数
+    会被跳过并发出警告。设置 ``compress_images`` 时，``rgb8`` 改为使用 JPEG 编码。
 
-    Args:
-        topic: Foxglove topic to log on.
-        frame_id: Frame id stamped on the message.
-        arr: Image as HWC or CHW (CHW is transposed to HWC), any dtype.
-        compress_images: JPEG-encode ``rgb8`` frames; ignored for other encodings.
-        channels: Per-topic channel cache to reuse (see :func:`_log_foxglove_scalars`).
-        log_time: Message time in nanoseconds, also written to the header timestamp; when ``None``
-            the server's receive time is used.
-        depth_range: ``(lo, hi)`` clip bounds in a depth frame's own input units. Depth frames
-            (``32FC1``/``16UC1``) are rescaled onto Foxglove's default display max for their encoding
-            (``1.0`` / ``10000``) so they show with sensible contrast; ``depth_range`` sets the source
-            range, else the frame's own min/max is used. Ignored for ``mono8``/``rgb8``/``rgba8``.
-        raw_depth_values: If True, depth values are not rescaled and are logged as is.
+    参数:
+        topic: 要记录到的 Foxglove 话题。
+        frame_id: 标记在消息上的帧 id。
+        arr: HWC 或 CHW 格式的图像（CHW 会被转置为 HWC），任意 dtype。
+        compress_images: 对 ``rgb8`` 帧进行 JPEG 编码；其他编码忽略此参数。
+        channels: 要复用的逐话题频道缓存（参见 :func:`_log_foxglove_scalars`）。
+        log_time: 消息时间（纳秒），同时写入头部时间戳；为 ``None``
+            时使用服务器的接收时间。
+        depth_range: 深度帧自身输入单位下的 ``(lo, hi)`` 裁剪边界。深度帧
+            （``32FC1``/``16UC1``）会被重新缩放到 Foxglove 对相应编码的默认显示
+            最大值（``1.0`` / ``10000``），以便以合理的对比度显示；``depth_range``
+            设置源范围，否则使用帧自身的最小/最大值。``mono8``/``rgb8``/``rgba8`` 忽略此参数。
+        raw_depth_values: 为 True 时，深度值不做重新缩放，按原样记录。
     """
 
     from foxglove.channels import CompressedImageChannel, RawImageChannel
@@ -216,21 +219,21 @@ def _log_foxglove_image(
     timestamp = Timestamp(sec=time_ns // 1_000_000_000, nsec=time_ns % 1_000_000_000)
     log_kwargs = {} if log_time is None else {"log_time": log_time}
 
-    # Convert CHW -> HWC when needed (mirrors log_rerun_data).
+    # 必要时将 CHW -> HWC（与 log_rerun_data 一致）。
     if arr.ndim == 3 and arr.shape[0] in (1, 3, 4) and arr.shape[-1] not in (1, 3, 4):
         arr = np.transpose(arr, (1, 2, 0))
     height, width = arr.shape[0], arr.shape[1]
     n_channels = 1 if arr.ndim == 2 else arr.shape[2]
 
     if n_channels == 1 and arr.dtype != np.uint8:
-        # Depth map: infer the encoding from the dtype.
+        # 深度图：根据 dtype 推断编码。
         encoding, target_dtype, value_max = (
             ("32FC1", np.float32, 1.0)
             if np.issubdtype(arr.dtype, np.floating)
             else ("16UC1", np.uint16, 10000.0)
         )
         if not raw_depth_values:
-            # Rescale onto the encoding's display max with respect to the given depth_range.
+            # 按照给定的 depth_range 重新缩放到该编码的显示最大值。
             lo, hi = depth_range if depth_range is not None else (float(arr.min()), float(arr.max()))
             arr = arr.clip(lo, hi).astype(np.float32)
             arr = (arr - lo) / ((hi - lo) if hi > lo else 1.0) * value_max
@@ -286,24 +289,26 @@ def log_foxglove_data(
     compress_images: bool = False,
 ) -> None:
     """
-    Logs observation and action data to a Foxglove WebSocket server for real-time visualization.
+    将观测和动作数据记录到 Foxglove WebSocket 服务器以进行实时可视化。
 
-    Mirrors ``log_rerun_data`` but emits Foxglove messages over the server started by
-    :func:`init_foxglove`. Data is mapped as follows:
-    - Scalars (and elements of 1D arrays) are accumulated per source and logged on the
-      ``/observation/state`` and ``/action/state`` topics as typed JSON messages using the static
-      ``lerobot.Scalars`` schema: a ``scalars`` array of ``{label, value}`` objects (see
-      :data:`_SCALARS_SCHEMA`). The ``label`` field lets Foxglove name each series automatically, so
-      ``/observation/state.scalars[:].value`` plots every feature at once.
-    - 3D NumPy arrays that resemble images are transposed from CHW to HWC when needed and logged on a
-      per-source topic (e.g. ``/observation/images/front``) as a ``RawImage`` (or a JPEG
-      ``CompressedImage`` when ``compress_images`` is True).
+    与 ``log_rerun_data`` 对应，但通过 :func:`init_foxglove`
+    启动的服务器发出 Foxglove 消息。数据映射如下：
+    - 标量（以及一维数组的元素）按来源累积，并使用静态的
+      ``lerobot.Scalars`` 模式以带类型的 JSON 消息记录到
+      ``/observation/state`` 和 ``/action/state`` 话题：即一个由
+      ``{label, value}`` 对象组成的 ``scalars`` 数组（参见
+      :data:`_SCALARS_SCHEMA`）。``label`` 字段让 Foxglove 能够自动命名各条序列，因此
+      ``/observation/state.scalars[:].value`` 可以一次绘制所有特征。
+    - 形似图像的三维 NumPy 数组会在必要时从 CHW 转置为 HWC，并记录到
+      每个来源各自的话题（例如 ``/observation/images/front``）上，形式为
+      ``RawImage``（当 ``compress_images`` 为 True 时为 JPEG
+      ``CompressedImage``）。
 
-    Args:
-        observation: An optional dictionary containing observation data to log.
-        action: An optional dictionary containing action data to log.
-        compress_images: Whether to JPEG-compress images before logging to save bandwidth in exchange
-            for CPU and quality.
+    参数:
+        observation: 可选的字典，包含要记录的观测数据。
+        action: 可选的字典，包含要记录的动作数据。
+        compress_images: 是否在记录前对图像进行 JPEG 压缩，以带宽
+            换取 CPU 和画质。
     """
 
     require_package("foxglove-sdk", extra="viz", import_name="foxglove")
@@ -347,19 +352,21 @@ def log_foxglove_data(
         _log_foxglove_scalars(_foxglove_topic(ACTION), action_scalars, log_time=now)
 
 
-# ── Dataset playback over a Foxglove WebSocket server ─────────────────────
-# A LeRobotDataset is random-access on disk, so rather than fire-and-forget a forward stream we
-# advertise a seekable timeline and serve frames on demand for whatever time the user scrubs/plays
-# to in the Foxglove app. This relies on the SDK's PlaybackControl capability.
+# ── 通过 Foxglove WebSocket 服务器进行数据集回放 ─────────────────────
+# LeRobotDataset 在磁盘上支持随机访问，因此我们不采用发后即忘的前向流，
+# 而是发布一条可寻址的时间线，并根据用户在 Foxglove 应用中
+# 拖动/播放到的时间按需提供帧。这依赖 SDK 的 PlaybackControl 能力。
 
 
 def _feature_dim_names(feature: dict | None) -> list[str] | None:
-    """Best-effort per-dimension series labels for a 1D feature, or ``None`` to fall back to indices.
+    """尽力为一维特征返回各维度的序列标签，无法确定时返回 ``None`` 以回退到索引。
 
-    LeRobot records a feature's ``names`` inconsistently: a flat list (``["x", "y"]``), a category
-    mapping (``{"motors": ["motor_0", "motor_1"]}``), or a name->index mapping
-    (``{"delta_x": 0, "delta_y": 1}``). Each is handled, but labels are only returned when their count
-    matches the feature's 1D shape, so a malformed/mismatched ``names`` can't silently mislabel series.
+    LeRobot 记录特征 ``names`` 的方式并不一致：可能是扁平列表
+    （``["x", "y"]``）、类别映射
+    （``{"motors": ["motor_0", "motor_1"]}``），或名称到索引的映射
+    （``{"delta_x": 0, "delta_y": 1}``）。每种形式都会被处理，但只有当标签数量
+    与特征的一维形状匹配时才返回标签，这样格式错误/不匹配的 ``names`` 不会
+    悄无声息地给序列贴错标签。
     """
 
     if not feature:
@@ -382,12 +389,12 @@ def _feature_dim_names(feature: dict | None) -> list[str] | None:
 
 
 def _frame_to_scalars(sample: dict, key: str, labels: list[str] | None = None) -> dict[str, float]:
-    """Flatten a frame's vector/scalar feature ``key`` into ``{label: value}`` entries.
+    """将一帧中的向量/标量特征 ``key`` 展平为 ``{label: value}`` 条目。
 
-    ``labels`` provides one name per dimension (from the dataset's feature metadata); when absent or
-    the wrong length, dimensions fall back to ``{name}_{i}`` (the short feature name), matching the
-    live stream so series names agree. A scalar feature becomes a single entry. Missing or ``None``
-    features yield an empty mapping.
+    ``labels`` 为每个维度提供一个名称（来自数据集的特征元数据）；当缺失或
+    长度不对时，各维度回退到 ``{name}_{i}``（特征的短名称），与
+    实时流保持一致，使序列名称相互吻合。标量特征变为单个条目。缺失或为
+    ``None`` 的特征产生空映射。
     """
 
     v = sample.get(key)
@@ -406,10 +413,10 @@ def _frame_to_scalars(sample: dict, key: str, labels: list[str] | None = None) -
 
 
 def _playback_times_ns(dataset) -> list[int]:
-    """Per-frame timestamps in nanoseconds, read without decoding video."""
+    """逐帧时间戳（纳秒），无需解码视频即可读取。"""
     if hasattr(dataset, "hf_dataset"):
         return [int(round(float(t) * 1e9)) for t in dataset.hf_dataset["timestamp"]]
-    # Storage formats without hf_dataset (e.g. lance): timestamps lie on the fps grid.
+    # 没有 hf_dataset 的存储格式（例如 lance）：时间戳落在 fps 网格上。
     return [int(round(i * 1e9 / dataset.fps)) for i in range(len(dataset))]
 
 
@@ -422,21 +429,22 @@ def serve_foxglove_dataset_playback(
     compress_images: bool = False,
     autoplay: bool = True,
 ) -> None:
-    """Serve a single dataset episode to Foxglove as a seekable, scrubbable timeline.
+    """将单个数据集 episode 作为可寻址、可拖动浏览的时间线提供给 Foxglove。
 
-    Starts a Foxglove WebSocket server advertising the ``PlaybackControl`` capability over the
-    episode's time range. The Foxglove app drives play/pause/seek/speed; a background thread and a
-    ``ServerListener`` read frames from the on-disk ``dataset`` on demand and log them stamped at
-    their dataset timestamps, so the user can scrub anywhere in the episode. Blocks until interrupted.
+    启动一个 Foxglove WebSocket 服务器，在该
+    episode 的时间范围内发布 ``PlaybackControl`` 能力。Foxglove 应用驱动播放/暂停/寻址/倍速；
+    一个后台线程和一个
+    ``ServerListener`` 按需从磁盘上的 ``dataset`` 读取帧，并以其数据集时间戳
+    记录它们，因此用户可以在 episode 中的任意位置拖动浏览。阻塞运行，直到被中断。
 
-    Args:
-        dataset: A ``LeRobotDataset`` loaded for the single episode to visualize.
-        episode_index: Index of the episode being visualized (used only for the session name).
-        host: Host interface to bind the WebSocket server to.
-        port: Port to bind the WebSocket server to.
-        compress_images: Whether to JPEG-compress camera frames before logging.
-        autoplay: If True, start playing automatically as soon as a client connects, instead of
-            waiting for the user to press play in the Foxglove app.
+    参数:
+        dataset: 为待可视化的单个 episode 加载的 ``LeRobotDataset``。
+        episode_index: 正在可视化的 episode 索引（仅用于会话名称）。
+        host: WebSocket 服务器绑定的主机接口。
+        port: WebSocket 服务器绑定的端口。
+        compress_images: 是否在记录前对相机帧进行 JPEG 压缩。
+        autoplay: 为 True 时，一旦客户端连接就自动开始播放，而不是
+            等待用户在 Foxglove 应用中按下播放。
     """
 
     require_package("foxglove-sdk", extra="viz", import_name="foxglove")
@@ -459,7 +467,7 @@ def serve_foxglove_dataset_playback(
         raise ValueError("Cannot visualize an empty episode.")
     first_ns, last_ns = times_ns[0], times_ns[-1]
     camera_keys = list(dataset.meta.camera_keys)
-    # Dataset-wide q01/q99 depth bounds (fallback min/max) used to normalize depth to [0, 1].
+    # 全数据集范围的 q01/q99 深度边界（回退到 min/max），用于将深度归一化到 [0, 1]。
     depth_ranges: dict[str, tuple[float, float]] = {}
     for key in dataset.meta.depth_keys:
         stats = (dataset.meta.stats or {}).get(key)
@@ -468,16 +476,16 @@ def serve_foxglove_dataset_playback(
         lo = stats["q01"] if "q01" in stats else stats["min"]
         hi = stats["q99"] if "q99" in stats else stats["max"]
         depth_ranges[key] = (float(np.asarray(lo).item()), float(np.asarray(hi).item()))
-    # Per-dimension series labels from the dataset metadata (e.g. joint names), computed once.
+    # 来自数据集元数据的各维度序列标签（例如关节名称），只计算一次。
     scalar_labels = {
         OBS_STATE: _feature_dim_names(dataset.meta.features.get(OBS_STATE)),
         ACTION: _feature_dim_names(dataset.meta.features.get(ACTION)),
     }
-    # Local channel cache so the playback server is self-contained and doesn't touch the live-stream cache.
+    # 本地频道缓存，使回放服务器自包含，不触碰实时流缓存。
     channels: dict = {}
 
     def emit_frame(i: int) -> None:
-        """Log every channel for frame ``i`` stamped at its dataset timestamp."""
+        """记录帧 ``i`` 的每个频道，并以其数据集时间戳标记。"""
         sample = dataset[i]
         log_time = times_ns[i]
         for key in camera_keys:
@@ -521,9 +529,9 @@ def serve_foxglove_dataset_playback(
 
     lock = threading.Lock()
     stop_event = threading.Event()
-    # Shared playback state, guarded by ``lock``. ``seek_idx`` is a one-shot request set by the
-    # listener and serviced by the playback loop, which is the *only* thread that emits frames (so
-    # concurrent random access into the on-disk dataset / video decoder never overlaps).
+    # 共享的回放状态，由 ``lock`` 保护。``seek_idx`` 是由监听器设置、
+    # 由回放循环处理的一次性请求；回放循环是*唯一*发出帧的线程（因此
+    # 对磁盘数据集 / 视频解码器的并发随机访问永远不会重叠）。
     state = {
         "status": PlaybackStatus.Paused,
         "cursor": first_ns,
@@ -535,14 +543,14 @@ def serve_foxglove_dataset_playback(
     def index_at(t_ns: int) -> int:
         return max(0, min(n_frames - 1, bisect.bisect_right(times_ns, t_ns) - 1))
 
-    # One-shot latch so autoplay fires only on the first client subscription.
+    # 一次性门闩，使自动播放只在第一个客户端订阅时触发。
     autoplay_started = threading.Event()
 
     class _PlaybackListener(ServerListener):
         def on_subscribe(self, client, channel):
-            # Start playing automatically once a client actually connects (subscribes). Using the
-            # subscribe hook, rather than starting in Playing up front, means the timeline doesn't
-            # advance before anyone is watching. Fires once; the user can still pause/seek after.
+            # 当客户端真正连接（订阅）后自动开始播放。使用
+            # 订阅钩子而不是一开始就以 Playing 状态启动，意味着时间线不会
+            # 在有人观看之前前进。只触发一次；之后用户仍可暂停/寻址。
             if not autoplay:
                 return
             with lock:
@@ -554,7 +562,7 @@ def serve_foxglove_dataset_playback(
             server.broadcast_playback_state(PlaybackState(PlaybackStatus.Playing, cursor, speed, False, ""))
 
         def on_playback_control_request(self, req: PlaybackControlRequest):
-            # Only mutate state here; the playback loop performs all frame emission.
+            # 这里只修改状态；所有帧的发出都由回放循环执行。
             with lock:
                 did_seek = False
                 if req.seek_time is not None:
@@ -565,7 +573,7 @@ def serve_foxglove_dataset_playback(
                 if req.playback_speed and req.playback_speed > 0:
                     state["speed"] = req.playback_speed
                 if req.playback_command == PlaybackCommand.Play:
-                    # Restarting from the end replays from the beginning.
+                    # 从末尾处再次播放时，从头开始重播。
                     if state["cursor"] >= last_ns:
                         state["cursor"] = first_ns
                         state["last_idx"] = state["seek_idx"] = 0
@@ -587,9 +595,9 @@ def serve_foxglove_dataset_playback(
     )
 
     def playback_loop() -> None:
-        # Cap how far the cursor may advance in a single tick. A slow frame decode (or any stall)
-        # would otherwise make ``dt`` huge and produce one enormous catch-up batch; clamping it makes
-        # playback trail wall-clock under a slow decoder while each tick emits a bounded frame range.
+        # 限制游标在单个 tick 内最多前进多少。否则缓慢的帧解码（或任何卡顿）
+        # 会使 ``dt`` 变得很大，产生一大批巨量的追赶帧；对其钳制后，在解码器
+        # 缓慢时回放会落后于挂钟时间，但每个 tick 发出的帧范围是有界的。
         max_tick_dt_s = 0.25
         prev = time.monotonic()
         while not stop_event.is_set():
@@ -600,7 +608,7 @@ def serve_foxglove_dataset_playback(
                 now = time.monotonic()
                 dt = min(now - prev, max_tick_dt_s)
                 prev = now
-                # A queued seek is always serviced, even while paused, so scrubbing updates the view.
+                # 排队的寻址请求总会被处理，即使处于暂停状态，这样拖动浏览才能更新画面。
                 work = []
                 seek_idx = state["seek_idx"]
                 if seek_idx is not None:
@@ -615,16 +623,16 @@ def serve_foxglove_dataset_playback(
                         target = index_at(cursor)
                     state["cursor"] = cursor
                     work.extend(range(start_idx, target + 1))
-                    # cursor only grows while playing (seeks reset last_idx in the listener), so
-                    # target >= last_idx here; a plain assignment is correct and clearer than max().
+                    # 播放时游标只会增长（寻址会在监听器中重置 last_idx），因此
+                    # 这里 target >= last_idx；直接赋值是正确的，也比 max() 更清晰。
                     state["last_idx"] = target
                     if ended:
                         state["status"] = PlaybackStatus.Ended
                 if not work:
                     continue
                 cursor, speed = state["cursor"], state["speed"]
-            # Emit outside the lock; this is the only thread that calls emit_frame. Re-check
-            # stop_event between frames so shutdown stays responsive even mid-batch.
+            # 在锁之外发出帧；这是唯一调用 emit_frame 的线程。在帧与帧之间
+            # 重新检查 stop_event，使关闭过程即使在批次中途也能保持响应。
             for i in work:
                 if stop_event.is_set():
                     break
@@ -633,8 +641,8 @@ def serve_foxglove_dataset_playback(
             if ended:
                 server.broadcast_playback_state(PlaybackState(PlaybackStatus.Ended, cursor, speed, False, ""))
 
-    # Emit the first frame so channels are advertised (done before the loop starts, so emission stays
-    # single-threaded). Late-connecting clients re-receive frames once they seek/play.
+    # 发出第一帧，以便各频道被发布（在循环启动之前完成，从而使帧的发出
+    # 保持单线程）。晚连接的客户端在寻址/播放后会重新收到帧。
     emit_frame(0)
     with lock:
         state["last_idx"] = 0

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared dependency-free helpers for the MolmoAct2 policy package."""
+"""MolmoAct2 策略包的共享无外部依赖辅助函数。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from torch import Tensor
 
 
 def hf_token() -> str | None:
-    """Return the Hugging Face access token configured for this process."""
+    """返回为当前进程配置的 Hugging Face 访问令牌。"""
     return os.environ.get("HF_TOKEN") or os.environ.get("HF_ACCESS_TOKEN")
 
 
@@ -34,7 +34,7 @@ def resolve_checkpoint_location(
     revision: str | None = None,
     force_download: bool = False,
 ) -> str:
-    """Resolve a local or Hub checkpoint without downloading remote Python code."""
+    """解析本地或 Hub 上的检查点，且不下载远程 Python 代码。"""
     checkpoint_path = str(checkpoint_path or "").strip()
     if not checkpoint_path:
         raise ValueError("MolmoAct2 policy requires `checkpoint_path`.")
@@ -56,7 +56,7 @@ def resolve_checkpoint_location(
 
 
 def position_ids_from_attention_mask(attention_mask: Tensor) -> Tensor:
-    """Build padding-invariant positions matching native MolmoAct2 training."""
+    """构建与原生 MolmoAct2 训练一致的、不受填充影响的位置索引。"""
     if attention_mask.ndim != 2:
         raise ValueError(
             f"MolmoAct2 position ids require a 2D attention mask, got shape {tuple(attention_mask.shape)}."

@@ -23,10 +23,10 @@ import sys
 
 
 def ensure_multiprocessing_start_method(start_method: str | None) -> None:
-    """Set a multiprocessing start method once, or verify the existing method matches.
+    """设置一次 multiprocessing 启动方法，或验证现有方法与之一致。
 
-    Passing ``None`` leaves Python's process-wide default untouched. This is useful
-    when LeRobot is embedded in an application that owns multiprocessing setup.
+    传入 ``None`` 则不改动 Python 进程级的默认设置。当 LeRobot
+    被嵌入到由应用自身负责 multiprocessing 配置的场景时，这很有用。
     """
     if start_method is None:
         return
@@ -50,18 +50,18 @@ def ensure_multiprocessing_start_method(start_method: str | None) -> None:
 
 
 class ProcessSignalHandler:
-    """Utility class to attach graceful shutdown signal handlers.
+    """用于挂载优雅关闭信号处理器的工具类。
 
-    The class exposes a shutdown_event attribute that is set when a shutdown
-    signal is received. A counter tracks how many shutdown signals have been
-    caught. On the second signal the process exits with status 1.
+    该类暴露一个 shutdown_event 属性，当收到关闭信号时会被置位。
+    一个计数器记录已捕获的关闭信号数量。收到第二个信号时，
+    进程以状态码 1 退出。
     """
 
     _SUPPORTED_SIGNALS = ("SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT")
 
     def __init__(self, use_threads: bool, display_pid: bool = False):
-        # TODO: Check if we can use Event from threading since Event from
-        # multiprocessing is the a clone of threading.Event.
+        # TODO: 检查是否可以使用 threading 的 Event，因为
+        # multiprocessing 的 Event 就是 threading.Event 的克隆。
         # https://docs.python.org/3/library/multiprocessing.html#multiprocessing.Event
         if use_threads:
             from threading import Event
@@ -75,12 +75,12 @@ class ProcessSignalHandler:
         self._register_handlers()
 
     @property
-    def counter(self) -> int:  # pragma: no cover – simple accessor
-        """Number of shutdown signals that have been intercepted."""
+    def counter(self) -> int:  # pragma: no cover – 简单的访问器
+        """已拦截的关闭信号数量。"""
         return self._counter
 
     def _register_handlers(self):
-        """Attach the internal _signal_handler to a subset of POSIX signals."""
+        """将内部的 _signal_handler 挂载到一部分 POSIX 信号上。"""
 
         def _signal_handler(signum, frame):
             pid_str = ""
@@ -90,10 +90,9 @@ class ProcessSignalHandler:
             self.shutdown_event.set()
             self._counter += 1
 
-            # On a second Ctrl-C (or any supported signal) force the exit to
-            # mimic the previous behaviour while giving the caller one chance to
-            # shutdown gracefully.
-            # TODO: Investigate if we need it later
+            # 收到第二个 Ctrl-C（或任何受支持的信号）时强制退出，
+            # 以复现此前的行为，同时给调用方一次优雅关闭的机会。
+            # TODO: 之后调查是否还需要此逻辑
             if self._counter > 1:
                 logging.info("Force shutdown")
                 sys.exit(1)
@@ -101,11 +100,11 @@ class ProcessSignalHandler:
         for sig_name in self._SUPPORTED_SIGNALS:
             sig = getattr(signal, sig_name, None)
             if sig is None:
-                # The signal is not available on this platform (Windows for
-                # instance does not provide SIGHUP, SIGQUIT…). Skip it.
+                # 该信号在此平台上不可用（例如 Windows 不提供
+                # SIGHUP、SIGQUIT……）。跳过。
                 continue
             try:
                 signal.signal(sig, _signal_handler)
-            except (ValueError, OSError):  # pragma: no cover – unlikely but safe
-                # Signal not supported or we are in a non-main thread.
+            except (ValueError, OSError):  # pragma: no cover – 不太可能发生，但更安全
+                # 信号不受支持，或者我们不在主线程中。
                 continue

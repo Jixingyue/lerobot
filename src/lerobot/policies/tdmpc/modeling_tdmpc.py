@@ -14,11 +14,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Implementation of Finetuning Offline World Models in the Real World.
+"""《在真实世界中微调离线世界模型》（Finetuning Offline World Models in the Real World）的实现。
 
-The comments in this code may sometimes refer to these references:
-    TD-MPC paper: Temporal Difference Learning for Model Predictive Control (https://huggingface.co/papers/2203.04955)
-    FOWM paper: Finetuning Offline World Models in the Real World (https://huggingface.co/papers/2310.16029)
+本代码中的注释有时会引用以下参考文献：
+    TD-MPC 论文：Temporal Difference Learning for Model Predictive Control (https://huggingface.co/papers/2203.04955)
+    FOWM 论文：Finetuning Offline World Models in the Real World (https://huggingface.co/papers/2310.16029)
 """
 
 # ruff: noqa: N806
@@ -43,21 +43,19 @@ from .configuration_tdmpc import TDMPCConfig
 
 
 class TDMPCPolicy(PreTrainedPolicy):
-    """Implementation of TD-MPC learning + inference.
+    """TD-MPC 训练 + 推理的实现。
 
-    Please note several warnings for this policy.
-        - Evaluation of pretrained weights created with the original FOWM code
-            (https://github.com/fyhMer/fowm) works as expected. To be precise: we trained and evaluated a
-            model with the FOWM code for the xarm_lift_medium_replay dataset. We ported the weights across
-            to LeRobot, and were able to evaluate with the same success metric. BUT, we had to use inter-
-            process communication to use the xarm environment from FOWM. This is because our xarm
-            environment uses newer dependencies and does not match the environment in FOWM. See
-            https://github.com/huggingface/lerobot/pull/103 for implementation details.
-        - We have NOT checked that training on LeRobot reproduces the results from FOWM.
-        - Nevertheless, we have verified that we can train TD-MPC for PushT. See
-          `lerobot/configs/policy/tdmpc_pusht_keypoints.yaml`.
-        - Our current xarm datasets were generated using the environment from FOWM. Therefore they do not
-          match our xarm environment.
+    请注意关于该策略的若干提醒：
+        - 使用原始 FOWM 代码（https://github.com/fyhMer/fowm）生成的预训练权重，
+            其评估表现符合预期。准确地说：我们用 FOWM 代码针对 xarm_lift_medium_replay
+            数据集训练并评估了一个模型，并将权重移植到了 LeRobot，能够以相同的成功率指标
+            进行评估。但是，我们不得不借助进程间通信来使用 FOWM 中的 xarm 环境。这是因为
+            我们的 xarm 环境使用了更新的依赖，与 FOWM 中的环境不匹配。实现细节参见
+            https://github.com/huggingface/lerobot/pull/103。
+        - 我们尚未验证在 LeRobot 上训练能否复现 FOWM 的结果。
+        - 尽管如此，我们已经验证可以针对 PushT 训练 TD-MPC。参见
+          `lerobot/configs/policy/tdmpc_pusht_keypoints.yaml`。
+        - 我们当前的 xarm 数据集是使用 FOWM 中的环境生成的，因此与我们的 xarm 环境不匹配。
     """
 
     config_class = TDMPCConfig
@@ -70,8 +68,7 @@ class TDMPCPolicy(PreTrainedPolicy):
     ):
         """
         Args:
-            config: Policy configuration class instance or None, in which case the default instantiation of
-                the configuration class is used.
+            config: 策略配置类实例；若为 None，则使用该配置类的默认实例化结果。
         """
         super().__init__(config)
         config.validate_features()
@@ -89,8 +86,8 @@ class TDMPCPolicy(PreTrainedPolicy):
 
     def reset(self):
         """
-        Clear observation and action queues. Clear previous means for warm starting of MPPI/CEM. Should be
-        called on `env.reset()`
+        清空观测队列和动作队列，并清除用于 MPPI/CEM 热启动的上一次均值。
+        应在 `env.reset()` 时调用。
         """
         self._queues = {
             OBS_STATE: deque(maxlen=1),
@@ -100,21 +97,20 @@ class TDMPCPolicy(PreTrainedPolicy):
             self._queues[OBS_IMAGE] = deque(maxlen=1)
         if self.config.env_state_feature:
             self._queues[OBS_ENV_STATE] = deque(maxlen=1)
-        # Previous mean obtained from the cross-entropy method (CEM) used during MPC. It is used to warm start
-        # CEM for the next step.
+        # MPC 过程中使用的交叉熵方法（CEM）得到的上一次均值，用于为下一步的 CEM 热启动。
         self._prev_mean: torch.Tensor | None = None
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor]) -> Tensor:
-        """Predict a chunk of actions given environment observations."""
+        """根据环境观测预测一个动作块。"""
         batch = {key: torch.stack(list(self._queues[key]), dim=1) for key in batch if key in self._queues}
 
-        # Remove the time dimensions as it is not handled yet.
+        # 移除时间维度，因为目前尚不处理该维度。
         for key in batch:
             assert batch[key].shape[1] == 1
             batch[key] = batch[key][:, 0]
 
-        # NOTE: Order of observations matters here.
+        # 注意：观测的顺序在这里很重要。
         encode_keys = []
         if self.config.image_features:
             encode_keys.append(OBS_IMAGE)
@@ -125,8 +121,8 @@ class TDMPCPolicy(PreTrainedPolicy):
         if self.config.use_mpc:  # noqa: SIM108
             actions = self.plan(z)  # (horizon, batch, action_dim)
         else:
-            # Plan with the policy (π) alone. This always returns one action so unsqueeze to get a
-            # sequence dimension like in the MPC branch.
+            # 仅使用策略（π）进行规划。这里总是返回一个动作，因此用 unsqueeze 增加一个
+            # 与 MPC 分支相同的序列维度。
             actions = self.model.pi(z).unsqueeze(0)
 
         actions = torch.clamp(actions, -1, +1)
@@ -135,21 +131,21 @@ class TDMPCPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select a single action given environment observations."""
-        # NOTE: for offline evaluation, we have action in the batch, so we need to pop it out
+        """根据环境观测选择单个动作。"""
+        # 注意：离线评估时 batch 中包含 action，需要将其弹出
         if ACTION in batch:
             batch.pop(ACTION)
 
         if self.config.image_features:
-            batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
+            batch = dict(batch)  # 浅拷贝，以免新增键时修改原始字典
             batch[OBS_IMAGE] = batch[next(iter(self.config.image_features))]
-        # NOTE: for offline evaluation, we have action in the batch, so we need to pop it out
+        # 注意：离线评估时 batch 中包含 action，需要将其弹出
         if ACTION in batch:
             batch.pop(ACTION)
 
         self._queues = populate_queues(self._queues, batch)
 
-        # When the action queue is depleted, populate it again by querying the policy.
+        # 当动作队列耗尽时，再次查询策略来填充它。
         if len(self._queues[ACTION]) == 0:
             actions = self.predict_action_chunk(batch)
 
@@ -157,7 +153,7 @@ class TDMPCPolicy(PreTrainedPolicy):
                 for _ in range(self.config.n_action_repeats):
                     self._queues[ACTION].append(actions[0])
             else:
-                # Action queue is (n_action_steps, batch_size, action_dim), so we transpose the action.
+                # 动作队列为 (n_action_steps, batch_size, action_dim)，因此这里对动作进行转置。
                 self._queues[ACTION].extend(actions[: self.config.n_action_steps])
 
         action = self._queues[ACTION].popleft()
@@ -165,18 +161,18 @@ class TDMPCPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def plan(self, z: Tensor) -> Tensor:
-        """Plan sequence of actions using TD-MPC inference.
+        """使用 TD-MPC 推理规划动作序列。
 
         Args:
-            z: (batch, latent_dim,) tensor for the initial state.
+            z: 初始状态张量，形状 (batch, latent_dim,)。
         Returns:
-            (horizon, batch, action_dim,) tensor for the planned trajectory of actions.
+            规划出的动作轨迹张量，形状 (horizon, batch, action_dim,)。
         """
         device = get_device_from_parameters(self)
 
         batch_size = z.shape[0]
 
-        # Sample Nπ trajectories from the policy.
+        # 从策略采样 Nπ 条轨迹。
         pi_actions = torch.empty(
             self.config.horizon,
             self.config.n_pi_samples,
@@ -187,28 +183,26 @@ class TDMPCPolicy(PreTrainedPolicy):
         if self.config.n_pi_samples > 0:
             _z = einops.repeat(z, "b d -> n b d", n=self.config.n_pi_samples)
             for t in range(self.config.horizon):
-                # Note: Adding a small amount of noise here doesn't hurt during inference and may even be
-                # helpful for CEM.
+                # 注意：在推理时加入少量噪声并无害处，甚至可能对 CEM 有所帮助。
                 pi_actions[t] = self.model.pi(_z, self.config.min_std)
                 _z = self.model.latent_dynamics(_z, pi_actions[t])
 
-        # In the CEM loop we will need this for a call to estimate_value with the gaussian sampled
-        # trajectories.
+        # 在 CEM 循环中，需要用它来对高斯采样得到的轨迹调用 estimate_value。
         z = einops.repeat(z, "b d -> n b d", n=self.config.n_gaussian_samples + self.config.n_pi_samples)
 
-        # Model Predictive Path Integral (MPPI) with the cross-entropy method (CEM) as the optimization
-        # algorithm.
-        # The initial mean and standard deviation for the cross-entropy method (CEM).
+        # 模型预测路径积分（Model Predictive Path Integral，MPPI），以交叉熵方法（CEM）
+        # 作为优化算法。
+        # 交叉熵方法（CEM）的初始均值和标准差。
         mean = torch.zeros(
             self.config.horizon, batch_size, self.config.action_feature.shape[0], device=device
         )
-        # Maybe warm start CEM with the mean from the previous step.
+        # 可能用上一步的均值为 CEM 热启动。
         if self._prev_mean is not None:
             mean[:-1] = self._prev_mean[1:]
         std = self.config.max_std * torch.ones_like(mean)
 
         for _ in range(self.config.cem_iterations):
-            # Randomly sample action trajectories for the gaussian distribution.
+            # 从高斯分布中随机采样动作轨迹。
             std_normal_noise = torch.randn(
                 self.config.horizon,
                 self.config.n_gaussian_samples,
@@ -218,7 +212,7 @@ class TDMPCPolicy(PreTrainedPolicy):
             )
             gaussian_actions = torch.clamp(mean.unsqueeze(1) + std.unsqueeze(1) * std_normal_noise, -1, 1)
 
-            # Compute elite actions.
+            # 计算精英动作。
             actions = torch.cat([gaussian_actions, pi_actions], dim=1)
             value = self.estimate_value(z, actions).nan_to_num_(0)
             elite_idxs = torch.topk(value, self.config.n_elites, dim=0).indices  # (n_elites, batch)
@@ -226,11 +220,11 @@ class TDMPCPolicy(PreTrainedPolicy):
             # (horizon, n_elites, batch, action_dim)
             elite_actions = actions.take_along_dim(einops.rearrange(elite_idxs, "n b -> 1 n b 1"), dim=1)
 
-            # Update gaussian PDF parameters to be the (weighted) mean and standard deviation of the elites.
+            # 将高斯 PDF 参数更新为精英样本的（加权）均值和标准差。
             max_value = elite_value.max(0, keepdim=True)[0]  # (1, batch)
-            # The weighting is a softmax over trajectory values. Note that this is not the same as the usage
-            # of Ω in eqn 4 of the TD-MPC paper. Instead it is the normalized version of it: s = Ω/ΣΩ. This
-            # makes the equations: μ = Σ(s⋅Γ), σ = Σ(s⋅(Γ-μ)²).
+            # 加权方式是对轨迹价值做 softmax。注意，这与 TD-MPC 论文公式 4 中 Ω 的用法不同；
+            # 这里使用的是其归一化版本：s = Ω/ΣΩ。由此公式变为：
+            # μ = Σ(s⋅Γ)，σ = Σ(s⋅(Γ-μ)²)。
             score = torch.exp(self.config.elite_weighting_temperature * (elite_value - max_value))
             score /= score.sum(axis=0, keepdim=True)
             # (horizon, batch, action_dim)
@@ -242,57 +236,54 @@ class TDMPCPolicy(PreTrainedPolicy):
                     dim=1,
                 )
             )
-            # Update mean with an exponential moving average, and std with a direct replacement.
+            # 均值使用指数移动平均更新，标准差则直接替换。
             mean = (
                 self.config.gaussian_mean_momentum * mean + (1 - self.config.gaussian_mean_momentum) * _mean
             )
             std = _std.clamp_(self.config.min_std, self.config.max_std)
 
-        # Keep track of the mean for warm-starting subsequent steps.
+        # 记录均值，用于后续步骤的热启动。
         self._prev_mean = mean
 
-        # Randomly select one of the elite actions from the last iteration of MPPI/CEM using the softmax
-        # scores from the last iteration.
+        # 使用 MPPI/CEM 最后一次迭代得到的 softmax 分数，
+        # 从最后一次迭代的精英动作中随机选取一个。
         actions = elite_actions[:, torch.multinomial(score.T, 1).squeeze(), torch.arange(batch_size)]
 
         return actions
 
     @torch.no_grad()
     def estimate_value(self, z: Tensor, actions: Tensor):
-        """Estimates the value of a trajectory as per eqn 4 of the FOWM paper.
+        """按照 FOWM 论文公式 4 估计一条轨迹的价值。
 
         Args:
-            z: (batch, latent_dim) tensor of initial latent states.
-            actions: (horizon, batch, action_dim) tensor of action trajectories.
+            z: 初始潜状态张量，形状 (batch, latent_dim)。
+            actions: 动作轨迹张量，形状 (horizon, batch, action_dim)。
         Returns:
-            (batch,) tensor of values.
+            价值张量，形状 (batch,)。
         """
-        # Initialize return and running discount factor.
+        # 初始化回报和累积折扣因子。
         G, running_discount = 0, 1
-        # Iterate over the actions in the trajectory to simulate the trajectory using the latent dynamics
-        # model. Keep track of return.
+        # 遍历轨迹中的动作，利用潜空间动态模型模拟轨迹，并记录回报。
         for t in range(actions.shape[0]):
-            # We will compute the reward in a moment. First compute the uncertainty regularizer from eqn 4
-            # of the FOWM paper.
+            # 稍后再计算奖励。首先计算 FOWM 论文公式 4 中的不确定性正则化项。
             if self.config.uncertainty_regularizer_coeff > 0:
                 regularization = -(
                     self.config.uncertainty_regularizer_coeff * self.model.Qs(z, actions[t]).std(0)
                 )
             else:
                 regularization = 0
-            # Estimate the next state (latent) and reward.
+            # 估计下一个状态（潜变量）和奖励。
             z, reward = self.model.latent_dynamics_and_reward(z, actions[t])
-            # Update the return and running discount.
+            # 更新回报和累积折扣。
             G += running_discount * (reward + regularization)
             running_discount *= self.config.discount
-        # Add the estimated value of the final state (using the minimum for a conservative estimate).
-        # Do so by predicting the next action, then taking a minimum over the ensemble of state-action value
-        # estimators.
-        # Note: This small amount of added noise seems to help a bit at inference time as observed by success
-        # metrics over 50 episodes of xarm_lift_medium_replay.
+        # 加上最终状态的估计价值（使用最小值以得到保守估计）。
+        # 做法是先预测下一个动作，再在状态-动作价值估计器集成上取最小值。
+        # 注意：在 xarm_lift_medium_replay 上 50 个回合的成功率指标表明，
+        # 推理时加入这少量噪声似乎略有帮助。
         next_action = self.model.pi(z, self.config.min_std)  # (batch, action_dim)
         terminal_values = self.model.Qs(z, next_action)  # (ensemble, batch)
-        # Randomly choose 2 of the Qs for terminal value estimation (as in App C. of the FOWM paper).
+        # 随机选取 2 个 Q 用于终止价值估计（如 FOWM 论文附录 C 所述）。
         if self.config.q_ensemble_size > 2:
             G += (
                 running_discount
@@ -302,20 +293,20 @@ class TDMPCPolicy(PreTrainedPolicy):
             )
         else:
             G += running_discount * torch.min(terminal_values, dim=0)[0]
-        # Finally, also regularize the terminal value.
+        # 最后，也对终止价值进行正则化。
         if self.config.uncertainty_regularizer_coeff > 0:
             G -= running_discount * self.config.uncertainty_regularizer_coeff * terminal_values.std(0)
         return G
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
-        """Run the batch through the model and compute the loss.
+        """将批次输入模型并计算损失。
 
-        Returns a dictionary with loss as a tensor, and other information as native floats.
+        返回一个字典，其中损失为张量，其他信息为 Python 原生浮点数。
         """
         device = get_device_from_parameters(self)
 
         if self.config.image_features:
-            batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
+            batch = dict(batch)  # 浅拷贝，以免新增键时修改原始字典
             batch[OBS_IMAGE] = batch[next(iter(self.config.image_features))]
 
         info = {}
@@ -329,15 +320,14 @@ class TDMPCPolicy(PreTrainedPolicy):
         reward = batch[REWARD]  # (t, b)
         observations = {k: v for k, v in batch.items() if k.startswith(OBS_PREFIX)}
 
-        # Apply random image augmentations.
+        # 施加随机图像增强。
         if self.config.image_features and self.config.max_random_shift_ratio > 0:
             observations[OBS_IMAGE] = flatten_forward_unflatten(
                 partial(random_shifts_aug, max_random_shift_ratio=self.config.max_random_shift_ratio),
                 observations[OBS_IMAGE],
             )
 
-        # Get the current observation for predicting trajectories, and all future observations for use in
-        # the latent consistency loss and TD loss.
+        # 获取用于预测轨迹的当前观测，以及用于潜变量一致性损失和 TD 损失的所有未来观测。
         current_observation, next_observations = {}, {}
         for k in observations:
             current_observation[k] = observations[k][0]
@@ -346,9 +336,9 @@ class TDMPCPolicy(PreTrainedPolicy):
             OBS_IMAGE if self.config.image_features else OBS_ENV_STATE
         ].shape[:2]
 
-        # Run latent rollout using the latent dynamics model and policy model.
-        # Note this has shape `horizon+1` because there are `horizon` actions and a current `z`. Each action
-        # gives us a next `z`.
+        # 使用潜空间动态模型和策略模型进行潜变量展开（latent rollout）。
+        # 注意其形状为 `horizon+1`，因为有 `horizon` 个动作和一个当前 `z`；
+        # 每个动作都会给出下一个 `z`。
         batch_size = batch["index"].shape[0]
         z_preds = torch.empty(horizon + 1, batch_size, self.config.latent_dim, device=device)
         z_preds[0] = self.model.encode(current_observation)
@@ -356,62 +346,58 @@ class TDMPCPolicy(PreTrainedPolicy):
         for t in range(horizon):
             z_preds[t + 1], reward_preds[t] = self.model.latent_dynamics_and_reward(z_preds[t], action[t])
 
-        # Compute Q and V value predictions based on the latent rollout.
+        # 基于潜变量展开计算 Q 和 V 价值预测。
         q_preds_ensemble = self.model.Qs(z_preds[:-1], action)  # (ensemble, horizon, batch)
         v_preds = self.model.V(z_preds[:-1])
         info.update({"Q": q_preds_ensemble.mean().item(), "V": v_preds.mean().item()})
 
-        # Compute various targets with stopgrad.
+        # 使用 stopgrad 计算各类目标值。
         with torch.no_grad():
-            # Latent state consistency targets.
+            # 潜状态一致性目标。
             z_targets = self.model_target.encode(next_observations)
-            # State-action value targets (or TD targets) as in eqn 3 of the FOWM. Unlike TD-MPC which uses the
-            # learned state-action value function in conjunction with the learned policy: Q(z, π(z)), FOWM
-            # uses a learned state value function: V(z). This means the TD targets only depend on in-sample
-            # actions (not actions estimated by π).
-            # Note: Here we do not use self.model_target, but self.model. This is to follow the original code
-            # and the FOWM paper.
+            # 状态-动作价值目标（或称 TD 目标），如 FOWM 公式 3 所示。TD-MPC 将学习到的
+            # 状态-动作价值函数与学习到的策略结合使用：Q(z, π(z))，而 FOWM 使用学习到的
+            # 状态价值函数：V(z)。这意味着 TD 目标只依赖于样本内动作（而非 π 估计的动作）。
+            # 注意：这里没有使用 self.model_target，而是使用 self.model，以遵循原始代码和 FOWM 论文。
             q_targets = reward + self.config.discount * self.model.V(self.model.encode(next_observations))
-            # From eqn 3 of FOWM. These appear as Q(z, a). Here we call them v_targets to emphasize that we
-            # are using them to compute loss for V.
+            # 来自 FOWM 公式 3。它们在论文中表现为 Q(z, a)。这里称之为 v_targets，
+            # 以强调我们用它们来计算 V 的损失。
             v_targets = self.model_target.Qs(z_preds[:-1].detach(), action, return_min=True)
 
-        # Compute losses.
-        # Exponentially decay the loss weight with respect to the timestep. Steps that are more distant in the
-        # future have less impact on the loss. Note: unsqueeze will let us broadcast to (seq, batch).
+        # 计算各项损失。
+        # 损失权重随时间步指数衰减；越遥远的未来步骤对损失的影响越小。
+        # 注意：unsqueeze 使我们可以广播到 (seq, batch)。
         temporal_loss_coeffs = torch.pow(
             self.config.temporal_decay_coeff, torch.arange(horizon, device=device)
         ).unsqueeze(-1)
-        # Compute consistency loss as MSE loss between latents predicted from the rollout and latents
-        # predicted from the (target model's) observation encoder.
+        # 一致性损失：展开预测的潜变量与（目标模型的）观测编码器预测的潜变量之间的 MSE 损失。
         consistency_loss = (
             (
                 temporal_loss_coeffs
                 * F.mse_loss(z_preds[1:], z_targets, reduction="none").mean(dim=-1)
-                # `z_preds` depends on the current observation and the actions.
+                # `z_preds` 依赖于当前观测和动作。
                 * ~batch[f"{OBS_STR}.state_is_pad"][0]
                 * ~batch["action_is_pad"]
-                # `z_targets` depends on the next observation.
+                # `z_targets` 依赖于下一个观测。
                 * ~batch[f"{OBS_STR}.state_is_pad"][1:]
             )
             .sum(0)
             .mean()
         )
-        # Compute the reward loss as MSE loss between rewards predicted from the rollout and the dataset
-        # rewards.
+        # 奖励损失：展开预测的奖励与数据集奖励之间的 MSE 损失。
         reward_loss = (
             (
                 temporal_loss_coeffs
                 * F.mse_loss(reward_preds, reward, reduction="none")
                 * ~batch["next.reward_is_pad"]
-                # `reward_preds` depends on the current observation and the actions.
+                # `reward_preds` 依赖于当前观测和动作。
                 * ~batch[f"{OBS_STR}.state_is_pad"][0]
                 * ~batch["action_is_pad"]
             )
             .sum(0)
             .mean()
         )
-        # Compute state-action value loss (TD loss) for all of the Q functions in the ensemble.
+        # 为集成中所有 Q 函数计算状态-动作价值损失（TD 损失）。
         q_value_loss = (
             (
                 temporal_loss_coeffs
@@ -419,22 +405,22 @@ class TDMPCPolicy(PreTrainedPolicy):
                     q_preds_ensemble,
                     einops.repeat(q_targets, "t b -> e t b", e=q_preds_ensemble.shape[0]),
                     reduction="none",
-                ).sum(0)  # sum over ensemble
-                # `q_preds_ensemble` depends on the first observation and the actions.
+                ).sum(0)  # 在集成维度上求和
+                # `q_preds_ensemble` 依赖于第一个观测和动作。
                 * ~batch[f"{OBS_STR}.state_is_pad"][0]
                 * ~batch["action_is_pad"]
-                # q_targets depends on the reward and the next observations.
+                # q_targets 依赖于奖励和下一个观测。
                 * ~batch["next.reward_is_pad"]
                 * ~batch[f"{OBS_STR}.state_is_pad"][1:]
             )
             .sum(0)
             .mean()
         )
-        # Compute state value loss as in eqn 3 of FOWM.
+        # 如 FOWM 公式 3 那样计算状态价值损失。
         diff = v_targets - v_preds
-        # Expectile loss penalizes:
-        #   - `v_preds <  v_targets` with weighting `expectile_weight`
-        #   - `v_preds >= v_targets` with weighting `1 - expectile_weight`
+        # 期望分位数损失（expectile loss）的惩罚方式：
+        #   - `v_preds <  v_targets` 时权重为 `expectile_weight`
+        #   - `v_preds >= v_targets` 时权重为 `1 - expectile_weight`
         raw_v_value_loss = torch.where(
             diff > 0, self.config.expectile_weight, (1 - self.config.expectile_weight)
         ) * (diff**2)
@@ -442,7 +428,7 @@ class TDMPCPolicy(PreTrainedPolicy):
             (
                 temporal_loss_coeffs
                 * raw_v_value_loss
-                # `v_targets` depends on the first observation and the actions, as does `v_preds`.
+                # `v_targets` 与 `v_preds` 一样，依赖于第一个观测和动作。
                 * ~batch[f"{OBS_STR}.state_is_pad"][0]
                 * ~batch["action_is_pad"]
             )
@@ -450,10 +436,10 @@ class TDMPCPolicy(PreTrainedPolicy):
             .mean()
         )
 
-        # Calculate the advantage weighted regression loss for π as detailed in FOWM 3.1.
-        # We won't need these gradients again so detach.
+        # 如 FOWM 3.1 节所述，计算 π 的优势加权回归损失。
+        # 后续不再需要这些梯度，因此进行 detach。
         z_preds = z_preds.detach()
-        # Use stopgrad for the advantage calculation.
+        # 优势计算使用 stopgrad。
         with torch.no_grad():
             advantage = self.model_target.Qs(z_preds[:-1], action, return_min=True) - self.model.V(
                 z_preds[:-1]
@@ -462,23 +448,19 @@ class TDMPCPolicy(PreTrainedPolicy):
             # (t, b)
             exp_advantage = torch.clamp(torch.exp(advantage * self.config.advantage_scaling), max=100.0)
         action_preds = self.model.pi(z_preds[:-1])  # (t, b, a)
-        # Calculate the MSE between the actions and the action predictions.
-        # Note: FOWM's original code calculates the log probability (wrt to a unit standard deviation
-        # gaussian) and sums over the action dimension. Computing the (negative) log probability amounts to
-        # multiplying the MSE by 0.5 and adding a constant offset (the log(2*pi)/2 term, times the action
-        # dimension). Here we drop the constant offset as it doesn't change the optimization step, and we drop
-        # the 0.5 as we instead make a configuration parameter for it (see below where we compute the total
-        # loss).
+        # 计算动作与动作预测之间的 MSE。
+        # 注意：FOWM 原始代码计算的是（相对于单位标准差高斯的）对数概率，并在动作维度上求和。
+        # 计算（负）对数概率等价于将 MSE 乘以 0.5 再加上一个常数偏移（即 log(2*pi)/2 项
+        # 乘以动作维度）。这里我们舍弃常数偏移，因为它不会改变优化步骤；同时舍弃 0.5，
+        # 因为我们改用一个配置参数来处理它（参见下方计算总损失的位置）。
         mse = F.mse_loss(action_preds, action, reduction="none").sum(-1)  # (t, b)
-        # NOTE: The original implementation does not take the sum over the temporal dimension like with the
-        # other losses.
-        # TODO(alexander-soare): Take the sum over the temporal dimension and check that training still works
-        # as well as expected.
+        # 注意：与其他损失不同，原始实现没有在时间维度上求和。
+        # TODO(alexander-soare)：改为在时间维度上求和，并检查训练是否仍能达到预期效果。
         pi_loss = (
             exp_advantage
             * mse
             * temporal_loss_coeffs
-            # `action_preds` depends on the first observation and the actions.
+            # `action_preds` 依赖于第一个观测和动作。
             * ~batch[f"{OBS_STR}.state_is_pad"][0]
             * ~batch["action_is_pad"]
         ).mean()
@@ -502,7 +484,7 @@ class TDMPCPolicy(PreTrainedPolicy):
             }
         )
 
-        # Undo (b, t) -> (t, b).
+        # 撤销 (b, t) -> (t, b) 的转置。
         for key in batch:
             if isinstance(batch[key], torch.Tensor) and batch[key].ndim > 1:
                 batch[key] = batch[key].transpose(1, 0)
@@ -510,15 +492,15 @@ class TDMPCPolicy(PreTrainedPolicy):
         return loss, info
 
     def update(self):
-        """Update the target model's parameters with an EMA step."""
-        # Note a minor variation with respect to the original FOWM code. Here they do this based on an EMA
-        # update frequency parameter which is set to 2 (every 2 steps an update is done). To simplify the code
-        # we update every step and adjust the decay parameter `alpha` accordingly (0.99 -> 0.995)
+        """通过一步 EMA 更新目标模型的参数。"""
+        # 注意：这里与原始 FOWM 代码有一处细微差别。原始代码基于一个 EMA 更新频率参数
+        # 来执行更新，该参数设为 2（每 2 步更新一次）。为简化代码，我们每一步都更新，
+        # 并相应调整衰减参数 `alpha`（0.99 -> 0.995）。
         update_ema_parameters(self.model_target, self.model, self.config.target_model_momentum)
 
 
 class TDMPCTOLD(nn.Module):
-    """Task-Oriented Latent Dynamics (TOLD) model used in TD-MPC."""
+    """TD-MPC 中使用的面向任务的潜空间动态（Task-Oriented Latent Dynamics，TOLD）模型。"""
 
     def __init__(self, config: TDMPCConfig):
         super().__init__()
@@ -577,11 +559,11 @@ class TDMPCTOLD(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        """Initialize model weights.
+        """初始化模型权重。
 
-        Orthogonal initialization for all linear and convolutional layers' weights (apart from final layers
-        of reward network and Q networks which get zero initialization).
-        Zero initialization for all linear and convolutional layers' biases.
+        所有线性层和卷积层的权重采用正交初始化（奖励网络和 Q 网络的最终层除外，
+        它们采用零初始化）。
+        所有线性层和卷积层的偏置均采用零初始化。
         """
 
         def _apply_fn(m):
@@ -601,49 +583,48 @@ class TDMPCTOLD(nn.Module):
                 "Sanity check. The last linear layer needs 0 initialization on weights."
             )
             nn.init.zeros_(m[-1].weight)
-            nn.init.zeros_(m[-1].bias)  # this has already been done, but keep this line here for good measure
+            nn.init.zeros_(m[-1].bias)  # 前面已经做过零初始化，但保留这一行以防万一
 
     def encode(self, obs: dict[str, Tensor]) -> Tensor:
-        """Encodes an observation into its latent representation."""
+        """将观测编码为其潜变量表示。"""
         return self._encoder(obs)
 
     def latent_dynamics_and_reward(self, z: Tensor, a: Tensor) -> tuple[Tensor, Tensor]:
-        """Predict the next state's latent representation and the reward given a current latent and action.
+        """在给定当前潜变量和动作的情况下，预测下一状态的潜变量表示和奖励。
 
         Args:
-            z: (*, latent_dim) tensor for the current state's latent representation.
-            a: (*, action_dim) tensor for the action to be applied.
+            z: 当前状态潜变量表示的张量，形状 (*, latent_dim)。
+            a: 待执行动作的张量，形状 (*, action_dim)。
         Returns:
-            A tuple containing:
-                - (*, latent_dim) tensor for the next state's latent representation.
-                - (*,) tensor for the estimated reward.
+            一个元组，包含：
+                - 下一状态潜变量表示的张量，形状 (*, latent_dim)。
+                - 估计奖励的张量，形状 (*,)。
         """
         x = torch.cat([z, a], dim=-1)
         return self._dynamics(x), self._reward(x).squeeze(-1)
 
     def latent_dynamics(self, z: Tensor, a: Tensor) -> Tensor:
-        """Predict the next state's latent representation given a current latent and action.
+        """在给定当前潜变量和动作的情况下，预测下一状态的潜变量表示。
 
         Args:
-            z: (*, latent_dim) tensor for the current state's latent representation.
-            a: (*, action_dim) tensor for the action to be applied.
+            z: 当前状态潜变量表示的张量，形状 (*, latent_dim)。
+            a: 待执行动作的张量，形状 (*, action_dim)。
         Returns:
-            (*, latent_dim) tensor for the next state's latent representation.
+            下一状态潜变量表示的张量，形状 (*, latent_dim)。
         """
         x = torch.cat([z, a], dim=-1)
         return self._dynamics(x)
 
     def pi(self, z: Tensor, std: float = 0.0) -> Tensor:
-        """Samples an action from the learned policy.
+        """从学习到的策略中采样一个动作。
 
-        The policy can also have added (truncated) Gaussian noise injected for encouraging exploration when
-        generating rollouts for online training.
+        在为在线训练生成展开（rollout）时，策略还可以注入（截断的）高斯噪声以鼓励探索。
 
         Args:
-            z: (*, latent_dim) tensor for the current state's latent representation.
-            std: The standard deviation of the injected noise.
+            z: 当前状态潜变量表示的张量，形状 (*, latent_dim)。
+            std: 注入噪声的标准差。
         Returns:
-            (*, action_dim) tensor for the sampled action.
+            采样动作的张量，形状 (*, action_dim)。
         """
         action = torch.tanh(self._pi(z))
         if std > 0:
@@ -652,26 +633,26 @@ class TDMPCTOLD(nn.Module):
         return action
 
     def V(self, z: Tensor) -> Tensor:  # noqa: N802
-        """Predict state value (V).
+        """预测状态价值（V）。
 
         Args:
-            z: (*, latent_dim) tensor for the current state's latent representation.
+            z: 当前状态潜变量表示的张量，形状 (*, latent_dim)。
         Returns:
-            (*,) tensor of estimated state values.
+            估计状态价值的张量，形状 (*,)。
         """
         return self._V(z).squeeze(-1)
 
     def Qs(self, z: Tensor, a: Tensor, return_min: bool = False) -> Tensor:  # noqa: N802
-        """Predict state-action value for all of the learned Q functions.
+        """为所有学习到的 Q 函数预测状态-动作价值。
 
         Args:
-            z: (*, latent_dim) tensor for the current state's latent representation.
-            a: (*, action_dim) tensor for the action to be applied.
-            return_min: Set to true for implementing the detail in App. C of the FOWM paper: randomly select
-                2 of the Qs and return the minimum
+            z: 当前状态潜变量表示的张量，形状 (*, latent_dim)。
+            a: 待执行动作的张量，形状 (*, action_dim)。
+            return_min: 设为 true 以实现 FOWM 论文附录 C 中的细节：随机选取
+                2 个 Q 并返回其中的最小值。
         Returns:
-            (q_ensemble, *) tensor for the value predictions of each learned Q function in the ensemble OR
-            (*,) tensor if return_min=True.
+            集成中每个学习到的 Q 函数价值预测的张量，形状 (q_ensemble, *)；
+            若 return_min=True，则返回形状 (*,) 的张量。
         """
         x = torch.cat([z, a], dim=-1)
         if not return_min:
@@ -685,13 +666,13 @@ class TDMPCTOLD(nn.Module):
 
 
 class TDMPCObservationEncoder(nn.Module):
-    """Encode image and/or state vector observations."""
+    """对图像和/或状态向量观测进行编码。"""
 
     def __init__(self, config: TDMPCConfig):
         """
-        Creates encoders for pixel and/or state modalities.
-        TODO(alexander-soare): The original work allows for multiple images by concatenating them along the
-            channel dimension. Re-implement this capability.
+        为像素和/或状态模态创建编码器。
+        TODO(alexander-soare)：原始工作通过沿通道维度拼接来支持多张图像，
+            请重新实现这一能力。
         """
         super().__init__()
         self.config = config
@@ -742,13 +723,13 @@ class TDMPCObservationEncoder(nn.Module):
             )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
-        """Encode the image and/or state vector.
+        """对图像和/或状态向量进行编码。
 
-        Each modality is encoded into a feature vector of size (latent_dim,) and then a uniform mean is taken
-        over all features.
+        每种模态都被编码为大小为 (latent_dim,) 的特征向量，
+        然后对所有特征取均匀平均。
         """
         feat = []
-        # NOTE: Order of observations matters here.
+        # 注意：观测的顺序在这里很重要。
         if self.config.image_features:
             feat.append(
                 flatten_forward_unflatten(
@@ -763,9 +744,9 @@ class TDMPCObservationEncoder(nn.Module):
 
 
 def random_shifts_aug(x: Tensor, max_random_shift_ratio: float) -> Tensor:
-    """Randomly shifts images horizontally and vertically.
+    """对图像进行水平和垂直方向的随机平移。
 
-    Adapted from https://github.com/facebookresearch/drqv2
+    改编自 https://github.com/facebookresearch/drqv2
     """
     b, _, h, w = x.size()
     assert h == w, "non-square images not handled yet"
@@ -782,7 +763,7 @@ def random_shifts_aug(x: Tensor, max_random_shift_ratio: float) -> Tensor:
     arange = einops.repeat(arange, "w -> h w 1", h=h)
     base_grid = torch.cat([arange, arange.transpose(1, 0)], dim=2)
     base_grid = einops.repeat(base_grid, "h w c -> b h w c", b=b)
-    # A random shift in units of pixels and within the boundaries of the padding.
+    # 以像素为单位、且位于填充边界内的随机平移量。
     shift = torch.randint(
         0,
         2 * pad + 1,
@@ -796,7 +777,7 @@ def random_shifts_aug(x: Tensor, max_random_shift_ratio: float) -> Tensor:
 
 
 def update_ema_parameters(ema_net: nn.Module, net: nn.Module, alpha: float):
-    """Update EMA parameters in place with ema_param <- alpha * ema_param + (1 - alpha) * param."""
+    """原地更新 EMA 参数，更新方式为 ema_param <- alpha * ema_param + (1 - alpha) * param。"""
     for ema_module, module in zip(ema_net.modules(), net.modules(), strict=True):
         for (n_p_ema, p_ema), (n_p, p) in zip(
             ema_module.named_parameters(recurse=False), module.named_parameters(recurse=False), strict=True
@@ -805,7 +786,7 @@ def update_ema_parameters(ema_net: nn.Module, net: nn.Module, alpha: float):
             if isinstance(p, dict):
                 raise RuntimeError("Dict parameter not supported")
             if isinstance(module, nn.modules.batchnorm._BatchNorm) or not p.requires_grad:
-                # Copy BatchNorm parameters, and non-trainable parameters directly.
+                # 直接拷贝 BatchNorm 参数以及不可训练的参数。
                 p_ema.copy_(p.to(dtype=p_ema.dtype).data)
             with torch.no_grad():
                 p_ema.mul_(alpha)
@@ -813,15 +794,15 @@ def update_ema_parameters(ema_net: nn.Module, net: nn.Module, alpha: float):
 
 
 def flatten_forward_unflatten(fn: Callable[[Tensor], Tensor], image_tensor: Tensor) -> Tensor:
-    """Helper to temporarily flatten extra dims at the start of the image tensor.
+    """临时将图像张量开头的额外维度展平的辅助函数。
 
     Args:
-        fn: Callable that the image tensor will be passed to. It should accept (B, C, H, W) and return
-            (B, *), where * is any number of dimensions.
-        image_tensor: An image tensor of shape (**, C, H, W), where ** is any number of dimensions, generally
-            different from *.
+        fn: 图像张量将被传入的可调用对象。它应接受 (B, C, H, W) 并返回
+            (B, *)，其中 * 表示任意数量的维度。
+        image_tensor: 形状为 (**, C, H, W) 的图像张量，其中 ** 表示任意数量的维度，
+            通常与 * 不同。
     Returns:
-        A return value from the callable reshaped to (**, *).
+        可调用对象的返回值，被重塑为 (**, *) 的形状。
     """
     if image_tensor.ndim == 4:
         return fn(image_tensor)

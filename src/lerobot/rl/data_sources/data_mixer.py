@@ -22,11 +22,11 @@ from ..buffer import ReplayBuffer, concatenate_batch_transitions
 
 
 class DataMixer(abc.ABC):
-    """Abstract interface for all data mixing strategies."""
+    """所有数据混合策略的抽象接口。"""
 
     @abc.abstractmethod
     def sample(self, batch_size: int) -> BatchType:
-        """Draw one batch of ``batch_size`` transitions."""
+        """抽取一个包含 ``batch_size`` 个转移的批次。"""
         raise NotImplementedError
 
     def get_iterator(
@@ -35,13 +35,13 @@ class DataMixer(abc.ABC):
         async_prefetch: bool = True,
         queue_size: int = 2,
     ):
-        """Infinite iterator that yields batches."""
+        """产出批次的无限迭代器。"""
         while True:
             yield self.sample(batch_size)
 
 
 class OnlineOfflineMixer(DataMixer):
-    """Mixes transitions from an online and an offline replay buffer."""
+    """混合来自在线和离线回放缓冲区的转移。"""
 
     def __init__(
         self,
@@ -72,7 +72,7 @@ class OnlineOfflineMixer(DataMixer):
         async_prefetch: bool = True,
         queue_size: int = 2,
     ):
-        """Yield batches by composing buffer async iterators."""
+        """通过组合缓冲区的异步迭代器来产出批次。"""
 
         n_online = max(1, int(batch_size * self.online_ratio))
 

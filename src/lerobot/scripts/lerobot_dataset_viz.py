@@ -13,30 +13,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Visualize data of **all** frames of any episode of a dataset of type LeRobotDataset.
+""" 可视化 LeRobotDataset 类型数据集中任意 episode 的**所有**帧的数据。
 
-Requires: pip install 'lerobot[dataset_viz]'  (includes dataset + viz extras)
+需要：pip install 'lerobot[dataset_viz]'  （包含 dataset 和 viz 附加依赖）
 
-Note: The last frame of the episode doesn't always correspond to a final state.
-That's because our datasets are composed of transition from state to state up to
-the antepenultimate state associated to the ultimate action to arrive in the final state.
-However, there might not be a transition from a final state to another state.
+注意：episode 的最后一帧并不总是对应最终状态。
+这是因为我们的数据集由状态之间的转移组成，一直到倒数第三个状态，
+该状态与最终动作相关联，进而到达最终状态。
+但从最终状态到另一个状态之间可能并不存在转移。
 
-Note: This script aims to visualize the data used to train the neural networks.
-~What you see is what you get~. When visualizing image modality, it is often expected to observe
-lossy compression artifacts since these images have been decoded from compressed mp4 videos to
-save disk space. The compression factor applied has been tuned to not affect success rate.
+注意：此脚本旨在可视化用于训练神经网络的数据。
+~所见即所得~。在可视化图像模态时，通常预期会观察到
+有损压缩伪影，因为这些图像是从压缩的 mp4 视频中解码出来的，以
+节省磁盘空间。所采用的压缩系数经过调整，不会影响成功率。
 
-Examples:
+示例：
 
-- Visualize data stored on a local machine:
+- 可视化存储在本地机器上的数据：
 ```
 local$ lerobot-dataset-viz \
     --repo-id lerobot/pusht \
     --episode-index 0
 ```
 
-- Visualize data stored on a distant machine with a local viewer:
+- 在本地查看器中可视化存储在远程机器上的数据：
 ```
 distant$ lerobot-dataset-viz \
     --repo-id lerobot/pusht \
@@ -48,7 +48,7 @@ local$ scp distant:path/to/directory/lerobot_pusht_episode_0.rrd .
 local$ rerun lerobot_pusht_episode_0.rrd
 ```
 
-- Visualize data stored on a distant machine through streaming:
+- 通过流式传输可视化存储在远程机器上的数据：
 ```
 distant$ lerobot-dataset-viz \
     --repo-id lerobot/pusht \
@@ -59,7 +59,7 @@ distant$ lerobot-dataset-viz \
 local$ rerun rerun+http://IP:GRPC_PORT/proxy
 ```
 
-- Visualize data in Foxglove with a seekable, scrubbable timeline:
+- 在 Foxglove 中以可寻址、可拖动浏览的时间线来可视化数据：
 ```
 local$ lerobot-dataset-viz \
     --repo-id lerobot/pusht \
@@ -68,8 +68,8 @@ local$ lerobot-dataset-viz \
 
 # then open the Foxglove app and connect to ws://127.0.0.1:8765
 ```
-This starts a Foxglove WebSocket server that serves the episode on demand from the on-disk dataset,
-so you can play/pause and scrub anywhere in the episode using Foxglove's playback controls.
+这会启动一个 Foxglove WebSocket 服务器，根据需要从磁盘上的数据集中提供该 episode 的数据，
+因此你可以使用 Foxglove 的播放控件在 episode 中的任意位置播放/暂停和拖动浏览。
 
 """
 
@@ -96,9 +96,9 @@ DEFAULT_RERUN_PORT = 9090
 
 
 def get_feature_names(dataset: LeRobotDataset, key: str) -> list[str]:
-    """Return per-dimension names for a feature from the dataset metadata.
+    """从数据集元数据中返回某个特征各维度的名称。
 
-    Only flat-list ``names`` metadata is used. Dict-style ``names`` and missing names fall back to ``{key}_{i}`` indices.
+    仅使用扁平列表形式的 ``names`` 元数据。字典形式的 ``names`` 以及缺失名称的情况会回退到 ``{key}_{i}`` 索引。
     """
     feature = dataset.features[key]
     dim = feature["shape"][-1]
@@ -112,7 +112,7 @@ def get_feature_names(dataset: LeRobotDataset, key: str) -> list[str]:
 
 def check_chw_float32(frame: torch.Tensor) -> None:
     """
-    Check if a frame is a channel-first, float32 tensor.
+    检查一帧是否为通道优先（channel-first）的 float32 张量。
     """
     assert frame.dtype == torch.float32
     assert frame.ndim == 3
@@ -133,18 +133,18 @@ def to_hwc_float32_numpy(chw_float32_torch: torch.Tensor) -> np.ndarray:
 
 
 def build_blueprint_from_dataset(dataset: LeRobotDataset):
-    """Build a Rerun blueprint laying out camera images and time series for the given dataset.
+    """构建一个 Rerun 蓝图（blueprint），为给定数据集排布相机图像和时间序列。
 
-    Camera images and scalar signals (action, state, reward, done, success) are arranged in a grid.
-    The per-dimension series names for ``action`` and ``state`` are applied directly
-    via blueprint overrides.
+    相机图像和标量信号（action、state、reward、done、success）以网格形式排列。
+    ``action`` 和 ``state`` 的各维度序列名称通过
+    蓝图覆盖（override）直接应用。
     """
     import rerun as rr
     import rerun.blueprint as rrb
 
     views = [rrb.Spatial2DView(origin=key, name=key) for key in dataset.meta.camera_keys]
 
-    # Style multi-dimensional signals (action, state) with per-dimension names.
+    # 为多维信号（action、state）设置各维度名称的样式。
     for origin, key in ((ACTION, ACTION), ("state", OBS_STATE)):
         if key in dataset.features:
             names = get_feature_names(dataset, key)
@@ -215,9 +215,9 @@ def visualize_dataset(
     blueprint = build_blueprint_from_dataset(dataset)
     rr.init(f"{repo_id}/episode_{episode_index}", spawn=spawn_local_viewer, default_blueprint=blueprint)
 
-    # Manually call python garbage collector after `rr.init` to avoid hanging in a blocking flush
-    # when iterating on a dataloader with `num_workers` > 0
-    # TODO(rcadene): remove `gc.collect` when rerun version 0.16 is out, which includes a fix
+    # 在 `rr.init` 之后手动调用 Python 垃圾回收器，以避免在迭代
+    # `num_workers` > 0 的 dataloader 时因阻塞式 flush 而挂起
+    # TODO(rcadene)：当包含修复的 rerun 0.16 版本发布后，移除 `gc.collect`
     gc.collect()
 
     if mode == "distant":
@@ -231,10 +231,10 @@ def visualize_dataset(
 
     logging.info("Logging to Rerun")
 
-    # Depth frames and stats are dequantized to the dataset's depth_output_unit on load.
+    # 深度帧和统计信息在加载时会被反量化为数据集的 depth_output_unit。
     depth_meter = 1000.0 if dataset.depth_output_unit == DEPTH_MILLIMETER_UNIT else 1.0
 
-    # Use the dataset's q01/q99 depth statistics for robust depth range bounds
+    # 使用数据集的 q01/q99 深度统计量作为稳健的深度范围边界
     depth_ranges = {}
     for key in dataset.meta.depth_keys:
         stats = (dataset.meta.stats or {}).get(key)
@@ -249,12 +249,12 @@ def visualize_dataset(
         if first_index is None:
             first_index = batch["index"][0].item()
 
-        # iterate over the batch
+        # 遍历该批次
         for i in range(len(batch["index"])):
             rr.set_time("frame_index", sequence=batch["index"][i].item() - first_index)
             rr.set_time("timestamp", timestamp=batch["timestamp"][i].item())
 
-            # display each camera image (or depth map)
+            # 显示每路相机图像（或深度图）
             for key in dataset.meta.camera_keys:
                 if key in dataset.meta.depth_keys:
                     depth = to_hwc_float32_numpy(batch[key][i])
@@ -270,11 +270,11 @@ def visualize_dataset(
                     img_entity = rr.Image(img).compress() if display_compressed_images else rr.Image(img)
                     rr.log(key, entity=img_entity)
 
-            # display the action space (e.g. actuators command)
+            # 显示动作空间（例如执行器指令）
             if ACTION in batch:
                 rr.log(ACTION, rr.Scalars(batch[ACTION][i].numpy()))
 
-            # display the observed state space (e.g. agent position in joint space)
+            # 显示观测到的状态空间（例如智能体在关节空间中的位置）
             if OBS_STATE in batch:
                 rr.log("state", rr.Scalars(batch[OBS_STATE][i].numpy()))
 
@@ -287,7 +287,7 @@ def visualize_dataset(
             if SUCCESS in batch:
                 rr.log(SUCCESS, rr.Scalars(batch[SUCCESS][i].item()))
 
-    # save .rrd locally
+    # 在本地保存 .rrd 文件
     if mode == "local" and save:
         output_dir.mkdir(parents=True, exist_ok=True)
         repo_id_str = repo_id.replace("/", "_")
@@ -296,7 +296,7 @@ def visualize_dataset(
         return rrd_path
 
     elif mode == "distant":
-        # Keep the process alive while it serves the gRPC/web connection.
+        # 在提供 gRPC/web 连接服务期间保持进程存活。
         try:
             while True:
                 time.sleep(1)

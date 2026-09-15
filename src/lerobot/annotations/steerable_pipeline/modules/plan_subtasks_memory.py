@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""``plan`` module: subtask decomposition + plan + memory (PERSISTENT styles)."""
+"""``plan`` 模块：子任务分解 + 计划 + 记忆（PERSISTENT 风格）。"""
 
 from __future__ import annotations
 
@@ -36,9 +36,9 @@ from ..vlm_client import VlmClient
 logger = logging.getLogger(__name__)
 
 
-# Prepended to every describe / segment prompt so the VLM knows the images are
-# timestamped contact-sheet grids, not a single video, and reads the burned-in
-# per-tile timestamp when choosing boundaries.
+# 添加到每个 describe / segment 提示词的前面，让 VLM 知道这些图像是
+# 带时间戳的联络印样（contact-sheet）网格，而不是单个视频，并在选择
+# 边界时读取烧录在每个图块上的时间戳。
 def _contact_sheet_preamble(columns: int) -> str:
     return (
         "CONTACT SHEETS — how to read the images below:\n"
@@ -54,10 +54,10 @@ def _contact_sheet_preamble(columns: int) -> str:
     )
 
 
-# Appended to every describe (and segment) prompt. A visual, causal definition
-# of where one event ends and the next begins — adapted from macrodata/refiner —
-# to sharpen cut points while the existing prompt keeps owning the imperative
-# phrasing.
+# 追加到每个 describe（以及 segment）提示词的末尾。这是一个关于一个事件
+# 在哪里结束、下一个事件从哪里开始的视觉化、因果性定义——改编自
+# macrodata/refiner——用于锐化切分点，同时由现有提示词继续负责祈使句式
+# 的措辞。
 _CAUSAL_BOUNDARY_RULES = (
     "EVENT BOUNDARIES — where one event ends and the next begins:\n"
     "- Start a new event whenever the world state changes: an object becomes "
@@ -76,17 +76,17 @@ _CAUSAL_BOUNDARY_RULES = (
 
 @dataclass
 class PlanSubtasksMemoryModule:
-    """Generate subtask spans, plan, and memory rows.
+    """生成子任务区间、计划（plan）和记忆（memory）行。
 
-    All output is persistent (lives in ``language_persistent``):
+    所有输出都是持久化的（存放在 ``language_persistent`` 中）：
 
-    - ``subtask`` rows: one per span, stamped at the span's *start* timestamp
-      (snapped to an exact frame).
-    - ``plan`` rows: emitted at ``t=0``; refreshed at every interjection
-      timestamp via :meth:`run_plan_updates` (called by the executor after
-      the ``interjections`` module completes).
-    - ``memory`` rows: emitted at each subtask boundary (= subtask start
-      timestamp from the second subtask onward).
+    - ``subtask`` 行：每个区间一行，打上该区间*开始*时间戳
+      （对齐到精确帧）。
+    - ``plan`` 行：在 ``t=0`` 发射；通过 :meth:`run_plan_updates`
+      在每个插话时间戳刷新（由执行器在 ``interjections`` 模块
+      完成后调用）。
+    - ``memory`` 行：在每个子任务边界（= 从第二个子任务起的子任务
+      开始时间戳）发射。
     """
 
     vlm: VlmClient
@@ -99,13 +99,13 @@ class PlanSubtasksMemoryModule:
 
     def run_episode(self, record: EpisodeRecord, staging: EpisodeStaging) -> None:
         rows: list[dict[str, Any]] = []
-        # Task driving every plan-module prompt: canonical episode_task, or a
-        # video-derived one when it's empty/placeholder (see derive_task_*).
+        # 驱动所有 plan 模块提示词的任务：规范的 episode_task，或者当它
+        # 为空/占位符时从视频推导出的任务（参见 derive_task_*）。
         effective_task = self._resolve_effective_task(record)
-        # task_aug rows at t=0: phrasings the renderer rotates ${task} through.
-        # Either the structured 5-axis taxonomy (task_aug_axes.enabled) or
-        # free-form n_task_rephrasings; the effective task is always emitted
-        # first so the rotation covers the source-of-truth phrasing.
+        # t=0 处的 task_aug 行：渲染器轮换 ${task} 所用的各种措辞。
+        # 要么是结构化的 5 轴分类法（task_aug_axes.enabled），要么是
+        # 自由形式的 n_task_rephrasings；有效任务总是最先发射，
+        # 以保证轮换覆盖事实来源的措辞。
         t0 = float(record.frame_timestamps[0]) if record.frame_timestamps else 0.0
         variants: list[str] | None = None
         if self.config.task_aug_axes.enabled and effective_task:
@@ -119,7 +119,7 @@ class PlanSubtasksMemoryModule:
         if self.config.subtask_seeded_relabel and subtask_spans:
             subtask_spans = self._seeded_relabel(record, subtask_spans, effective_task)
 
-        # subtask rows
+        # subtask 行
         for span in subtask_spans:
             rows.append(
                 {
@@ -130,10 +130,10 @@ class PlanSubtasksMemoryModule:
                     "tool_calls": None,
                 }
             )
-        # Plan rows at every subtask boundary (incl. t=0). The plan is a
-        # numbered list of still-todo subtasks, so re-emitting at each
-        # boundary makes it shrink as work progresses — ${plan} at frame t is
-        # exactly what's left to do.
+        # 在每个子任务边界（包括 t=0）发射 Plan 行。计划是一个
+        # 尚未完成的子任务的编号列表，因此在每个边界重新发射
+        # 会让它随着工作推进而收缩——帧 t 处的 ${plan} 恰好就是
+        # 剩余要做的事情。
         if self.config.emit_plan:
             for span in subtask_spans:
                 boundary_t = snap_to_frame(span["start"], record.frame_timestamps)
@@ -150,8 +150,8 @@ class PlanSubtasksMemoryModule:
                             "tool_calls": None,
                         }
                     )
-        # memory rows at every subtask boundary except the very first start;
-        # skipped entirely when ``emit_memory`` is False (subtasks-only / plan-only).
+        # 在除第一个开始之外的每个子任务边界发射 memory 行；
+        # 当 ``emit_memory`` 为 False 时完全跳过（仅子任务 / 仅计划）。
         prior_memory = ""
         memory_boundaries = enumerate(subtask_spans[1:], start=1) if self.config.emit_memory else []
         for i, span in memory_boundaries:
@@ -173,7 +173,7 @@ class PlanSubtasksMemoryModule:
         staging.write("plan", rows)
 
     # ------------------------------------------------------------------
-    # Task derivation + rephrasings
+    # 任务推导 + 改写
     # ------------------------------------------------------------------
 
     _PLACEHOLDER_TASKS: frozenset[str] = frozenset(
@@ -192,12 +192,11 @@ class PlanSubtasksMemoryModule:
     )
 
     def _resolve_effective_task(self, record: EpisodeRecord) -> str:
-        """Decide which task string drives the ``plan`` module for this episode.
+        """决定本片段中驱动 ``plan`` 模块的任务字符串。
 
-        Returns the user-supplied ``record.episode_task`` unless
-        ``derive_task_from_video`` says otherwise (see config docstring).
-        Falls back gracefully to the canonical task if video derivation
-        fails.
+        除非 ``derive_task_from_video`` 另有指示（参见配置的
+        docstring），否则返回用户提供的 ``record.episode_task``。
+        如果视频推导失败，则优雅地回退到规范任务。
         """
         canonical = (record.episode_task or "").strip()
         mode = (self.config.derive_task_from_video or "off").strip().lower()
@@ -219,7 +218,7 @@ class PlanSubtasksMemoryModule:
 
     @staticmethod
     def _task_aug_rows(phrasings: Sequence[str], t0: float) -> list[dict[str, Any]]:
-        """Build deduplicated ``task_aug`` rows (role=user) at ``t0``."""
+        """在 ``t0`` 构建去重后的 ``task_aug`` 行（role=user）。"""
         seen: set[str] = set()
         rows: list[dict[str, Any]] = []
         for phrasing in phrasings:
@@ -233,15 +232,15 @@ class PlanSubtasksMemoryModule:
         return rows
 
     # ------------------------------------------------------------------
-    # VLM call helpers — every plan-module prompt follows the same shape:
-    # build messages → single VLM call → pull a named field.
+    # VLM 调用辅助函数——每个 plan 模块提示词都遵循相同的形态：
+    # 构建 messages → 单次 VLM 调用 → 提取一个命名字段。
     # ------------------------------------------------------------------
 
     def _vlm_field(self, messages: list[dict[str, Any]], field: str) -> Any:
-        """Run a single VLM call and return ``result[field]`` or ``None``.
+        """执行单次 VLM 调用并返回 ``result[field]`` 或 ``None``。
 
-        Centralizes the ``vlm.generate_json([m])[0]`` + ``isinstance(dict)``
-        dance every prompt-call site needs.
+        集中处理每个提示词调用点都需要的
+        ``vlm.generate_json([m])[0]`` + ``isinstance(dict)`` 这套流程。
         """
         result = self.vlm.generate_json([messages])[0]
         if isinstance(result, dict):
@@ -250,7 +249,7 @@ class PlanSubtasksMemoryModule:
 
     @staticmethod
     def _text_message(text: str) -> list[dict[str, Any]]:
-        """One-shot text-only user message wrapped for ``generate_json``."""
+        """为 ``generate_json`` 包装的一次性纯文本用户消息。"""
         return [{"role": "user", "content": [{"type": "text", "text": text}]}]
 
     def _video_message(
@@ -259,23 +258,23 @@ class PlanSubtasksMemoryModule:
         prompt: str,
         window: tuple[float, float] | None = None,
     ) -> list[dict[str, Any]]:
-        """User message combining the (optionally windowed) contact sheets with ``prompt``.
+        """将（可选加窗的）联络印样与 ``prompt`` 组合成的用户消息。
 
-        The prompt is always prefixed with a short explanation of how to read
-        the timestamped grids, so the model treats them as one ordered
-        sequence of frames rather than unrelated images.
+        提示词总是带有一段关于如何阅读带时间戳网格的简短说明
+        作为前缀，使模型将它们视为一个有序的帧序列，而不是
+        互不相关的图像。
         """
         prompt = _contact_sheet_preamble(self.config.contact_sheet_columns) + prompt
         content = [*self._episode_video_block(record, window=window), {"type": "text", "text": prompt}]
         return [{"role": "user", "content": content}]
 
     def _derive_task_from_video(self, record: EpisodeRecord) -> str | None:
-        """Ask the VLM "what is this video about" with no task hint at all."""
+        """在完全不提供任务提示的情况下询问 VLM"这个视频是关于什么的"。"""
         text = self._vlm_field(self._video_message(record, load_prompt("plan_video_task")), "task")
         return text.strip() if isinstance(text, str) and text.strip() else None
 
     def _generate_task_rephrasings(self, base_task: str, *, n: int) -> list[str]:
-        """Generate ``n`` text-only paraphrases of ``base_task``."""
+        """生成 ``base_task`` 的 ``n`` 个纯文本改写。"""
         if n <= 0 or not base_task:
             return []
         prompt = load_prompt("plan_task_rephrasings").format(base_task=base_task, n=n)
@@ -286,18 +285,17 @@ class PlanSubtasksMemoryModule:
         return [s for s in out if s][:n]
 
     # ------------------------------------------------------------------
-    # Structured 5-axis task augmentation (EgoMimic-style taxonomy)
+    # 结构化 5 轴任务增强（EgoMimic 风格的分类法）
     # ------------------------------------------------------------------
 
     def _generate_task_aug_by_axes(self, base_task: str, axes_cfg: Any) -> list[str]:
-        """One VLM call → variants along the 5-axis taxonomy.
+        """一次 VLM 调用 → 沿 5 轴分类法生成变体。
 
-        Variants from all axes are flattened into a single list (the
-        downstream pipeline doesn't need to know about the per-axis
-        bucketing — every variant becomes a ``task_aug`` row). Order
-        is preserved for reproducibility: synonym_paraphrase first,
-        then omit_arm, then omit_orientation, then omit_grasp_method,
-        then combined_omissions.
+        所有轴的变体被展平为一个列表（下游流水线不需要知道
+        按轴分桶的情况——每个变体都会成为一个 ``task_aug`` 行）。
+        为了可复现性保持顺序：synonym_paraphrase 在前，
+        然后是 omit_arm，接着是 omit_orientation，再是
+        omit_grasp_method，最后是 combined_omissions。
         """
         if not base_task:
             return []
@@ -338,19 +336,18 @@ class PlanSubtasksMemoryModule:
     def _episode_video_block(
         self, record: EpisodeRecord, window: tuple[float, float] | None = None
     ) -> list[dict[str, Any]]:
-        """Timestamped contact sheets for the describe / segmentation prompts.
+        """用于 describe / segmentation 提示词的带时间戳联络印样。
 
-        Always renders the (optionally windowed) episode as contact sheets:
-        frames sampled at ``frames_per_second`` and packed into timestamped
-        JPEG grids. ``max_frames_per_prompt`` caps the frame count; whole
-        episodes that exceed it are windowed upstream in
-        :meth:`_generate_subtasks` so each call stays within budget while the
-        full episode keeps its sampling density.
+        总是将（可选加窗的）片段渲染为联络印样：按
+        ``frames_per_second`` 采样的帧被打包成带时间戳的 JPEG
+        网格。``max_frames_per_prompt`` 限制帧数；超出该限制的
+        完整片段会在上游的 :meth:`_generate_subtasks` 中加窗，
+        使每次调用都保持在预算之内，同时完整片段保持其采样
+        密度。
 
-        When ``window=(w0, w1)`` is given the badges are WINDOW-RELATIVE
-        (``ts - w0``) to match the window-relative time frame the
-        segmentation prompt works in (spans are offset back to absolute time
-        afterwards).
+        当给定 ``window=(w0, w1)`` 时，徽标是相对于窗口的
+        （``ts - w0``），以匹配 segmentation 提示词所使用的
+        窗口相对时间框架（之后区间会被偏移回绝对时间）。
         """
         if not record.frame_timestamps:
             return []
@@ -376,7 +373,7 @@ class PlanSubtasksMemoryModule:
 
     @staticmethod
     def _uniform_episode_timestamps(record: EpisodeRecord, n: int) -> list[float]:
-        """``n`` episode-relative timestamps spanning ``[t0, t_last]`` uniformly."""
+        """均匀覆盖 ``[t0, t_last]`` 的 ``n`` 个片段相对时间戳。"""
         ts = record.frame_timestamps
         if n >= len(ts):
             return [float(t) for t in ts]
@@ -387,7 +384,7 @@ class PlanSubtasksMemoryModule:
         return [t0 + i * step for i in range(n)]
 
     def _contact_sheet_blocks(self, frames: list[Any], timestamps: list[float]) -> list[dict[str, Any]]:
-        """Build timestamped contact-sheet image blocks from decoded frames."""
+        """从解码后的帧构建带时间戳的联络印样图像块。"""
         return to_contact_sheet_blocks(
             frames,
             timestamps,
@@ -404,17 +401,16 @@ class PlanSubtasksMemoryModule:
         interjection_times: Sequence[float],
         interjection_texts: Sequence[str] | None = None,
     ) -> None:
-        """Append additional ``plan`` rows at every interjection timestamp.
+        """在每个插话时间戳追加额外的 ``plan`` 行。
 
-        Plans refresh ONLY on user interjections (event-driven). The
-        interjection text is forwarded into the prompt so the refreshed plan
-        reflects the user's correction.
+        计划仅在用户插话时刷新（事件驱动）。插话文本会被
+        转发到提示词中，使刷新后的计划反映用户的纠正。
         """
         if not self.config.emit_plan:
             return
         existing = staging.read("plan")
-        # Pass the last frame timestamp so the final span is closed (else its
-        # end == start, zero duration, and a refresh inside it is missed).
+        # 传入最后一帧的时间戳，使最后一个区间是闭合的（否则其
+        # end == start，持续时间为零，其内部的刷新会被遗漏）。
         episode_end_t = float(record.frame_timestamps[-1]) if record.frame_timestamps else None
         spans = reconstruct_subtask_spans(existing, episode_end_t=episode_end_t)
         already_planned: set[float] = {float(r["timestamp"]) for r in existing if r.get("style") == "plan"}
@@ -444,37 +440,37 @@ class PlanSubtasksMemoryModule:
         staging.write("plan", new_rows)
 
     def _generate_subtasks(self, record: EpisodeRecord, *, task: str | None = None) -> list[dict[str, Any]]:
-        """Generate subtask spans, optionally via a multi-call quality chain.
+        """生成子任务区间，可选通过多次调用的质量链。
 
-        Single call (default): watch video → emit subtask JSON.
+        单次调用（默认）：观看视频 → 发射子任务 JSON。
 
-        Multi-call (opt-in, higher quality, more VLM calls):
-          1. ``subtask_describe_first`` — a grounding pass that narrates
-             ONLY what is visible (no JSON commitment to subtasks yet);
-             its description is injected into the segmentation prompt so
-             the model segments its own grounded observations instead of
-             pattern-matching the task text.
-          2. segmentation — emit subtask JSON (as before).
+        多次调用（可选启用，质量更高，VLM 调用更多）：
+          1. ``subtask_describe_first`` —— 一个落地（grounding）过程，
+             仅叙述可见的内容（此时尚不对子任务做 JSON 承诺）；
+             其描述会被注入到 segmentation 提示词中，使模型对
+             自己有依据的观察进行切分，而不是对任务文本做
+             模式匹配。
+          2. segmentation —— 发射子任务 JSON（与之前相同）。
         """
         if record.row_count == 0 or not record.frame_timestamps:
             return []
         episode_duration = record.frame_timestamps[-1] - record.frame_timestamps[0]
         effective_task = task if task is not None else record.episode_task
 
-        # ---- Auto-windowing (keeps the full sampling density) --------
-        # Contact sheets are cheap, but a whole long episode sampled at
-        # ``frames_per_second`` can still exceed ``max_frames_per_prompt``.
-        # When it does, split into consecutive windows of exactly that many
-        # frames (one describe→segment call each, still at the full sampling
-        # density), then merge + stitch — so an episode of any length is
-        # covered at full density rather than subsampled into one sparse call.
+        # ---- 自动加窗（保持完整采样密度）--------------------------
+        # 联络印样很便宜，但按 ``frames_per_second`` 采样的整个长
+        # 片段仍可能超过 ``max_frames_per_prompt``。当超过时，
+        # 切分为恰好那么多帧的连续窗口（每个窗口一次
+        # describe→segment 调用，仍保持完整采样密度），然后
+        # 合并 + 拼接——这样任意长度的片段都能以完整密度被覆盖，
+        # 而不是被降采样成一次稀疏调用。
         fps = max(1e-6, float(self.config.frames_per_second))
         n_whole = int(round(episode_duration * fps)) + 1
         if n_whole > self.config.max_frames_per_prompt:
             window_s = self.config.max_frames_per_prompt / fps
             return self._generate_subtasks_windowed(record, effective_task, window_s)
 
-        # ---- Pass 1 (optional): grounding description ----------------
+        # ---- 过程 1（可选）：落地描述 ------------------------------
         observation_block = ""
         if getattr(self.config, "subtask_describe_first", False):
             description = self._describe_episode(record, effective_task)
@@ -488,7 +484,7 @@ class PlanSubtasksMemoryModule:
                     "action that is not in your description above.\n\n"
                 )
 
-        # ---- Pass 2: segmentation ------------------------------------
+        # ---- 过程 2：segmentation ------------------------------------
         prompt = self._with_causal_rules(
             load_prompt("plan_subtasks").format(
                 episode_task=effective_task,
@@ -503,10 +499,9 @@ class PlanSubtasksMemoryModule:
         if not cleaned:
             return []
 
-        # ---- Full-episode coverage stitch ----------------------------
-        # The VLM can start after t0 or leave gaps, so frames fall through
-        # with no active subtask. Always stitch into a contiguous
-        # [t0, t_last] cover.
+        # ---- 完整片段覆盖拼接 --------------------------------------
+        # VLM 可能从 t0 之后才开始，或者留下空隙，导致某些帧没有
+        # 有效的子任务。总是拼接成连续的 [t0, t_last] 覆盖。
         cleaned = self._stitch_full_coverage(cleaned, record)
 
         return cleaned
@@ -514,12 +509,12 @@ class PlanSubtasksMemoryModule:
     def _seeded_relabel(
         self, record: EpisodeRecord, spans: list[dict[str, Any]], task: str
     ) -> list[dict[str, Any]]:
-        """Re-label each span using prev/current/next segment contact sheets.
+        """使用 prev/current/next 区段的联络印样重新标注每个区间。
 
-        Boundaries are kept fixed; only ``text`` is refined. The original
-        ("seed") label is passed as a strong prior so the model verifies and
-        minimally corrects it rather than re-describing from scratch — the
-        macrodata seeded-relabeling step. One VLM call per span.
+        边界保持固定；只精炼 ``text``。原始（"种子"）标签作为强
+        先验传入，使模型对其进行验证并做最小限度的纠正，而不是
+        从头重新描述——即 macrodata 的种子重标注步骤。每个区间
+        一次 VLM 调用。
         """
         n = len(spans)
         out: list[dict[str, Any]] = []
@@ -545,7 +540,7 @@ class PlanSubtasksMemoryModule:
         return out
 
     def _segment_sheet(self, record: EpisodeRecord, span: dict[str, Any]) -> list[dict[str, Any]]:
-        """Contact-sheet block(s) for one span: up to N frames sampled uniformly."""
+        """单个区间的联络印样块：最多均匀采样 N 帧。"""
         s, e = float(span["start"]), float(span["end"])
         n = max(1, int(self.config.subtask_relabel_frames))
         if e <= s or n == 1:
@@ -559,13 +554,12 @@ class PlanSubtasksMemoryModule:
     def _generate_subtasks_windowed(
         self, record: EpisodeRecord, task: str, window_s: float
     ) -> list[dict[str, Any]]:
-        """Subtask generation in fixed-length windows at constant fps.
+        """以固定 fps 在固定长度窗口内进行子任务生成。
 
-        Splits ``[t0, t_last]`` into consecutive windows of ``window_s``
-        seconds, runs the describe -> segment chain on each window's own
-        frames (sampled at ``frames_per_second``), offsets
-        each window's spans back to absolute episode time, then merges +
-        stitches into a contiguous whole-episode cover.
+        将 ``[t0, t_last]`` 切分为 ``window_s`` 秒的连续窗口，
+        在每个窗口自己的帧上（按 ``frames_per_second`` 采样）
+        运行 describe -> segment 链，将每个窗口的区间偏移回
+        绝对的片段时间，然后合并 + 拼接成连续的整片段覆盖。
         """
         t0 = float(record.frame_timestamps[0])
         t_last = float(record.frame_timestamps[-1])
@@ -584,8 +578,8 @@ class PlanSubtasksMemoryModule:
             window_s,
             len(all_spans),
         )
-        # Merge across windows: clamp to the absolute episode, sort, and
-        # frame-snap to distinct starts (handles any boundary collisions).
+        # 跨窗口合并：钳制到绝对片段范围内，排序，并将开始时间
+        # 对齐到互不相同的帧（处理任何边界碰撞）。
         cleaned = self._clean_spans(all_spans, record)
         if not cleaned:
             return []
@@ -594,11 +588,11 @@ class PlanSubtasksMemoryModule:
     def _subtasks_for_window(
         self, record: EpisodeRecord, task: str, w0: float, w1: float
     ) -> list[dict[str, Any]]:
-        """Run describe -> segment on one ``[w0, w1]`` window.
+        """在一个 ``[w0, w1]`` 窗口上运行 describe -> segment。
 
-        The model works in window-RELATIVE time ``[0, L]`` (it perceives
-        the window as a clip starting at 0); spans are offset back to
-        absolute ``[w0, w1]`` before returning.
+        模型在窗口相对时间 ``[0, L]`` 内工作（它将窗口感知为
+        从 0 开始的片段）；区间在返回前被偏移回绝对的
+        ``[w0, w1]``。
         """
         window = (w0, w1)
         win_len = max(0.0, w1 - w0)
@@ -626,13 +620,13 @@ class PlanSubtasksMemoryModule:
             )
         )
         spans = self._vlm_field(self._video_message(record, prompt, window=window), "subtasks")
-        # Window-relative clamp; no frame-snap dedupe yet (done on the
-        # merged absolute set).
+        # 窗口相对钳制；此时尚不做帧对齐去重（在合并后的绝对
+        # 时间集合上统一进行）。
         cleaned = self._clean_spans(spans, record, bounds=(0.0, win_len), dedupe=False)
         if not cleaned:
             return []
 
-        # Offset window-relative spans back to absolute episode time.
+        # 将窗口相对的区间偏移回绝对的片段时间。
         for s in cleaned:
             s["start"] = w0 + float(s["start"])
             s["end"] = w0 + float(s["end"])
@@ -641,20 +635,19 @@ class PlanSubtasksMemoryModule:
     def _stitch_full_coverage(
         self, spans: list[dict[str, Any]], record: EpisodeRecord
     ) -> list[dict[str, Any]]:
-        """Make subtask spans tile the full episode with no gaps.
+        """使子任务区间无缝铺满整个片段。
 
-        * The first subtask starts at the episode's first frame ``t0``
-          (any idle / approach before the first labelled action is folded
-          into it), so every early frame has an active subtask.
-        * Each subtask's ``end`` is snapped to the next subtask's
-          ``start`` (gaps between spans are closed), and the final
-          subtask's ``end`` extends to the last frame ``t_last``.
+        * 第一个子任务从片段的第一帧 ``t0`` 开始（第一个有标签
+          的动作之前的任何空闲/接近过程都被并入其中），因此
+          每个早期帧都有一个有效的子任务。
+        * 每个子任务的 ``end`` 对齐到下一个子任务的 ``start``
+          （区间之间的空隙被闭合），最后一个子任务的 ``end``
+          延伸到最后一帧 ``t_last``。
 
-        Starts are otherwise left as the (already frame-snapped, distinct)
-        values the VLM produced — only the FIRST start is pulled
-        back to ``t0``, which can't collide with a later span because it
-        was already the earliest. Purely deterministic; runs after the
-        VLM passes.
+        开始时间在其他方面保持 VLM 产生的（已对齐到帧且互不相同
+        的）值——只有第一个开始时间被拉回 ``t0``，这不会与后面
+        的区间冲突，因为它本来就是最早的。完全确定性；在 VLM
+        过程之后运行。
         """
         if not spans or not record.frame_timestamps:
             return spans
@@ -672,7 +665,7 @@ class PlanSubtasksMemoryModule:
 
     @staticmethod
     def _with_causal_rules(prompt: str) -> str:
-        """Append the causal event-boundary rules to a describe/segment prompt."""
+        """将因果事件边界规则追加到 describe/segment 提示词中。"""
         return f"{prompt}\n\n{_CAUSAL_BOUNDARY_RULES}"
 
     def _clean_spans(
@@ -682,14 +675,13 @@ class PlanSubtasksMemoryModule:
         bounds: tuple[float, float] | None = None,
         dedupe: bool = True,
     ) -> list[dict[str, Any]]:
-        """Clamp / sort / (optionally) dedupe raw VLM subtask spans into valid rows.
+        """将原始 VLM 子任务区间钳制 / 排序 /（可选）去重为有效行。
 
-        ``bounds`` overrides the clamp range — pass the window's
-        ``(w_lo, w_hi)`` when cleaning window-relative spans, or leave
-        ``None`` to clamp to the whole episode ``[t0, t_last]``.
-        ``dedupe`` runs the frame-snap distinct-start step; skip it for
-        window-relative spans (frame snapping is done once on the merged,
-        absolute-time set).
+        ``bounds`` 覆盖钳制范围——在清理窗口相对区间时传入窗口
+        的 ``(w_lo, w_hi)``，或者留 ``None`` 以钳制到整个片段
+        ``[t0, t_last]``。``dedupe`` 执行帧对齐的不同开始时间
+        步骤；对窗口相对区间跳过它（帧对齐在合并后的绝对时间
+        集合上只做一次）。
         """
         if not spans:
             return []
@@ -721,7 +713,7 @@ class PlanSubtasksMemoryModule:
     def _describe_episode(
         self, record: EpisodeRecord, task: str, window: tuple[float, float] | None = None
     ) -> str:
-        """Grounding pass: free-form chronological description of the (windowed) video."""
+        """落地过程：对（加窗的）视频进行自由形式的按时间顺序描述。"""
         prompt = self._with_causal_rules(load_prompt("plan_subtask_describe").format(episode_task=task))
         text = self._vlm_field(self._video_message(record, prompt, window=window), "description")
         return text.strip() if isinstance(text, str) and text.strip() else ""
@@ -730,21 +722,19 @@ class PlanSubtasksMemoryModule:
     def _dedupe_starts_to_distinct_frames(
         spans: list[dict[str, Any]], record: EpisodeRecord
     ) -> list[dict[str, Any]]:
-        """Bump same-frame subtask starts onto distinct frames.
+        """将落在同一帧上的子任务开始时间挪到互不相同的帧上。
 
-        Two consecutive VLM spans whose ``start`` rounds to the same
-        source frame (after :func:`snap_to_frame`) would otherwise emit
-        two ``style=subtask`` rows at the identical persistent
-        timestamp. The training-time renderer's ``active_at(t,
-        style=subtask)`` resolver can't disambiguate that and raises
-        ``Ambiguous resolver for style='subtask'``.
+        两个连续的 VLM 区间，如果其 ``start``（经过
+        :func:`snap_to_frame` 之后）舍入到同一个源帧，就会在
+        相同的持久化时间戳上发射两行 ``style=subtask``。
+        训练时渲染器的 ``active_at(t, style=subtask)`` 解析器
+        无法消歧，会抛出 ``Ambiguous resolver for style='subtask'``。
 
-        Walk the (sorted-by-start) spans, snap each to its frame, and
-        if the snapped frame is already taken push the span onto the
-        next unused frame so both subtasks survive on distinct
-        timestamps. If the episode ends before a free frame is found,
-        the trailing span is dropped with a warning — better than
-        poisoning the render.
+        遍历（按开始时间排序的）区间，将每个区间对齐到其帧，
+        如果对齐的帧已被占用，就把该区间推到下一个未使用的帧，
+        使两个子任务都能以不同的时间戳保留下来。如果在找到空闲
+        帧之前片段就结束了，则丢弃末尾的区间并发出警告——这比
+        污染渲染要好。
         """
         if not spans:
             return spans
@@ -783,19 +773,19 @@ class PlanSubtasksMemoryModule:
         interjection: str | None = None,  # noqa: ARG002
         task: str | None = None,  # noqa: ARG002
     ) -> str | None:
-        """Deterministic plan = numbered list of *still-todo* subtasks.
+        """确定性计划 = *尚未完成*的子任务的编号列表。
 
-        No VLM call: a plain numbered list keeps the plan aligned with the
-        upcoming subtasks (the old VLM "compact hierarchical plan" prompt
-        cost a round-trip per episode/refresh and could diverge).
+        不调用 VLM：简单的编号列表使计划与即将到来的子任务
+        保持一致（旧的 VLM"紧凑分层计划"提示词每个片段/每次
+        刷新都要一次往返，而且可能产生偏差）。
 
             1. <subtask 1>
             2. <subtask 2>
 
-        On a refresh at ``refresh_t`` (from ``run_plan_updates`` on
-        interjections, and ``run_episode`` at each boundary), only subtasks
-        starting at or after ``refresh_t`` are included — so it always
-        describes what's left.
+        在 ``refresh_t`` 处刷新时（来自 ``run_plan_updates`` 在
+        插话时的调用，以及 ``run_episode`` 在每个边界的调用），
+        只包含在 ``refresh_t`` 或之后开始的子任务——因此它总是
+        描述剩余要做的事情。
         """
         if not subtask_spans:
             return None
@@ -803,8 +793,8 @@ class PlanSubtasksMemoryModule:
             s for s in subtask_spans if refresh_t is None or float(s.get("start", 0.0)) >= float(refresh_t)
         ]
         if not remaining:
-            # Past the last subtask boundary on a late refresh — nothing
-            # left to plan; emit None so the caller skips the row.
+            # 在一次较晚的刷新中已越过最后一个子任务边界——没有
+            # 剩余可计划的内容；返回 None 让调用方跳过该行。
             return None
         return "\n".join(f"{i}. {span.get('text', '').strip()}" for i, span in enumerate(remaining, start=1))
 

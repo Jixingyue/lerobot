@@ -41,8 +41,8 @@ class BatchTransition(TypedDict):
 
 def random_crop_vectorized(images: torch.Tensor, output_size: tuple) -> torch.Tensor:
     """
-    Perform a per-image random crop over a batch of images in a vectorized way.
-    (Same as shown previously.)
+    以向量化的方式对一批图像逐张执行随机裁剪。
+    （与前面展示的相同。）
     """
     B, C, H, W = images.shape  # noqa: N806
     crop_h, crop_w = output_size
@@ -63,7 +63,7 @@ def random_crop_vectorized(images: torch.Tensor, output_size: tuple) -> torch.Te
 
     images_hwcn = images.permute(0, 2, 3, 1)  # (B, H, W, C)
 
-    # Gather pixels
+    # 收集像素
     cropped_hwcn = images_hwcn[torch.arange(B, device=images.device).view(B, 1, 1), rows, cols, :]
     # cropped_hwcn => (B, crop_h, crop_w, C)
 
@@ -72,7 +72,7 @@ def random_crop_vectorized(images: torch.Tensor, output_size: tuple) -> torch.Te
 
 
 def random_shift(images: torch.Tensor, pad: int = 4):
-    """Vectorized random shift, imgs: (B,C,H,W), pad: #pixels"""
+    """向量化随机平移，imgs: (B,C,H,W)，pad: 像素数"""
     _, _, h, w = images.shape
     images = F.pad(input=images, pad=(pad, pad, pad, pad), mode="replicate")
     return random_crop_vectorized(images=images, output_size=(h, w))
@@ -90,21 +90,21 @@ class ReplayBuffer:
         optimize_memory: bool = False,
     ):
         """
-        Replay buffer for storing transitions.
-        It will allocate tensors on the specified device, when the first transition is added.
-        NOTE: If you encounter memory issues, you can try to use the `optimize_memory` flag to save memory or
-        and use the `storage_device` flag to store the buffer on a different device.
+        用于存储转移（transition）的回放缓冲区。
+        在添加第一个转移时，它会在指定设备上分配张量。
+        注意：如果遇到内存问题，可以尝试使用 `optimize_memory` 标志来节省内存，
+        并使用 `storage_device` 标志将缓冲区存储在其他设备上。
         Args:
-            capacity (int): Maximum number of transitions to store in the buffer.
-            device (str): The device where the tensors will be moved when sampling ("cuda:0" or "cpu").
-            state_keys (list[str]): The list of keys that appear in `state` and `next_state`.
-            image_augmentation_function (Callable | None): A function that takes a batch of images
-                and returns a batch of augmented images. If None, a default augmentation function is used.
-            use_drq (bool): Whether to use the default DRQ image augmentation style, when sampling in the buffer.
-            storage_device: The device (e.g. "cpu" or "cuda:0") where the data will be stored.
-                Using "cpu" can help save GPU memory.
-            optimize_memory (bool): If True, optimizes memory by not storing duplicate next_states when
-                they can be derived from states. This is useful for large datasets where next_state[i] = state[i+1].
+            capacity (int): 缓冲区中可存储的最大转移数量。
+            device (str): 采样时张量将被移动到的设备（"cuda:0" 或 "cpu"）。
+            state_keys (list[str]): 出现在 `state` 和 `next_state` 中的键列表。
+            image_augmentation_function (Callable | None): 接收一批图像
+                并返回增强后图像批次的函数。如果为 None，则使用默认的增强函数。
+            use_drq (bool): 在缓冲区中采样时，是否使用默认的 DRQ 图像增强风格。
+            storage_device: 数据存储所用的设备（例如 "cpu" 或 "cuda:0"）。
+                使用 "cpu" 有助于节省 GPU 内存。
+            optimize_memory (bool): 如果为 True，则通过不存储重复的 next_states 来优化内存
+                （当它们可以从 states 推导出来时）。这适用于 next_state[i] = state[i+1] 的大型数据集。
         """
         if capacity <= 0:
             raise ValueError("Capacity must be greater than 0.")
@@ -118,10 +118,10 @@ class ReplayBuffer:
         self.optimize_memory = optimize_memory
         self._lock = threading.Lock()
 
-        # Track episode boundaries for memory optimization
+        # 跟踪回合（episode）边界以进行内存优化
         self.episode_ends = torch.zeros(capacity, dtype=torch.bool, device=storage_device)
 
-        # If no state_keys provided, default to an empty list
+        # 如果未提供 state_keys，则默认为空列表
         self.state_keys = state_keys if state_keys is not None else []
 
         self.image_augmentation_function = image_augmentation_function
@@ -137,12 +137,12 @@ class ReplayBuffer:
         action: torch.Tensor,
         complementary_info: dict[str, torch.Tensor] | None = None,
     ):
-        """Initialize the storage tensors based on the first transition."""
-        # Determine shapes from the first transition
+        """根据第一个转移初始化存储张量。"""
+        # 从第一个转移确定形状
         state_shapes = {key: val.squeeze(0).shape for key, val in state.items()}
         action_shape = action.squeeze(0).shape
 
-        # Pre-allocate tensors for storage
+        # 预分配存储张量
         self.states = {
             key: torch.empty((self.capacity, *shape), device=self.storage_device)
             for key, shape in state_shapes.items()
@@ -151,27 +151,27 @@ class ReplayBuffer:
         self.rewards = torch.empty((self.capacity,), device=self.storage_device)
 
         if not self.optimize_memory:
-            # Standard approach: store states and next_states separately
+            # 标准方式：分别存储 states 和 next_states
             self.next_states = {
                 key: torch.empty((self.capacity, *shape), device=self.storage_device)
                 for key, shape in state_shapes.items()
             }
         else:
-            # Memory-optimized approach: don't allocate next_states buffer
-            # Just create a reference to states for consistent API
-            self.next_states = self.states  # Just a reference for API consistency
+            # 内存优化方式：不分配 next_states 缓冲区
+            # 仅创建对 states 的引用，以保持 API 一致
+            self.next_states = self.states  # 仅为 API 一致性而保留的引用
 
         self.dones = torch.empty((self.capacity,), dtype=torch.bool, device=self.storage_device)
         self.truncateds = torch.empty((self.capacity,), dtype=torch.bool, device=self.storage_device)
 
-        # Initialize storage for complementary_info
+        # 初始化 complementary_info 的存储
         self.has_complementary_info = complementary_info is not None
         self.complementary_info_keys = []
         self.complementary_info = {}
 
         if self.has_complementary_info:
             self.complementary_info_keys = list(complementary_info.keys())
-            # Pre-allocate tensors for each key in complementary_info
+            # 为 complementary_info 中的每个键预分配张量
             for key, value in complementary_info.items():
                 if isinstance(value, torch.Tensor):
                     value_shape = value.squeeze(0).shape
@@ -179,7 +179,7 @@ class ReplayBuffer:
                         (self.capacity, *value_shape), device=self.storage_device
                     )
                 elif isinstance(value, (int | float)):
-                    # Handle scalar values similar to reward
+                    # 像处理 reward 一样处理标量值
                     self.complementary_info[key] = torch.empty((self.capacity,), device=self.storage_device)
                 else:
                     raise ValueError(f"Unsupported type {type(value)} for complementary_info[{key}]")
@@ -199,18 +199,18 @@ class ReplayBuffer:
         truncated: bool,
         complementary_info: dict[str, torch.Tensor] | None = None,
     ):
-        """Saves a transition, ensuring tensors are stored on the designated storage device."""
+        """保存一个转移，并确保张量存储在指定的存储设备上。"""
         with self._lock:
-            # Initialize storage if this is the first transition
+            # 如果这是第一个转移，则初始化存储
             if not self.initialized:
                 self._initialize_storage(state=state, action=action, complementary_info=complementary_info)
 
-            # Store the transition in pre-allocated tensors
+            # 将转移存储到预分配的张量中
             for key in self.states:
                 self.states[key][self.position].copy_(state[key].squeeze(dim=0))
 
                 if not self.optimize_memory:
-                    # Only store next_states if not optimizing memory
+                    # 仅在不优化内存时存储 next_states
                     self.next_states[key][self.position].copy_(next_state[key].squeeze(dim=0))
 
             self.actions[self.position].copy_(action.squeeze(dim=0))
@@ -218,7 +218,7 @@ class ReplayBuffer:
             self.dones[self.position] = done
             self.truncateds[self.position] = truncated
 
-            # Handle complementary_info if provided and storage is initialized
+            # 如果提供了 complementary_info 且存储已初始化，则进行处理
             if complementary_info is not None and self.has_complementary_info:
                 for key in self.complementary_info_keys:
                     if key in complementary_info:
@@ -232,7 +232,7 @@ class ReplayBuffer:
             self.size = min(self.size + 1, self.capacity)
 
     def sample(self, batch_size: int) -> BatchTransition:
-        """Sample a random batch of transitions and collate them into batched tensors."""
+        """随机采样一批转移，并将它们整理成批量张量。"""
         if not self.initialized:
             raise RuntimeError("Cannot sample from an empty buffer. Add transitions first.")
 
@@ -256,13 +256,13 @@ class ReplayBuffer:
                     next_idx = (idx + 1) % self.capacity
                     batch_next_state[key] = self.states[key][next_idx].to(self.device)
 
-            # Sample other tensors
+            # 采样其他张量
             batch_actions = self.actions[idx].to(self.device)
             batch_rewards = self.rewards[idx].to(self.device)
             batch_dones = self.dones[idx].to(self.device).float()
             batch_truncateds = self.truncateds[idx].to(self.device).float()
 
-            # Sample complementary_info if available
+            # 如果可用，则采样 complementary_info
             batch_complementary_info = None
             if self.has_complementary_info:
                 batch_complementary_info = {}
@@ -270,23 +270,23 @@ class ReplayBuffer:
                     batch_complementary_info[key] = self.complementary_info[key][idx].to(self.device)
 
         if self.use_drq and image_keys:
-            # Concatenate all images from state and next_state
+            # 拼接来自 state 和 next_state 的所有图像
             all_images = []
             for key in image_keys:
                 all_images.append(batch_state[key])
                 all_images.append(batch_next_state[key])
 
-            # Optimization: Batch all images and apply augmentation once
+            # 优化：将所有图像组成一个批次，一次性应用增强
             all_images_tensor = torch.cat(all_images, dim=0)
             augmented_images = self.image_augmentation_function(all_images_tensor)
 
-            # Split the augmented images back to their sources
+            # 将增强后的图像拆分回各自的来源
             for i, key in enumerate(image_keys):
-                # Calculate offsets for the current image key:
-                # For each key, we have 2*batch_size images (batch_size for states, batch_size for next_states)
-                # States start at index i*2*batch_size and take up batch_size slots
+                # 计算当前图像键的偏移量：
+                # 对于每个键，有 2*batch_size 张图像（states 占 batch_size 张，next_states 占 batch_size 张）
+                # States 从索引 i*2*batch_size 开始，占用 batch_size 个位置
                 batch_state[key] = augmented_images[i * 2 * batch_size : (i * 2 + 1) * batch_size]
-                # Next states start after the states at index (i*2+1)*batch_size and also take up batch_size slots
+                # Next states 紧随 states 之后，从索引 (i*2+1)*batch_size 开始，同样占用 batch_size 个位置
                 batch_next_state[key] = augmented_images[(i * 2 + 1) * batch_size : (i + 1) * 2 * batch_size]
 
         return BatchTransition(
@@ -306,41 +306,39 @@ class ReplayBuffer:
         queue_size: int = 2,
     ):
         """
-        Creates an infinite iterator that yields batches of transitions.
-        Will automatically restart when internal iterator is exhausted.
+        创建一个产出转移批次的无限迭代器。
+        当内部迭代器耗尽时会自动重新开始。
 
         Args:
-            batch_size (int): Size of batches to sample
-            async_prefetch (bool): Whether to use asynchronous prefetching with threads (default: True)
-            queue_size (int): Number of batches to prefetch (default: 2)
+            batch_size (int): 采样批次的大小
+            async_prefetch (bool): 是否使用线程进行异步预取（默认：True）
+            queue_size (int): 预取的批次数量（默认：2）
 
         Yields:
-            BatchTransition: Batched transitions
+            BatchTransition: 批量化的转移
         """
-        while True:  # Create an infinite loop
+        while True:  # 创建无限循环
             if async_prefetch:
-                # Get the standard iterator
+                # 获取标准迭代器
                 iterator = self._get_async_iterator(queue_size=queue_size, batch_size=batch_size)
             else:
                 iterator = self._get_naive_iterator(batch_size=batch_size, queue_size=queue_size)
 
-            # Yield all items from the iterator
+            # 从迭代器中产出所有项
             with suppress(StopIteration):
                 yield from iterator
 
     def _get_async_iterator(self, batch_size: int, queue_size: int = 2):
         """
-        Create an iterator that continuously yields prefetched batches in a
-        background thread. The design is intentionally simple and avoids busy
-        waiting / complex state management.
+        创建一个迭代器，在后台线程中持续产出预取的批次。
+        该设计刻意保持简单，避免忙等待 / 复杂的状态管理。
 
         Args:
-            batch_size (int): Size of batches to sample.
-            queue_size (int): Maximum number of prefetched batches to keep in
-                memory.
+            batch_size (int): 采样批次的大小。
+            queue_size (int): 内存中保留的预取批次最大数量。
 
         Yields:
-            BatchTransition: A batch sampled from the replay buffer.
+            BatchTransition: 从回放缓冲区采样的一个批次。
         """
         import queue
         import threading
@@ -349,18 +347,18 @@ class ReplayBuffer:
         shutdown_event = threading.Event()
 
         def producer() -> None:
-            """Continuously put sampled batches into the queue until shutdown."""
+            """持续将采样得到的批次放入队列，直到关闭。"""
             while not shutdown_event.is_set():
                 try:
                     batch = self.sample(batch_size)
-                    # The timeout ensures the thread unblocks if the queue is full
-                    # and the shutdown event gets set meanwhile.
+                    # 该超时确保在队列已满且期间设置了关闭事件时，
+                    # 线程能够解除阻塞。
                     data_queue.put(batch, block=True, timeout=0.5)
                 except queue.Full:
-                    # Queue is full – loop again (will re-check shutdown_event)
+                    # 队列已满 – 再次循环（将重新检查 shutdown_event）
                     continue
                 except Exception:
-                    # Surface any unexpected error and terminate the producer.
+                    # 暴露任何意外错误并终止生产者。
                     shutdown_event.set()
 
         producer_thread = threading.Thread(target=producer, daemon=True)
@@ -371,27 +369,27 @@ class ReplayBuffer:
                 try:
                     yield data_queue.get(block=True)
                 except Exception:
-                    # If the producer already set the shutdown flag we exit.
+                    # 如果生产者已经设置了关闭标志，则退出。
                     if shutdown_event.is_set():
                         break
         finally:
             shutdown_event.set()
-            # Drain the queue quickly to help the thread exit if it's blocked on `put`.
+            # 快速清空队列，帮助阻塞在 `put` 上的线程退出。
             while not data_queue.empty():
                 _ = data_queue.get_nowait()
-            # Give the producer thread a bit of time to finish.
+            # 给生产者线程一点时间来完成收尾。
             producer_thread.join(timeout=1.0)
 
     def _get_naive_iterator(self, batch_size: int, queue_size: int = 2):
         """
-        Creates a simple non-threaded iterator that yields batches.
+        创建一个产出批次的简单非线程迭代器。
 
         Args:
-            batch_size (int): Size of batches to sample
-            queue_size (int): Number of initial batches to prefetch
+            batch_size (int): 采样批次的大小
+            queue_size (int): 初始预取的批次数量
 
         Yields:
-            BatchTransition: Batch transitions
+            BatchTransition: 批量转移
         """
         import collections
 
@@ -420,22 +418,22 @@ class ReplayBuffer:
         optimize_memory: bool = False,
     ) -> "ReplayBuffer":
         """
-        Convert a LeRobotDataset into a ReplayBuffer.
+        将 LeRobotDataset 转换为 ReplayBuffer。
 
         Args:
-            lerobot_dataset (LeRobotDataset): The dataset to convert.
-            device (str): The device for sampling tensors. Defaults to "cuda:0".
-            state_keys (Sequence[str] | None): The list of keys that appear in `state` and `next_state`.
-            capacity (int | None): Buffer capacity. If None, uses dataset length.
-            action_mask (Sequence[int] | None): Indices of action dimensions to keep.
-            image_augmentation_function (Callable | None): Function for image augmentation.
-                If None, uses default random shift with pad=4.
-            use_drq (bool): Whether to use DrQ image augmentation when sampling.
-            storage_device (str): Device for storing tensor data. Using "cpu" saves GPU memory.
-            optimize_memory (bool): If True, reduces memory usage by not duplicating state data.
+            lerobot_dataset (LeRobotDataset): 要转换的数据集。
+            device (str): 采样张量所用的设备。默认为 "cuda:0"。
+            state_keys (Sequence[str] | None): 出现在 `state` 和 `next_state` 中的键列表。
+            capacity (int | None): 缓冲区容量。如果为 None，则使用数据集长度。
+            action_mask (Sequence[int] | None): 要保留的动作维度索引。
+            image_augmentation_function (Callable | None): 用于图像增强的函数。
+                如果为 None，则使用 pad=4 的默认随机平移。
+            use_drq (bool): 采样时是否使用 DrQ 图像增强。
+            storage_device (str): 存储张量数据的设备。使用 "cpu" 可节省 GPU 内存。
+            optimize_memory (bool): 如果为 True，则通过不复制 state 数据来减少内存使用。
 
         Returns:
-            ReplayBuffer: The replay buffer with dataset transitions.
+            ReplayBuffer: 包含数据集转移的回放缓冲区。
         """
         if capacity is None:
             capacity = len(lerobot_dataset)
@@ -445,7 +443,7 @@ class ReplayBuffer:
                 "The capacity of the ReplayBuffer must be greater than or equal to the length of the LeRobotDataset."
             )
 
-        # Create replay buffer with image augmentation and DrQ settings
+        # 使用图像增强和 DrQ 设置创建回放缓冲区
         replay_buffer = cls(
             capacity=capacity,
             device=device,
@@ -456,16 +454,16 @@ class ReplayBuffer:
             optimize_memory=optimize_memory,
         )
 
-        # Convert dataset to transitions
+        # 将数据集转换为转移
         list_transition = cls._lerobotdataset_to_transitions(dataset=lerobot_dataset, state_keys=state_keys)
 
-        # Initialize the buffer with the first transition to set up storage tensors
+        # 用第一个转移初始化缓冲区，以建立存储张量
         if list_transition:
             first_transition = list_transition[0]
             first_state = {k: v.to(device) for k, v in first_transition["state"].items()}
             first_action = first_transition[ACTION].to(device)
 
-            # Get complementary info if available
+            # 如果可用，获取补充信息
             first_complementary_info = None
             if (
                 "complementary_info" in first_transition
@@ -479,7 +477,7 @@ class ReplayBuffer:
                 state=first_state, action=first_action, complementary_info=first_complementary_info
             )
 
-        # Fill the buffer with all transitions
+        # 将所有转移填入缓冲区
         for data in list_transition:
             for k, v in data.items():
                 if isinstance(v, dict):
@@ -496,7 +494,7 @@ class ReplayBuffer:
                 reward=data["reward"],
                 next_state=data["next_state"],
                 done=data["done"],
-                truncated=False,  # NOTE: Truncation are not supported yet in lerobot dataset
+                truncated=False,  # 注意：lerobot 数据集尚不支持截断（truncation）
                 complementary_info=data.get("complementary_info", None),
             )
 
@@ -510,36 +508,36 @@ class ReplayBuffer:
         task_name="from_replay_buffer",
     ) -> LeRobotDataset:
         """
-        Converts all transitions in this ReplayBuffer into a single LeRobotDataset object.
+        将此 ReplayBuffer 中的所有转移转换为单个 LeRobotDataset 对象。
         """
         if self.size == 0:
             raise ValueError("The replay buffer is empty. Cannot convert to a dataset.")
 
-        # Create features dictionary for the dataset
+        # 为数据集创建特征字典
         features = {
-            "index": {"dtype": "int64", "shape": [1]},  # global index across episodes
-            "episode_index": {"dtype": "int64", "shape": [1]},  # which episode
-            "frame_index": {"dtype": "int64", "shape": [1]},  # index inside an episode
-            "timestamp": {"dtype": "float32", "shape": [1]},  # for now we store dummy
+            "index": {"dtype": "int64", "shape": [1]},  # 跨回合的全局索引
+            "episode_index": {"dtype": "int64", "shape": [1]},  # 所属回合
+            "frame_index": {"dtype": "int64", "shape": [1]},  # 回合内部的索引
+            "timestamp": {"dtype": "float32", "shape": [1]},  # 目前存储的是占位值
             "task_index": {"dtype": "int64", "shape": [1]},
         }
 
-        # Add "action"
+        # 添加 "action"
         sample_action = self.actions[0]
         act_info = guess_feature_info(t=sample_action, name=ACTION)
         features[ACTION] = act_info
 
-        # Add "reward" and "done"
+        # 添加 "reward" 和 "done"
         features[REWARD] = {"dtype": "float32", "shape": (1,)}
         features[DONE] = {"dtype": "bool", "shape": (1,)}
 
-        # Add state keys
+        # 添加 state 键
         for key in self.states:
             sample_val = self.states[key][0]
             f_info = guess_feature_info(t=sample_val, name=key)
             features[key] = f_info
 
-        # Add complementary_info keys if available
+        # 如果可用，添加 complementary_info 键
         if self.has_complementary_info:
             for key in self.complementary_info_keys:
                 sample_val = self.complementary_info[key][0]
@@ -548,7 +546,7 @@ class ReplayBuffer:
                 f_info = guess_feature_info(t=sample_val, name=f"complementary_info.{key}")
                 features[f"complementary_info.{key}"] = f_info
 
-        # Create an empty LeRobotDataset
+        # 创建一个空的 LeRobotDataset
         lerobot_dataset = LeRobotDataset.create(
             repo_id=repo_id,
             fps=fps,
@@ -558,47 +556,47 @@ class ReplayBuffer:
             use_videos=True,
         )
 
-        # Start writing images if needed
+        # 如有需要，开始写入图像
         lerobot_dataset.writer.start_image_writer(num_processes=0, num_threads=3)
 
-        # Convert transitions into episodes and frames
+        # 将转移转换为回合和帧
 
         for idx in range(self.size):
             actual_idx = (self.position - self.size + idx) % self.capacity
 
             frame_dict = {}
 
-            # Fill the data for state keys
+            # 填充 state 键的数据
             for key in self.states:
                 frame_dict[key] = self.states[key][actual_idx].cpu()
 
-            # Fill action, reward, done
+            # 填充 action、reward、done
             frame_dict[ACTION] = self.actions[actual_idx].cpu()
             frame_dict[REWARD] = torch.tensor([self.rewards[actual_idx]], dtype=torch.float32).cpu()
             frame_dict[DONE] = torch.tensor([self.dones[actual_idx]], dtype=torch.bool).cpu()
             frame_dict["task"] = task_name
 
-            # Add complementary_info if available
+            # 如果可用，添加 complementary_info
             if self.has_complementary_info:
                 for key in self.complementary_info_keys:
                     val = self.complementary_info[key][actual_idx]
-                    # Convert tensors to CPU
+                    # 将张量转换到 CPU
                     if isinstance(val, torch.Tensor):
                         if val.ndim == 0:
                             val = val.unsqueeze(0)
                         frame_dict[f"complementary_info.{key}"] = val.cpu()
-                    # Non-tensor values can be used directly
+                    # 非张量值可以直接使用
                     else:
                         frame_dict[f"complementary_info.{key}"] = val
 
-            # Add to the dataset's buffer
+            # 添加到数据集的缓冲区
             lerobot_dataset.add_frame(frame_dict)
 
-            # If we reached an episode boundary, call save_episode, reset counters
+            # 如果到达回合边界，调用 save_episode，重置计数器
             if self.dones[actual_idx] or self.truncateds[actual_idx]:
                 lerobot_dataset.save_episode()
 
-        # Save any remaining frames in the buffer
+        # 保存缓冲区中剩余的帧
         if lerobot_dataset.has_pending_frames():
             lerobot_dataset.save_episode()
 
@@ -613,29 +611,28 @@ class ReplayBuffer:
         state_keys: Sequence[str] | None = None,
     ) -> list[Transition]:
         """
-        Convert a LeRobotDataset into a list of RL (s, a, r, s', done) transitions.
+        将 LeRobotDataset 转换为 RL (s, a, r, s', done) 转移列表。
 
         Args:
             dataset (LeRobotDataset):
-                The dataset to convert. Each item in the dataset is expected to have
-                at least the following keys:
+                要转换的数据集。数据集中的每个样本应至少包含以下键：
                 {
                     "action": ...
                     "next.reward": ...
                     "next.done": ...
                     "episode_index": ...
                 }
-                plus whatever your 'state_keys' specify.
+                外加 'state_keys' 所指定的任意键。
 
             state_keys (Sequence[str] | None):
-                The dataset keys to include in 'state' and 'next_state'. Their names
-                will be kept as-is in the output transitions. E.g.
-                ["observation.state", "observation.environment_state"].
-                If None, you must handle or define default keys.
+                要包含在 'state' 和 'next_state' 中的数据集键。它们的名称
+                在输出转移中将原样保留。例如
+                ["observation.state", "observation.environment_state"]。
+                如果为 None，则必须自行处理或定义默认键。
 
         Returns:
             transitions (list[Transition]):
-                A list of Transition dictionaries with the same length as `dataset`.
+                与 `dataset` 长度相同的 Transition 字典列表。
         """
         if state_keys is None:
             raise ValueError("State keys must be provided when converting LeRobotDataset to Transitions.")
@@ -643,38 +640,38 @@ class ReplayBuffer:
         transitions = []
         num_frames = len(dataset)
 
-        # Check if the dataset has "next.done" key
+        # 检查数据集是否包含 "next.done" 键
         sample = dataset[0]
         has_done_key = DONE in sample
 
-        # Check for complementary_info keys
+        # 检查 complementary_info 键
         complementary_info_keys = [key for key in sample if key.startswith("complementary_info.")]
         has_complementary_info = len(complementary_info_keys) > 0
 
-        # If not, we need to infer it from episode boundaries
+        # 如果没有，则需要从回合边界推断
         if not has_done_key:
             print("'next.done' key not found in dataset. Inferring from episode boundaries...")
 
         for i in tqdm(range(num_frames)):
             current_sample = dataset[i]
 
-            # ----- 1) Current state -----
+            # ----- 1) 当前状态 -----
             current_state: dict[str, torch.Tensor] = {}
             for key in state_keys:
                 val = current_sample[key]
-                current_state[key] = val.unsqueeze(0)  # Add batch dimension
+                current_state[key] = val.unsqueeze(0)  # 添加批次维度
 
-            # ----- 2) Action -----
-            action = current_sample[ACTION].unsqueeze(0)  # Add batch dimension
+            # ----- 2) 动作 -----
+            action = current_sample[ACTION].unsqueeze(0)  # 添加批次维度
 
-            # ----- 3) Reward and done -----
-            reward = float(current_sample[REWARD].item())  # ensure float
+            # ----- 3) 奖励和完成标志 -----
+            reward = float(current_sample[REWARD].item())  # 确保为 float
 
-            # Determine done flag - use next.done if available, otherwise infer from episode boundaries
+            # 确定 done 标志 - 如果可用则使用 next.done，否则从回合边界推断
             if has_done_key:
-                done = bool(current_sample[DONE].item())  # ensure bool
+                done = bool(current_sample[DONE].item())  # 确保为 bool
             else:
-                # If this is the last frame or if next frame is in a different episode, mark as done
+                # 如果这是最后一帧，或者下一帧属于不同的回合，则标记为 done
                 done = False
                 if i == num_frames - 1:
                     done = True
@@ -683,40 +680,40 @@ class ReplayBuffer:
                     if next_sample["episode_index"] != current_sample["episode_index"]:
                         done = True
 
-            # TODO: (azouitine) Handle truncation (using the same value as done for now)
+            # TODO: (azouitine) 处理截断（目前使用与 done 相同的值）
             truncated = done
 
-            # ----- 4) Next state -----
-            # If not done and the next sample is in the same episode, we pull the next sample's state.
-            # Otherwise (done=True or next sample crosses to a new episode), next_state = current_state.
-            next_state = current_state  # default
+            # ----- 4) 下一状态 -----
+            # 如果未结束且下一个样本在同一回合中，则取下一个样本的状态。
+            # 否则（done=True 或下一个样本进入新回合），next_state = current_state。
+            next_state = current_state  # 默认值
             if not done and (i < num_frames - 1):
                 next_sample = dataset[i + 1]
                 if next_sample["episode_index"] == current_sample["episode_index"]:
-                    # Build next_state from the same keys
+                    # 使用相同的键构建 next_state
                     next_state_data: dict[str, torch.Tensor] = {}
                     for key in state_keys:
                         val = next_sample[key]
-                        next_state_data[key] = val.unsqueeze(0)  # Add batch dimension
+                        next_state_data[key] = val.unsqueeze(0)  # 添加批次维度
                     next_state = next_state_data
 
-            # ----- 5) Complementary info (if available) -----
+            # ----- 5) 补充信息（如果可用） -----
             complementary_info = None
             if has_complementary_info:
                 complementary_info = {}
                 for key in complementary_info_keys:
-                    # Strip the "complementary_info." prefix to get the actual key
+                    # 去掉 "complementary_info." 前缀，得到实际的键
                     clean_key = key[len("complementary_info.") :]
                     val = current_sample[key]
-                    # Handle tensor and non-tensor values differently
+                    # 对张量值和非张量值采用不同的处理方式
                     if isinstance(val, torch.Tensor):
-                        complementary_info[clean_key] = val.unsqueeze(0)  # Add batch dimension
+                        complementary_info[clean_key] = val.unsqueeze(0)  # 添加批次维度
                     else:
-                        # TODO: (azouitine) Check if it's necessary to convert to tensor
-                        # For non-tensor values, use directly
+                        # TODO: (azouitine) 检查是否有必要转换为张量
+                        # 非张量值直接使用
                         complementary_info[clean_key] = val
 
-            # ----- Construct the Transition -----
+            # ----- 构造 Transition -----
             transition = Transition(
                 state=current_state,
                 action=action,
@@ -731,23 +728,23 @@ class ReplayBuffer:
         return transitions
 
 
-# Utility function to guess shapes/dtypes from a tensor
+# 根据张量猜测形状/数据类型的工具函数
 def guess_feature_info(t, name: str):
     """
-    Return a dictionary with the 'dtype' and 'shape' for a given tensor or scalar value.
-    If it looks like a 3D (C,H,W) shape, we might consider it an 'image'.
-    Otherwise default to appropriate dtype for numeric.
+    返回包含给定张量或标量值的 'dtype' 和 'shape' 的字典。
+    如果看起来像 3D (C,H,W) 形状，我们可能将其视为 'image'。
+    否则默认为适合数值的 dtype。
     """
 
     shape = tuple(t.shape)
-    # Basic guess: if we have exactly 3 dims and shape[0] in {1, 3}, guess 'image'
+    # 基本猜测：如果恰好有 3 个维度且 shape[0] 属于 {1, 3}，则猜测为 'image'
     if len(shape) == 3 and shape[0] in [1, 3]:
         return {
             "dtype": "image",
             "shape": shape,
         }
     else:
-        # Otherwise treat as numeric
+        # 否则视为数值类型
         return {
             "dtype": "float32",
             "shape": shape,
@@ -758,24 +755,22 @@ def concatenate_batch_transitions(
     left_batch_transitions: BatchTransition, right_batch_transition: BatchTransition
 ) -> BatchTransition:
     """
-    Concatenates two BatchTransition objects into one.
+    将两个 BatchTransition 对象拼接为一个。
 
-    This function merges the right BatchTransition into the left one by concatenating
-    all corresponding tensors along dimension 0. The operation modifies the left_batch_transitions
-    in place and also returns it.
+    该函数通过沿维度 0 拼接所有对应的张量，将右侧的 BatchTransition 合并到左侧。
+    该操作会就地修改 left_batch_transitions，并将其返回。
 
     Args:
-        left_batch_transitions (BatchTransition): The first batch to concatenate and the one
-            that will be modified in place.
-        right_batch_transition (BatchTransition): The second batch to append to the first one.
+        left_batch_transitions (BatchTransition): 第一个批次，也是将被就地修改的批次。
+        right_batch_transition (BatchTransition): 要追加到第一个批次之后的第二个批次。
 
     Returns:
-        BatchTransition: The concatenated batch (same object as left_batch_transitions).
+        BatchTransition: 拼接后的批次（与 left_batch_transitions 是同一个对象）。
 
     Warning:
-        This function modifies the left_batch_transitions object in place.
+        该函数会就地修改 left_batch_transitions 对象。
     """
-    # Concatenate state fields
+    # 拼接 state 字段
     left_batch_transitions["state"] = {
         key: torch.cat(
             [left_batch_transitions["state"][key], right_batch_transition["state"][key]],
@@ -784,7 +779,7 @@ def concatenate_batch_transitions(
         for key in left_batch_transitions["state"]
     }
 
-    # Concatenate basic fields
+    # 拼接基本字段
     left_batch_transitions[ACTION] = torch.cat(
         [left_batch_transitions[ACTION], right_batch_transition[ACTION]], dim=0
     )
@@ -792,7 +787,7 @@ def concatenate_batch_transitions(
         [left_batch_transitions["reward"], right_batch_transition["reward"]], dim=0
     )
 
-    # Concatenate next_state fields
+    # 拼接 next_state 字段
     left_batch_transitions["next_state"] = {
         key: torch.cat(
             [left_batch_transitions["next_state"][key], right_batch_transition["next_state"][key]],
@@ -801,7 +796,7 @@ def concatenate_batch_transitions(
         for key in left_batch_transitions["next_state"]
     }
 
-    # Concatenate done and truncated fields
+    # 拼接 done 和 truncated 字段
     left_batch_transitions["done"] = torch.cat(
         [left_batch_transitions["done"], right_batch_transition["done"]], dim=0
     )
@@ -810,17 +805,17 @@ def concatenate_batch_transitions(
         dim=0,
     )
 
-    # Handle complementary_info
+    # 处理 complementary_info
     left_info = left_batch_transitions.get("complementary_info")
     right_info = right_batch_transition.get("complementary_info")
 
-    # Only process if right_info exists
+    # 仅在 right_info 存在时处理
     if right_info is not None:
-        # Initialize left complementary_info if needed
+        # 如有需要，初始化左侧的 complementary_info
         if left_info is None:
             left_batch_transitions["complementary_info"] = right_info
         else:
-            # Concatenate each field
+            # 拼接每个字段
             for key in right_info:
                 if key in left_info:
                     left_info[key] = torch.cat([left_info[key], right_info[key]], dim=0)

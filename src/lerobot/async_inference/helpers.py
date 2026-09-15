@@ -24,7 +24,7 @@ import torch
 
 from lerobot.configs import PolicyFeature
 
-# NOTE: Configs need to be loaded for the client to be able to instantiate the policy config
+# 注意：需要加载配置，客户端才能实例化策略配置
 from lerobot.policies import (  # noqa: F401
     ACTConfig,
     DiffusionConfig,
@@ -40,13 +40,13 @@ from lerobot.utils.utils import init_logging
 
 Action = torch.Tensor
 
-# observation as received from the robot (can be numpy arrays, floats, etc.)
+# 从机器人接收到的原始观测（可以是 numpy 数组、浮点数等）
 RawObservation = dict[str, Any]
 
-# observation as those recorded in LeRobot dataset (keys are different)
+# 与 LeRobot 数据集中记录的观测一致（键名不同）
 LeRobotObservation = dict[str, torch.Tensor]
 
-# observation, ready for policy inference (image keys resized)
+# 已准备好用于策略推理的观测（图像键已调整尺寸）
 Observation = dict[str, torch.Tensor]
 
 
@@ -73,18 +73,18 @@ def is_image_key(k: str) -> bool:
 
 def resize_robot_observation_image(image: torch.tensor, resize_dims: tuple[int, int, int]) -> torch.tensor:
     assert image.ndim == 3, f"Image must be (C, H, W)! Received {image.shape}"
-    # (H, W, C) -> (C, H, W) for resizing from robot obsevation resolution to policy image resolution
+    # (H, W, C) -> (C, H, W)，用于将机器人观测分辨率调整为策略图像分辨率
     image = image.permute(2, 0, 1)
     dims = (resize_dims[1], resize_dims[2])
-    # Add batch dimension for interpolate: (C, H, W) -> (1, C, H, W)
+    # 为 interpolate 添加批次维度：(C, H, W) -> (1, C, H, W)
     image_batched = image.unsqueeze(0)
-    # Interpolate and remove batch dimension: (1, C, H, W) -> (C, H, W)
+    # 插值并移除批次维度：(1, C, H, W) -> (C, H, W)
     resized = torch.nn.functional.interpolate(image_batched, size=dims, mode="bilinear", align_corners=False)
 
     return resized.squeeze(0)
 
 
-# TODO(Steven): Consider implementing a pipeline step for this
+# TODO(Steven): 考虑为此实现一个 pipeline 步骤
 def raw_observation_to_observation(
     raw_observation: RawObservation,
     lerobot_features: dict[str, dict],
@@ -94,9 +94,9 @@ def raw_observation_to_observation(
 
     observation = prepare_raw_observation(raw_observation, lerobot_features, policy_image_features)
     for k, v in observation.items():
-        if isinstance(v, torch.Tensor):  # VLAs present natural-language instructions in observations
+        if isinstance(v, torch.Tensor):  # VLA 在观测中以自然语言指令的形式呈现
             if "image" in k:
-                # Policy expects images in shape (B, C, H, W)
+                # 策略期望图像形状为 (B, C, H, W)
                 observation[k] = prepare_image(v).unsqueeze(0)
         else:
             observation[k] = v
@@ -105,7 +105,7 @@ def raw_observation_to_observation(
 
 
 def prepare_image(image: torch.Tensor) -> torch.Tensor:
-    """Minimal preprocessing to turn RGB uint8 images to float32 in [0, 1], and create a memory-contiguous tensor"""
+    """最小化的预处理，将 RGB uint8 图像转换为 [0, 1] 范围内的 float32，并创建内存连续的张量"""
     if image.dtype == torch.uint8:
         image = image.type(torch.float32) / 255
     image = image.contiguous()
@@ -116,7 +116,7 @@ def prepare_image(image: torch.Tensor) -> torch.Tensor:
 def extract_state_from_raw_observation(
     lerobot_obs: RawObservation,
 ) -> torch.Tensor:
-    """Extract the state from a raw observation."""
+    """从原始观测中提取状态。"""
     state = torch.tensor(lerobot_obs[OBS_STATE])
 
     if state.ndim == 1:
@@ -129,7 +129,7 @@ def extract_images_from_raw_observation(
     lerobot_obs: RawObservation,
     camera_key: str,
 ) -> dict[str, torch.Tensor]:
-    """Extract the images from a raw observation."""
+    """从原始观测中提取图像。"""
     return torch.tensor(lerobot_obs[camera_key])
 
 
@@ -137,7 +137,7 @@ def make_lerobot_observation(
     robot_obs: RawObservation,
     lerobot_features: dict[str, dict],
 ) -> LeRobotObservation:
-    """Make a lerobot observation from a raw observation."""
+    """从原始观测构造 lerobot 观测。"""
     return build_dataset_frame(lerobot_features, robot_obs, prefix=OBS_STR)
 
 
@@ -146,22 +146,22 @@ def prepare_raw_observation(
     lerobot_features: dict[str, dict],
     policy_image_features: dict[str, PolicyFeature],
 ) -> Observation:
-    """Matches keys from the raw robot_obs dict to the keys expected by a given policy (passed as
-    policy_image_features)."""
+    """将原始 robot_obs 字典中的键与给定策略所期望的键（通过
+    policy_image_features 传入）进行匹配。"""
     # 1. {motor.pos1:value1, motor.pos2:value2, ..., laptop:np.ndarray} ->
     # -> {observation.state:[value1,value2,...], observation.images.laptop:np.ndarray}
     lerobot_obs = make_lerobot_observation(robot_obs, lerobot_features)
 
-    # 2. Greps all observation.images.<> keys
+    # 2. 提取所有 observation.images.<> 键
     image_keys = list(filter(is_image_key, lerobot_obs))
-    # state's shape is expected as (B, state_dim)
+    # state 的形状期望为 (B, state_dim)
     state_dict = {OBS_STATE: extract_state_from_raw_observation(lerobot_obs)}
     image_dict = {
         image_k: extract_images_from_raw_observation(lerobot_obs, image_k) for image_k in image_keys
     }
 
-    # Turns the image features to (C, H, W) with H, W matching the policy image features.
-    # This reduces the resolution of the images
+    # 将图像特征转换为 (C, H, W)，其中 H、W 与策略图像特征匹配。
+    # 这会降低图像的分辨率
     image_dict = {
         key: resize_robot_observation_image(torch.tensor(lerobot_obs[key]), policy_image_features[key].shape)
         for key in image_keys
@@ -175,37 +175,37 @@ def prepare_raw_observation(
 
 def get_logger(name: str, log_to_file: bool = True) -> logging.Logger:
     """
-    Get a logger using the standardized logging setup from utils.py.
+    使用 utils.py 中的标准化日志设置来获取日志记录器。
 
     Args:
-        name: Logger name (e.g., 'policy_server', 'robot_client')
-        log_to_file: Whether to also log to a file
+        name: 日志记录器名称（例如 'policy_server'、'robot_client'）
+        log_to_file: 是否同时记录到文件
 
     Returns:
-        Configured logger instance
+        配置好的日志记录器实例
     """
-    # Create logs directory if logging to file
+    # 如果记录到文件，则创建 logs 目录
     if log_to_file:
         os.makedirs("logs", exist_ok=True)
         log_file = Path(f"logs/{name}_{int(time.time())}.log")
     else:
         log_file = None
 
-    # Initialize the standardized logging
+    # 初始化标准化日志
     init_logging(log_file=log_file, display_pid=False)
 
-    # Return a named logger
+    # 返回具名日志记录器
     return logging.getLogger(name)
 
 
 @dataclass
 class TimedData:
-    """A data object with timestamp and timestep information.
+    """带有时间戳和时间步信息的数据对象。
 
     Args:
-        timestamp: Unix timestamp relative to data's creation.
-        data: The actual data to wrap a timestamp around.
-        timestep: The timestep of the data.
+        timestamp: 相对于数据创建时间的 Unix 时间戳。
+        data: 要包裹时间戳的实际数据。
+        timestep: 数据的时间步。
     """
 
     timestamp: float
@@ -237,28 +237,28 @@ class TimedObservation(TimedData):
 
 @dataclass
 class FPSTracker:
-    """Utility class to track FPS metrics over time."""
+    """用于跟踪 FPS 指标随时间变化的工具类。"""
 
     target_fps: float
     first_timestamp: float = None
     total_obs_count: int = 0
 
     def calculate_fps_metrics(self, current_timestamp: float) -> dict[str, float]:
-        """Calculate average FPS vs target"""
+        """计算平均 FPS 与目标 FPS 的对比"""
         self.total_obs_count += 1
 
-        # Initialize first observation time
+        # 初始化首次观测时间
         if self.first_timestamp is None:
             self.first_timestamp = current_timestamp
 
-        # Calculate overall average FPS (since start)
+        # 计算总体平均 FPS（自启动以来）
         total_duration = current_timestamp - self.first_timestamp
         avg_fps = (self.total_obs_count - 1) / total_duration if total_duration > 1e-6 else 0.0
 
         return {"avg_fps": avg_fps, "target_fps": self.target_fps}
 
     def reset(self):
-        """Reset the FPS tracker state"""
+        """重置 FPS 跟踪器状态"""
         self.first_timestamp = None
         self.total_obs_count = 0
 
@@ -274,19 +274,19 @@ class RemotePolicyConfig:
 
 
 def _compare_observation_states(obs1_state: torch.Tensor, obs2_state: torch.Tensor, atol: float) -> bool:
-    """Check if two observation states are similar, under a tolerance threshold"""
+    """在容差阈值内检查两个观测状态是否相似"""
     return bool(torch.linalg.norm(obs1_state - obs2_state) < atol)
 
 
 def observations_similar(
     obs1: TimedObservation, obs2: TimedObservation, lerobot_features: dict[str, dict], atol: float = 1
 ) -> bool:
-    """Check if two observations are similar, under a tolerance threshold. Measures distance between
-    observations as the difference in joint-space between the two observations.
+    """在容差阈值内检查两个观测是否相似。通过将两个观测在关节空间中的
+    差异作为观测之间的距离来衡量。
 
-    NOTE(fracapuano): This is a very simple check, and it is enough for the current use case.
-    An immediate next step is to use (fast) perceptual difference metrics comparing some camera views,
-    to surpass this joint-space similarity check.
+    注意（fracapuano）：这是一个非常简单的检查，对于当前的使用场景已经足够。
+    下一步是直接使用（快速的）感知差异指标来比较某些相机视角，
+    以超越这种关节空间的相似性检查。
     """
     obs1_state = extract_state_from_raw_observation(
         make_lerobot_observation(obs1.get_observation(), lerobot_features)

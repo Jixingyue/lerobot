@@ -30,49 +30,49 @@ from lerobot.utils.constants import DONE, REWARD
 
 def select_rect_roi(img):
     """
-    Allows the user to draw a rectangular ROI on the image.
+    允许用户在图像上绘制一个矩形 ROI。
 
-    The user must click and drag to draw the rectangle.
-    - While dragging, the rectangle is dynamically drawn.
-    - On mouse button release, the rectangle is fixed.
-    - Press 'c' to confirm the selection.
-    - Press 'r' to reset the selection.
-    - Press ESC to cancel.
+    用户必须点击并拖动来绘制矩形。
+    - 拖动过程中，矩形会被动态绘制。
+    - 松开鼠标按键后，矩形被固定。
+    - 按 'c' 确认选择。
+    - 按 'r' 重置选择。
+    - 按 ESC 取消。
 
     Returns:
-        A tuple (top, left, height, width) representing the rectangular ROI,
-        or None if no valid ROI is selected.
+        表示矩形 ROI 的元组 (top, left, height, width)，
+        如果未选择有效的 ROI，则返回 None。
     """
-    # Create a working copy of the image
+    # 创建图像的工作副本
     clone = img.copy()
     working_img = clone.copy()
 
-    roi = None  # Will store the final ROI as (top, left, height, width)
+    roi = None  # 将以 (top, left, height, width) 存储最终的 ROI
     drawing = False
-    index_x, index_y = -1, -1  # Initial click coordinates
+    index_x, index_y = -1, -1  # 初始点击坐标
 
     def mouse_callback(event, x, y, flags, param):
         nonlocal index_x, index_y, drawing, roi, working_img
 
         if event == cv2.EVENT_LBUTTONDOWN:
-            # Start drawing: record starting coordinates
+            # 开始绘制：记录起始坐标
             drawing = True
             index_x, index_y = x, y
 
         elif event == cv2.EVENT_MOUSEMOVE:
             if drawing:
-                # Compute the top-left and bottom-right corners regardless of drag direction
+                # 无论拖动方向如何，都计算左上角和右下角
                 top = min(index_y, y)
                 left = min(index_x, x)
                 bottom = max(index_y, y)
                 right = max(index_x, x)
-                # Show a temporary image with the current rectangle drawn
+                # 显示绘制了当前矩形的临时图像
                 temp = working_img.copy()
                 cv2.rectangle(temp, (left, top), (right, bottom), (0, 255, 0), 2)
                 cv2.imshow("Select ROI", temp)
 
         elif event == cv2.EVENT_LBUTTONUP:
-            # Finish drawing
+            # 完成绘制
             drawing = False
             top = min(index_y, y)
             left = min(index_x, x)
@@ -81,12 +81,12 @@ def select_rect_roi(img):
             height = bottom - top
             width = right - left
             roi = (top, left, height, width)  # (top, left, height, width)
-            # Draw the final rectangle on the working image and display it
+            # 在工作图像上绘制最终矩形并显示
             working_img = clone.copy()
             cv2.rectangle(working_img, (left, top), (right, bottom), (0, 255, 0), 2)
             cv2.imshow("Select ROI", working_img)
 
-    # Create the window and set the callback
+    # 创建窗口并设置回调
     cv2.namedWindow("Select ROI")
     cv2.setMouseCallback("Select ROI", mouse_callback)
     cv2.imshow("Select ROI", working_img)
@@ -97,19 +97,19 @@ def select_rect_roi(img):
     print("  - Press 'r' to reset and draw again.")
     print("  - Press ESC to cancel the selection.")
 
-    # Wait until the user confirms with 'c', resets with 'r', or cancels with ESC
+    # 等待用户按 'c' 确认、按 'r' 重置或按 ESC 取消
     while True:
         key = cv2.waitKey(1) & 0xFF
-        # Confirm ROI if one has been drawn
+        # 如果已绘制 ROI，则确认
         if key == ord("c") and roi is not None:
             break
-        # Reset: clear the ROI and restore the original image
+        # 重置：清除 ROI 并恢复原始图像
         elif key == ord("r"):
             working_img = clone.copy()
             roi = None
             cv2.imshow("Select ROI", working_img)
-        # Cancel selection for this image
-        elif key == 27:  # ESC key
+        # 取消对这张图像的选择
+        elif key == 27:  # ESC 键
             roi = None
             break
 
@@ -119,15 +119,14 @@ def select_rect_roi(img):
 
 def select_square_roi_for_images(images: dict) -> dict:
     """
-    For each image in the provided dictionary, open a window to allow the user
-    to select a rectangular ROI. Returns a dictionary mapping each key to a tuple
-    (top, left, height, width) representing the ROI.
+    针对所提供字典中的每张图像，打开一个窗口让用户选择一个矩形 ROI。
+    返回一个字典，将每个键映射到表示 ROI 的元组 (top, left, height, width)。
 
     Parameters:
-        images (dict): Dictionary where keys are identifiers and values are OpenCV images.
+        images (dict): 键为标识符、值为 OpenCV 图像的字典。
 
     Returns:
-        dict: Mapping of image keys to the selected rectangular ROI.
+        dict: 图像键到所选矩形 ROI 的映射。
     """
     selected_rois = {}
 
@@ -150,7 +149,7 @@ def select_square_roi_for_images(images: dict) -> dict:
 
 def get_image_from_lerobot_dataset(dataset: LeRobotDataset):
     """
-    Find the first row in the dataset and extract the image in order to be used for the crop.
+    找到数据集中的第一行并提取图像，以便用于裁剪。
     """
     row = dataset[0]
     image_dict = {}
@@ -170,24 +169,22 @@ def convert_lerobot_dataset_to_cropped_lerobot_dataset(
     task: str = "",
 ) -> LeRobotDataset:
     """
-    Converts an existing LeRobotDataset by iterating over its episodes and frames,
-    applying cropping and resizing to image observations, and saving a new dataset
-    with the transformed data.
+    通过遍历现有 LeRobotDataset 的回合和帧来转换它，
+    对图像观测应用裁剪和缩放，并将转换后的数据保存为新数据集。
 
     Args:
-        original_dataset (LeRobotDataset): The source dataset.
+        original_dataset (LeRobotDataset): 源数据集。
         crop_params_dict (dict[str, Tuple[int, int, int, int]]):
-            A dictionary mapping observation keys to crop parameters (top, left, height, width).
-        new_repo_id (str): Repository id for the new dataset.
-        new_dataset_root (str): The root directory where the new dataset will be written.
-        resize_size (tuple[int, int], optional): The target size (height, width) after cropping.
-            Defaults to (128, 128).
+            将观测键映射到裁剪参数 (top, left, height, width) 的字典。
+        new_repo_id (str): 新数据集的仓库 id。
+        new_dataset_root (str): 新数据集写入的根目录。
+        resize_size (tuple[int, int], optional): 裁剪后的目标尺寸 (height, width)。
+            默认为 (128, 128)。
 
     Returns:
-        LeRobotDataset: A new LeRobotDataset where the specified image observations have been cropped
-                        and resized.
+        LeRobotDataset: 一个对指定图像观测进行了裁剪和缩放的新 LeRobotDataset。
     """
-    # 1. Create a new (empty) LeRobotDataset for writing.
+    # 1. 创建一个新的（空的）LeRobotDataset 用于写入。
     new_dataset = LeRobotDataset.create(
         repo_id=new_repo_id,
         fps=int(original_dataset.fps),
@@ -197,18 +194,18 @@ def convert_lerobot_dataset_to_cropped_lerobot_dataset(
         use_videos=len(original_dataset.meta.video_keys) > 0,
     )
 
-    # Update the metadata for every image key that will be cropped:
-    # (Here we simply set the shape to be the final resize_size.)
+    # 更新每个将被裁剪的图像键的元数据：
+    # （这里我们直接将形状设置为最终的 resize_size。）
     for key in crop_params_dict:
         if key in new_dataset.meta.info.features:
             new_dataset.meta.info.features[key]["shape"] = (3, *resize_size)
 
-    # TODO:  Directly modify the mp4 video + meta info features, instead of recreating a dataset
+    # TODO: 直接修改 mp4 视频 + 元信息特征，而不是重新创建数据集
     prev_episode_index = 0
     for frame_idx in tqdm(range(len(original_dataset))):
         frame = original_dataset[frame_idx]
 
-        # Create a copy of the frame to add to the new dataset
+        # 创建帧的副本以添加到新数据集
         new_frame = {}
         for key, value in frame.items():
             if key in ("task_index", "timestamp", "episode_index", "frame_index", "index", "task"):
@@ -219,7 +216,7 @@ def convert_lerobot_dataset_to_cropped_lerobot_dataset(
 
             if key in crop_params_dict:
                 top, left, height, width = crop_params_dict[key]
-                # Apply crop then resize.
+                # 先应用裁剪，再缩放。
                 cropped = F.crop(value, top, left, height, width)
                 value = F.resize(cropped, resize_size)
                 value = value.clamp(0, 1)
@@ -231,11 +228,11 @@ def convert_lerobot_dataset_to_cropped_lerobot_dataset(
         new_dataset.add_frame(new_frame)
 
         if frame["episode_index"].item() != prev_episode_index:
-            # Save the episode
+            # 保存该回合
             new_dataset.save_episode()
             prev_episode_index = frame["episode_index"].item()
 
-    # Save the last episode
+    # 保存最后一个回合
     new_dataset.save_episode()
 
     if push_to_hub:
@@ -295,7 +292,7 @@ if __name__ == "__main__":
         with open(args.crop_params_path) as f:
             rois = json.load(f)
 
-    # Print the selected rectangular ROIs
+    # 打印所选的矩形 ROI
     print("\nSelected Rectangular Regions of Interest (top, left, height, width):")
     for key, roi in rois.items():
         print(f"{key}: {roi}")
@@ -304,7 +301,7 @@ if __name__ == "__main__":
 
     if args.new_repo_id:
         new_dataset_name = args.new_repo_id.split("/")[-1]
-        # Parent 1: HF user, Parent 2: HF LeRobot Home
+        # 上级目录 1：HF 用户，上级目录 2：HF LeRobot 主目录
         new_dataset_root = dataset.root.parent.parent / new_dataset_name
     else:
         new_dataset_root = Path(str(dataset.root) + "_cropped_resized")

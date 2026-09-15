@@ -90,15 +90,15 @@ class HopeJrArm(Robot):
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
         """
-        We assume that at connection time, arm is in a rest position,
-        and torque can be safely disabled to run calibration.
+        我们假设在连接时，机械臂处于静止位置，
+        并且可以安全地禁用力矩来运行校准。
         """
 
         self.bus.connect(handshake=False)
         if not self.is_calibrated and calibrate:
             self.calibrate()
 
-        # Connect the cameras
+        # 连接相机
         for cam in self.cameras.values():
             cam.connect()
 
@@ -126,7 +126,7 @@ class HopeJrArm(Robot):
             self.bus.configure_motors(maximum_acceleration=30, acceleration=30)
 
     def setup_motors(self) -> None:
-        # TODO: add docstring
+        # TODO: 添加文档字符串
         for motor in reversed(self.bus.motors):
             input(f"Connect the controller board to the '{motor}' motor only and press enter.")
             self.bus.setup_motor(motor)
@@ -134,7 +134,7 @@ class HopeJrArm(Robot):
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
-        # Read arm position
+        # 读取机械臂位置
         start = time.perf_counter()
         obs_dict = self.bus.sync_read("Present_Position", self.other_motors)
         obs_dict[self.shoulder_pitch] = self.bus.read("Present_Position", self.shoulder_pitch)
@@ -142,7 +142,7 @@ class HopeJrArm(Robot):
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
+        # 从相机捕获图像
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
@@ -162,8 +162,8 @@ class HopeJrArm(Robot):
     def send_action(self, action: RobotAction) -> RobotAction:
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
+        # 当目标位置离当前位置太远时对其进行限制。
+        # /!\ 由于需要从从动端读取，预计帧率会降低。
         if self.config.max_relative_target is not None:
             present_pos = self.bus.sync_read("Present_Position")
             goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}

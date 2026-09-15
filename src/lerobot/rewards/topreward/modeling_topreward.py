@@ -14,42 +14,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TOPReward: Token Probabilities as Hidden Zero-Shot Rewards for Robotics.
+"""TOPReward：将 Token 概率作为机器人领域的隐式零样本奖励。
 
-Paper:         https://arxiv.org/abs/2602.19313
-Project:       https://topreward.github.io/webpage/
-Original code: https://github.com/TOPReward/TOPReward
-Backbone:      https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct  (default)
+论文：         https://arxiv.org/abs/2602.19313
+项目：         https://topreward.github.io/webpage/
+原始代码：     https://github.com/TOPReward/TOPReward
+骨干模型：     https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct  (默认)
 
-TOPReward is a **zero-shot** reward model: it has no fine-tuned weights of
-its own. Given a video trajectory and a task instruction, it asks an
-off-the-shelf VLM how likely the instruction is, conditioned on the video,
-and returns that log-likelihood as the reward signal.
+TOPReward 是一个**零样本**奖励模型：它自身没有微调权重。
+给定一条视频轨迹和一条任务指令，它会询问一个现成的
+VLM：在以视频为条件的情况下该指令成立的可能性有多大，
+并将该对数似然作为奖励信号返回。
 
-Inference recipe:
+推理流程：
 
-1. The processor builds a chat-style prompt, tokenises it, and emits
-   ``input_ids``, ``attention_mask``, vision tensors, and ``labels``.
-   The processor label-masks everything except the terminal answer token with
-   ``-100``.
-2. Forward the full token sequence through the VLM.
-3. Read the terminal answer token log-probability from the logits as the
-   scalar reward.
+1. 处理器构建一个聊天式提示词，对其进行分词，并输出
+   ``input_ids``、``attention_mask``、视觉张量和 ``labels``。
+   处理器用 ``-100`` 对除末尾回答 token 之外的所有
+   label 进行掩码。
+2. 将完整的 token 序列前向传入 VLM。
+3. 从 logits 中读取末尾回答 token 的对数概率，作为
+   标量奖励。
 
-With the default ``prompt_suffix_template``, the only unmasked token is the
-literal ``"True"`` at the end — the reward is
-``log P("True" | video + prompt + instruction)``.
+使用默认的 ``prompt_suffix_template`` 时，唯一未被掩码的 token 是
+末尾的字面量 ``"True"``——奖励即
+``log P("True" | video + prompt + instruction)``。
 
-This LeRobot port is **inference-only and not trainable** — :meth:`forward`
-is intentionally inherited from :class:`PreTrainedRewardModel` and raises
-``NotImplementedError``, making :attr:`PreTrainedRewardModel.is_trainable`
-return ``False``.
+本 LeRobot 移植版**仅支持推理且不可训练**——:meth:`forward`
+有意继承自 :class:`PreTrainedRewardModel` 并抛出
+``NotImplementedError``，使 :attr:`PreTrainedRewardModel.is_trainable`
+返回 ``False``。
 
-Because the VLM weights live on the Hugging Face Hub under their canonical
-id (``Qwen/Qwen3-VL-8B-Instruct`` etc.) and TOPReward never modifies them,
-:meth:`_save_pretrained` and :meth:`from_pretrained` are overridden so a
-TOPReward LeRobot "checkpoint" is a single ``config.json`` (the VLM is
-re-fetched from the Hub at load time).
+由于 VLM 权重以规范 id（如 ``Qwen/Qwen3-VL-8B-Instruct``）托管在
+Hugging Face Hub 上，且 TOPReward 从不修改它们，
+因此重写了 :meth:`_save_pretrained` 和 :meth:`from_pretrained`，
+使 TOPReward 的 LeRobot "检查点"仅为单个 ``config.json``
+（VLM 在加载时从 Hub 重新获取）。
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ T = TypeVar("T", bound="TOPRewardModel")
 
 
 def _torch_dtype(name: str) -> torch.dtype | str:
-    """Resolve a torch dtype name; ``"auto"`` is passed through verbatim."""
+    """解析 torch dtype 名称；``"auto"`` 原样透传。"""
     if name == "auto":
         return "auto"
     dtype = getattr(torch, name, None)
@@ -95,7 +95,7 @@ def _torch_dtype(name: str) -> torch.dtype | str:
 
 
 class TOPRewardModel(PreTrainedRewardModel):
-    """TOPReward zero-shot reward model."""
+    """TOPReward 零样本奖励模型。"""
 
     name = "topreward"
     config_class = TOPRewardConfig
@@ -113,7 +113,7 @@ class TOPRewardModel(PreTrainedRewardModel):
         self.model = Qwen3VLForConditionalGeneration.from_pretrained(config.vlm_name, **model_kwargs)
 
     def compute_reward(self, batch: dict[str, Any]) -> Tensor:
-        """Return one log-prob reward per sample in the batch."""
+        """为批次中的每个样本返回一个 log-prob 奖励。"""
         inputs: dict[str, Any] = {}
         for key in TOPREWARD_INPUT_KEYS:
             batch_key = f"{TOPREWARD_FEATURE_PREFIX}{key}"
@@ -139,7 +139,7 @@ class TOPRewardModel(PreTrainedRewardModel):
         return rewards.to(self.config.device or "cpu")
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Save ``config.json`` only."""
+        """仅保存 ``config.json``。"""
         self.config._save_pretrained(save_directory)
 
     @classmethod
@@ -155,10 +155,10 @@ class TOPRewardModel(PreTrainedRewardModel):
         cache_dir: str | Path | None = None,
         local_files_only: bool = False,
         revision: str | None = None,
-        strict: bool = False,  # noqa: ARG003 — accepted for API parity; unused (no safetensors to load)
+        strict: bool = False,  # noqa: ARG003 — 为保持 API 一致性而接受；未使用（没有可加载的 safetensors）
         **kwargs: Any,
     ) -> T:
-        """Load a TOPReward configuration and instantiate the wrapped VLM."""
+        """加载 TOPReward 配置并实例化其包装的 VLM。"""
         if config is None:
             config = RewardModelConfig.from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,

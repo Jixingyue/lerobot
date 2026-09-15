@@ -26,15 +26,15 @@ from .pipeline import ActionProcessorStep, ProcessorStepRegistry, RobotActionPro
 @dataclass
 class MapTensorToDeltaActionDictStep(ActionProcessorStep):
     """
-    Maps a flat action tensor from a policy to a structured delta action dictionary.
+    将策略输出的扁平动作张量映射为结构化的增量动作字典。
 
-    This step is typically used after a policy outputs a continuous action vector.
-    It decomposes the vector into named components for delta movements of the
-    end-effector (x, y, z) and optionally the gripper.
+    该步骤通常在策略输出连续动作向量之后使用。
+    它将向量分解为末端执行器增量运动（x、y、z）的具名分量，
+    以及可选的夹爪分量。
 
     Attributes:
-        use_gripper: If True, assumes the 4th element of the tensor is the
-                     gripper action.
+        use_gripper: 如果为 True，则假定张量的第 4 个元素是
+                     夹爪动作。
     """
 
     use_gripper: bool = True
@@ -46,7 +46,7 @@ class MapTensorToDeltaActionDictStep(ActionProcessorStep):
         if action.dim() > 1:
             action = action.squeeze(0)
 
-        # TODO (maractingi): add rotation
+        # TODO (maractingi): 添加旋转
         delta_action = {
             "delta_x": action[0].item(),
             "delta_y": action[1].item(),
@@ -75,47 +75,46 @@ class MapTensorToDeltaActionDictStep(ActionProcessorStep):
 @dataclass
 class MapDeltaActionToRobotActionStep(RobotActionProcessorStep):
     """
-    Maps delta actions from teleoperators to robot target actions for inverse kinematics.
+    将来自遥操作设备的增量动作映射为用于逆运动学的机器人目标动作。
 
-    This step converts a dictionary of delta movements (e.g., from a gamepad)
-    into a target action format that includes an "enabled" flag and target
-    end-effector positions. It also handles scaling and noise filtering.
+    该步骤将增量运动字典（例如来自手柄）转换为包含 "enabled" 标志和
+    目标末端执行器位置的目标动作格式。它还处理缩放和噪声过滤。
 
     Attributes:
-        position_scale: A factor to scale the delta position inputs.
-        noise_threshold: The magnitude below which delta inputs are considered noise
-                         and do not trigger an "enabled" state.
+        position_scale: 用于缩放增量位置输入的系数。
+        noise_threshold: 低于该幅值的增量输入被视为噪声，
+                         不会触发 "enabled" 状态。
     """
 
-    # Scale factors for delta movements
+    # 增量运动的缩放系数
     position_scale: float = 1.0
-    noise_threshold: float = 1e-3  # 1 mm threshold to filter out noise
+    noise_threshold: float = 1e-3  # 1 mm 阈值，用于过滤噪声
 
     def action(self, action: RobotAction) -> RobotAction:
-        # NOTE (maractingi): Action can be a dict from the teleop_devices or a tensor from the policy
-        # TODO (maractingi): changing this target_xyz naming convention from the teleop_devices
+        # 注意 (maractingi)：动作可以是来自遥操作设备的字典，也可以是来自策略的张量
+        # TODO (maractingi)：更改遥操作设备中 target_xyz 的命名约定
         delta_x = action.pop("delta_x")
         delta_y = action.pop("delta_y")
         delta_z = action.pop("delta_z")
         gripper = action.pop("gripper")
 
-        # Determine if the teleoperator is actively providing input
-        # Consider enabled if any significant movement delta is detected
-        position_magnitude = (delta_x**2 + delta_y**2 + delta_z**2) ** 0.5  # Use Euclidean norm for position
-        enabled = position_magnitude > self.noise_threshold  # Small threshold to avoid noise
+        # 判断遥操作设备是否在主动提供输入
+        # 如果检测到任何显著的位移增量，则视为 enabled
+        position_magnitude = (delta_x**2 + delta_y**2 + delta_z**2) ** 0.5  # 位置使用欧几里得范数
+        enabled = position_magnitude > self.noise_threshold  # 较小的阈值以避免噪声
 
-        # Scale the deltas appropriately
+        # 对增量进行适当的缩放
         scaled_delta_x = delta_x * self.position_scale
         scaled_delta_y = delta_y * self.position_scale
         scaled_delta_z = delta_z * self.position_scale
 
-        # For gamepad/keyboard, we don't have rotation input, so set to 0
-        # These could be extended in the future for more sophisticated teleoperators
+        # 对于手柄/键盘，没有旋转输入，因此设为 0
+        # 未来可以为更复杂的遥操作设备扩展这些值
         target_wx = 0.0
         target_wy = 0.0
         target_wz = 0.0
 
-        # Update action with robot target format
+        # 使用机器人目标格式更新动作
         action = {
             "enabled": enabled,
             "target_x": scaled_delta_x,

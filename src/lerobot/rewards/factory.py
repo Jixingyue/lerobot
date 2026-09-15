@@ -32,20 +32,20 @@ from .topreward.configuration_topreward import TOPRewardConfig
 
 def get_reward_model_class(name: str) -> type[PreTrainedRewardModel]:
     """
-    Retrieves a reward model class by its registered name.
+    根据注册的名称获取奖励模型类。
 
-    This function uses dynamic imports to avoid loading all reward model classes into
-    memory at once, improving startup time and reducing dependencies.
+    此函数使用动态导入，避免一次性将所有奖励模型类加载到内存中，
+    从而加快启动速度并减少依赖。
 
     Args:
-        name: The name of the reward model. Supported names are "reward_classifier",
-              "sarm", "robometer", "topreward".
+        name: 奖励模型的名称。支持的名称有 "reward_classifier"、
+              "sarm"、"robometer"、"topreward"。
 
     Returns:
-        The reward model class corresponding to the given name.
+        与给定名称对应的奖励模型类。
 
     Raises:
-        ValueError: If the reward model name is not recognized.
+        ValueError: 如果奖励模型名称无法识别。
     """
     if name == "reward_classifier":
         from lerobot.rewards.classifier.modeling_classifier import Classifier
@@ -72,21 +72,21 @@ def get_reward_model_class(name: str) -> type[PreTrainedRewardModel]:
 
 def make_reward_model_config(reward_type: str, **kwargs) -> RewardModelConfig:
     """
-    Instantiates a reward model configuration object based on the reward type.
+    根据奖励类型实例化奖励模型配置对象。
 
-    This factory function simplifies the creation of reward model configuration objects
-    by mapping a string identifier to the corresponding config class.
+    此工厂函数通过将字符串标识符映射到对应的配置类，
+    简化了奖励模型配置对象的创建。
 
     Args:
-        reward_type: The type of the reward model. Supported types include
-                     "reward_classifier", "sarm", "robometer", "topreward".
-        **kwargs: Keyword arguments to be passed to the configuration class constructor.
+        reward_type: 奖励模型的类型。支持的类型包括
+                     "reward_classifier"、"sarm"、"robometer"、"topreward"。
+        **kwargs: 传递给配置类构造函数的关键字参数。
 
     Returns:
-        An instance of a `RewardModelConfig` subclass.
+        `RewardModelConfig` 子类的实例。
 
     Raises:
-        ValueError: If the `reward_type` is not recognized.
+        ValueError: 如果 `reward_type` 无法识别。
     """
     if reward_type == "reward_classifier":
         return RewardClassifierConfig(**kwargs)
@@ -106,17 +106,16 @@ def make_reward_model_config(reward_type: str, **kwargs) -> RewardModelConfig:
 
 def make_reward_model(cfg: RewardModelConfig, **kwargs) -> PreTrainedRewardModel:
     """
-    Instantiate a reward model from its configuration.
+    根据配置实例化奖励模型。
 
     Args:
-        cfg: The configuration for the reward model to be created. If
-             `cfg.pretrained_path` is set, the model will be loaded with weights
-             from that path.
-        **kwargs: Additional keyword arguments forwarded to the model constructor
-            (e.g., ``dataset_stats``, ``dataset_meta``).
+        cfg: 待创建奖励模型的配置。如果设置了 `cfg.pretrained_path`，
+             模型将从该路径加载权重。
+        **kwargs: 转发给模型构造函数的其他关键字参数
+            （例如 ``dataset_stats``、``dataset_meta``）。
 
     Returns:
-        An instantiated and device-placed reward model.
+        已实例化并放置到设备上的奖励模型。
     """
     reward_cls = get_reward_model_class(cfg.type)
 
@@ -143,23 +142,22 @@ def make_reward_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Create pre- and post-processor pipelines for a given reward model.
+    为给定的奖励模型创建前处理器和后处理器流水线。
 
-    Each reward model type has a dedicated factory function for its processors.
+    每种奖励模型类型都有其专用的处理器工厂函数。
 
     Args:
-        reward_cfg: The configuration of the reward model for which to create processors.
-        **kwargs: Additional keyword arguments passed to the processor factory
-            (e.g., ``dataset_stats``, ``dataset_meta``).
+        reward_cfg: 要为其创建处理器的奖励模型配置。
+        **kwargs: 传递给处理器工厂的其他关键字参数
+            （例如 ``dataset_stats``、``dataset_meta``）。
 
     Returns:
-        A tuple containing the input (pre-processor) and output (post-processor) pipelines.
+        包含输入（前处理器）和输出（后处理器）流水线的元组。
 
     Raises:
-        ValueError: If a processor factory is not implemented for the given reward
-            model configuration type.
+        ValueError: 如果给定的奖励模型配置类型没有实现对应的处理器工厂。
     """
-    # Create a new processor based on reward model type
+    # 根据奖励模型类型创建新的处理器
     if isinstance(reward_cfg, RewardClassifierConfig):
         from lerobot.rewards.classifier.processor_classifier import make_classifier_processor
 
@@ -206,16 +204,15 @@ def make_reward_pre_post_processors(
 
 
 def _get_reward_model_cls_from_name(name: str) -> type[PreTrainedRewardModel]:
-    """Get reward model class from its registered name using dynamic imports.
+    """使用动态导入，根据注册的名称获取奖励模型类。
 
-    This is used as a helper function to import reward models from 3rd party lerobot
-    plugins.
+    此函数作为辅助函数，用于从第三方 lerobot 插件导入奖励模型。
 
     Args:
-        name: The name of the reward model.
+        name: 奖励模型的名称。
 
     Returns:
-        The reward model class corresponding to the given name.
+        与给定名称对应的奖励模型类。
     """
     if name not in RewardModelConfig.get_known_choices():
         raise ValueError(
@@ -245,17 +242,16 @@ def _make_processors_from_reward_model_config(
     config: RewardModelConfig,
     dataset_stats: dict[str, dict[str, torch.Tensor]] | None = None,
 ) -> tuple[Any, Any]:
-    """Create pre- and post-processors from a reward model configuration using dynamic imports.
+    """使用动态导入，根据奖励模型配置创建前处理器和后处理器。
 
-    This is used as a helper function to import processor factories from 3rd party
-    lerobot reward model plugins.
+    此函数作为辅助函数，用于从第三方 lerobot 奖励模型插件导入处理器工厂。
 
     Args:
-        config: The reward model configuration object.
-        dataset_stats: Dataset statistics for normalization.
+        config: 奖励模型配置对象。
+        dataset_stats: 用于归一化的数据集统计信息。
 
     Returns:
-        A tuple containing the input (pre-processor) and output (post-processor) pipelines.
+        包含输入（前处理器）和输出（后处理器）流水线的元组。
     """
     reward_type = config.type
     function_name = f"make_{reward_type}_pre_post_processors"

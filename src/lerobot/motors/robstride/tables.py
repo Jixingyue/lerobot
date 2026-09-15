@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration tables for Damiao motors."""
+"""Damiao 电机的配置表。"""
 
 from enum import IntEnum
 
 
-# Motor type definitions
+# 电机类型定义
 class MotorType(IntEnum):
     O0 = 0
     O1 = 1
@@ -35,17 +35,17 @@ class CommMode(IntEnum):
     MIT = 2
 
 
-# Control modes
+# 控制模式
 class ControlMode(IntEnum):
     MIT = 0
     POS_VEL = 1
     VEL = 2
 
 
-# Motor limit parameters [PMAX, VMAX, TMAX]
-# PMAX: Maximum position (rad)
-# VMAX: Maximum velocity (rad/s)
-# TMAX: Maximum torque (N·m)
+# 电机限位参数 [PMAX, VMAX, TMAX]
+# PMAX：最大位置（rad）
+# VMAX：最大速度（rad/s）
+# TMAX：最大力矩（N·m）
 MOTOR_LIMIT_PARAMS: dict[MotorType, tuple[float, float, float]] = {
     MotorType.O0: (12.57, 33, 14),
     MotorType.O1: (12.57, 44, 17),
@@ -57,7 +57,7 @@ MOTOR_LIMIT_PARAMS: dict[MotorType, tuple[float, float, float]] = {
     MotorType.O6: (112.5, 50, 36),
 }
 
-# Motor model names
+# 电机型号名称
 MODEL_NAMES = {
     MotorType.O0: "O0",
     MotorType.O1: "O1",
@@ -69,7 +69,7 @@ MODEL_NAMES = {
     MotorType.O6: "O6",
 }
 
-# Motor resolution table (encoder counts per revolution)
+# 电机分辨率表（每转编码器计数值）
 MODEL_RESOLUTION = {
     "O0": 65536,
     "O1": 65536,
@@ -81,25 +81,25 @@ MODEL_RESOLUTION = {
     "O6": 65536,
 }
 
-# CAN baudrates supported by Robstride motors
+# Robstride 电机支持的 CAN 波特率
 AVAILABLE_BAUDRATES = [
-    1000000,  # 4: 1 mbps (default)
+    1000000,  # 4: 1 mbps（默认）
 ]
 DEFAULT_BAUDRATE = 1000000
 
-# Default timeout in milliseconds
-DEFAULT_TIMEOUT_MS = 0  # disabled by default, otherwise 20000 is 1s
+# 默认超时时间（毫秒）
+DEFAULT_TIMEOUT_MS = 0  # 默认禁用，否则 20000 对应 1s
 
 
-# Data that should be normalized
+# 需要归一化的数据
 NORMALIZED_DATA = ["Present_Position", "Goal_Position"]
 
 
-# MIT control parameter ranges
+# MIT 控制参数范围
 MIT_KP_RANGE = (0.0, 500.0)
 MIT_KD_RANGE = (0.0, 5.0)
 
-# CAN frame command IDs
+# CAN 帧命令 ID
 CAN_CMD_ENABLE = 0xFC
 CAN_CMD_DISABLE = 0xFD
 CAN_CMD_SET_ZERO = 0xFE
@@ -110,7 +110,7 @@ CAN_CMD_QUERY_PARAM = 0x33
 CAN_CMD_WRITE_PARAM = 0x55
 CAN_CMD_SAVE_PARAM = 0xAA
 
-# CAN ID for parameter operations
+# 参数操作使用的 CAN ID
 CAN_PARAM_ID = 0x7FF
 
 

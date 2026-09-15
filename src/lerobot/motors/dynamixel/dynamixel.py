@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(aliberts): Should we implement FastSyncRead/Write?
+# TODO(aliberts): 是否应该实现 FastSyncRead/Write？
 # https://github.com/ROBOTIS-GIT/DynamixelSDK/pull/643
 # https://github.com/ROBOTIS-GIT/DynamixelSDK/releases/tag/3.8.2
 # https://emanual.robotis.com/docs/en/dxl/protocol2/#fast-sync-read-0x8a
-# -> Need to check compatibility across models
+# -> 需要检查不同型号之间的兼容性
 
 import logging
 from copy import deepcopy
@@ -51,32 +51,32 @@ logger = logging.getLogger(__name__)
 
 
 class OperatingMode(Enum):
-    # DYNAMIXEL only controls current(torque) regardless of speed and position. This mode is ideal for a
-    # gripper or a system that only uses current(torque) control or a system that has additional
-    # velocity/position controllers.
+    # DYNAMIXEL 无论速度和位置如何都只控制电流（力矩）。该模式适用于夹爪，
+    # 或者只使用电流（力矩）控制的系统，
+    # 或者带有额外速度/位置控制器的系统。
     CURRENT = 0
 
-    # This mode controls velocity. This mode is identical to the Wheel Mode(endless) from existing DYNAMIXEL.
-    # This mode is ideal for wheel-type robots.
+    # 该模式控制速度。该模式与现有 DYNAMIXEL 的 Wheel Mode（无限制）相同。
+    # 该模式适用于轮式机器人。
     VELOCITY = 1
 
-    # This mode controls position. This mode is identical to the Joint Mode from existing DYNAMIXEL. Operating
-    # position range is limited by the Max Position Limit(48) and the Min Position Limit(52). This mode is
-    # ideal for articulated robots that each joint rotates less than 360 degrees.
+    # 该模式控制位置。该模式与现有 DYNAMIXEL 的 Joint Mode 相同。运行位置范围
+    # 受 Max Position Limit(48) 和 Min Position Limit(52) 限制。该模式适用于
+    # 每个关节旋转不超过 360 度的多关节机器人。
     POSITION = 3
 
-    # This mode controls position. This mode is identical to the Multi-turn Position Control from existing
-    # DYNAMIXEL. 512 turns are supported(-256[rev] ~ 256[rev]). This mode is ideal for multi-turn wrists or
-    # conveyor systems or a system that requires an additional reduction gear. Note that Max Position
-    # Limit(48), Min Position Limit(52) are not used on Extended Position Control Mode.
+    # 该模式控制位置。该模式与现有 DYNAMIXEL 的 Multi-turn Position Control 相同。
+    # 支持 512 圈（-256[rev] ~ 256[rev]）。该模式适用于多圈腕部、
+    # 传送带系统或需要额外减速齿轮的系统。注意，在 Extended Position Control Mode 下
+    # 不使用 Max Position Limit(48) 和 Min Position Limit(52)。
     EXTENDED_POSITION = 4
 
-    # This mode controls both position and current(torque). Up to 512 turns are supported (-256[rev] ~
-    # 256[rev]). This mode is ideal for a system that requires both position and current control such as
-    # articulated robots or grippers.
+    # 该模式同时控制位置和电流（力矩）。最多支持 512 圈（-256[rev] ~
+    # 256[rev]）。该模式适用于同时需要位置控制和电流控制的系统，
+    # 例如多关节机器人或夹爪。
     CURRENT_POSITION = 5
 
-    # This mode directly controls PWM output. (Voltage Control Mode)
+    # 该模式直接控制 PWM 输出。（电压控制模式）
     PWM = 16
 
 
@@ -92,8 +92,8 @@ class TorqueMode(Enum):
 
 class DynamixelMotorsBus(SerialMotorsBus):
     """
-    The Dynamixel implementation for a MotorsBus. It relies on the python dynamixel sdk to communicate with
-    the motors. For more info, see the Dynamixel SDK Documentation:
+    MotorsBus 的 Dynamixel 实现。它依赖 python dynamixel sdk 与电机通信。
+    更多信息请参阅 Dynamixel SDK 文档：
     https://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/sample_code/python_read_write_protocol_2_0/#python-read-write-protocol-20
     """
 
@@ -152,8 +152,8 @@ class DynamixelMotorsBus(SerialMotorsBus):
         raise RuntimeError(f"Motor '{motor}' (model '{model}') was not found. Make sure it is connected.")
 
     def configure_motors(self, return_delay_time=0) -> None:
-        # By default, Dynamixel motors have a 500µs delay response time (corresponding to a value of 250 on
-        # the 'Return_Delay_Time' address). We ensure this is reduced to the minimum of 2µs (value of 0).
+        # 默认情况下，Dynamixel 电机有 500µs 的响应延迟（对应 'Return_Delay_Time' 地址上的值 250）。
+        # 我们确保将其降低到最小值 2µs（值为 0）。
         for motor in self.motors:
             self.write("Return_Delay_Time", motor, return_delay_time)
 
@@ -222,8 +222,8 @@ class DynamixelMotorsBus(SerialMotorsBus):
 
     def _get_half_turn_homings(self, positions: dict[NameOrID, Value]) -> dict[NameOrID, Value]:
         """
-        On Dynamixel Motors:
-        Present_Position = Actual_Position + Homing_Offset
+        对于 Dynamixel 电机：
+        Present_Position = Actual_Position + Homing Offset
         """
         half_turn_homings: dict[NameOrID, Value] = {}
         for motor, pos in positions.items():

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Note: We subclass str so that serialization is straightforward
+# 注意：我们继承 str，这样序列化就很直接了
 # https://stackoverflow.com/questions/24481852/serialising-an-enum-member-to-json
 from dataclasses import dataclass
 from enum import Enum

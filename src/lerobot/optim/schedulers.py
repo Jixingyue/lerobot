@@ -86,10 +86,10 @@ class VQBeTSchedulerConfig(LRSchedulerConfig):
 @LRSchedulerConfig.register_subclass("constant_with_warmup")
 @dataclass
 class ConstantWithWarmupSchedulerConfig(LRSchedulerConfig):
-    """Linear warmup followed by a constant learning rate.
+    """线性预热后接恒定学习率。
 
-    Mirrors the ``warmup_constant_lambda`` used by LingBot-VA (upstream ``wan_va/train.py``):
-    the LR ramps linearly from 0 to the peak over ``num_warmup_steps`` steps, then stays flat.
+    与 LingBot-VA 使用的 ``warmup_constant_lambda`` 一致（上游 ``wan_va/train.py``）：
+    学习率在 ``num_warmup_steps`` 步内从 0 线性上升到峰值，然后保持不变。
     """
 
     num_warmup_steps: int = 1000
@@ -108,9 +108,9 @@ class ConstantWithWarmupSchedulerConfig(LRSchedulerConfig):
 @LRSchedulerConfig.register_subclass("cosine_annealing_with_warmup")
 @dataclass
 class CosineAnnealingWithWarmupSchedulerConfig(LRSchedulerConfig):
-    """Linear warmup followed by cosine annealing from the peak LR to zero.
+    """线性预热后接从峰值学习率到零的余弦退火。
 
-    Used by EVO1; the annealing phase always spans the remaining training steps.
+    由 EVO1 使用；退火阶段始终覆盖剩余的训练步数。
     """
 
     num_warmup_steps: int
@@ -130,10 +130,10 @@ class CosineAnnealingWithWarmupSchedulerConfig(LRSchedulerConfig):
 @LRSchedulerConfig.register_subclass("cosine_decay_with_warmup")
 @dataclass
 class CosineDecayWithWarmupSchedulerConfig(LRSchedulerConfig):
-    """Used by Physical Intelligence to train Pi0.
+    """Physical Intelligence 用于训练 Pi0 的调度器。
 
-    Automatically scales warmup and decay steps if num_training_steps < num_decay_steps.
-    This ensures the learning rate schedule completes properly even with shorter training runs.
+    当 num_training_steps < num_decay_steps 时，自动缩放预热和衰减步数。
+    这确保即使在较短的训练运行中，学习率调度也能正确完成。
     """
 
     num_warmup_steps: int
@@ -142,12 +142,12 @@ class CosineDecayWithWarmupSchedulerConfig(LRSchedulerConfig):
     decay_lr: float
 
     def build(self, optimizer: Optimizer, num_training_steps: int) -> LambdaLR:
-        # Auto-scale scheduler parameters if training steps are shorter than configured decay steps
+        # 如果训练步数少于配置的衰减步数，则自动缩放调度器参数
         actual_warmup_steps = self.num_warmup_steps
         actual_decay_steps = self.num_decay_steps
 
         if num_training_steps < self.num_decay_steps:
-            # Calculate scaling factor to fit the schedule into the available training steps
+            # 计算缩放因子，使调度适配可用的训练步数
             scale_factor = num_training_steps / self.num_decay_steps
             actual_warmup_steps = int(self.num_warmup_steps * scale_factor)
             actual_decay_steps = num_training_steps

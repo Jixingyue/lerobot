@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Debug information handler for Real-Time Chunking (RTC)."""
+"""实时分块（Real-Time Chunking，RTC）的调试信息处理器。"""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -25,21 +25,21 @@ from torch import Tensor
 
 @dataclass
 class DebugStep:
-    """Container for debug information from a single denoising step.
+    """单个去噪步骤的调试信息容器。
 
     Attributes:
-        step_idx (int): Step index/counter.
-        x_t (Tensor | None): Current latent/state tensor.
-        v_t (Tensor | None): Velocity from denoiser.
-        x1_t (Tensor | None): Denoised prediction (x_t - time * v_t).
-        correction (Tensor | None): Correction gradient tensor.
-        err (Tensor | None): Weighted error term.
-        weights (Tensor | None): Prefix attention weights.
-        guidance_weight (float | Tensor | None): Applied guidance weight.
-        time (float | Tensor | None): Time parameter.
-        inference_delay (int | None): Inference delay parameter.
-        execution_horizon (int | None): Execution horizon parameter.
-        metadata (dict[str, Any]): Additional metadata.
+        step_idx (int): 步骤索引/计数器。
+        x_t (Tensor | None): 当前的潜变量/状态张量。
+        v_t (Tensor | None): 去噪器给出的速度。
+        x1_t (Tensor | None): 去噪预测值（x_t - time * v_t）。
+        correction (Tensor | None): 校正梯度张量。
+        err (Tensor | None): 加权误差项。
+        weights (Tensor | None): 前缀注意力权重。
+        guidance_weight (float | Tensor | None): 实际应用的引导权重。
+        time (float | Tensor | None): 时间参数。
+        inference_delay (int | None): 推理延迟参数。
+        execution_horizon (int | None): 执行时域参数。
+        metadata (dict[str, Any]): 附加元数据。
     """
 
     step_idx: int = 0
@@ -56,14 +56,14 @@ class DebugStep:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self, include_tensors: bool = False) -> dict[str, Any]:
-        """Convert debug step to dictionary.
+        """将调试步骤转换为字典。
 
         Args:
-            include_tensors (bool): If True, include tensor values. If False, only include
-                tensor statistics (shape, mean, std, min, max).
+            include_tensors (bool): 为 True 时包含张量的值；为 False 时仅包含
+                张量的统计信息（shape、mean、std、min、max）。
 
         Returns:
-            Dictionary representation of the debug step.
+            该调试步骤的字典表示。
         """
         result = {
             "step_idx": self.step_idx,
@@ -78,7 +78,7 @@ class DebugStep:
             "metadata": self.metadata.copy(),
         }
 
-        # Add tensor information
+        # 添加张量信息
         tensor_fields = ["x_t", "v_t", "x1_t", "correction", "err", "weights"]
         for field_name in tensor_fields:
             tensor = getattr(self, field_name)
@@ -98,25 +98,25 @@ class DebugStep:
 
 
 class Tracker:
-    """Collects and manages debug information for RTC processing.
+    """收集并管理 RTC 处理过程中的调试信息。
 
-    This tracker stores debug information from recent denoising steps in a dictionary,
-    using time as the key for efficient lookups and updates.
+    该跟踪器将最近去噪步骤的调试信息存储在字典中，
+    以时间作为键，便于高效查找和更新。
 
     Args:
-        enabled (bool): Whether debug collection is enabled.
-        maxlen (int | None): Optional sliding window size. If provided, only the
-            most recent ``maxlen`` debug steps are kept. If ``None``, keeps all.
+        enabled (bool): 是否启用调试信息收集。
+        maxlen (int | None): 可选的滑动窗口大小。若提供，则只保留最近的
+            ``maxlen`` 个调试步骤；若为 ``None``，则保留全部。
     """
 
     def __init__(self, enabled: bool = False, maxlen: int = 100):
         self.enabled = enabled
-        self._steps = {} if enabled else None  # Dictionary with time as key
+        self._steps = {} if enabled else None  # 以时间为键的字典
         self._maxlen = maxlen
         self._step_counter = 0
 
     def reset(self) -> None:
-        """Clear all recorded debug information."""
+        """清除所有已记录的调试信息。"""
         if self.enabled and self._steps is not None:
             self._steps.clear()
         self._step_counter = 0
@@ -136,37 +136,37 @@ class Tracker:
         execution_horizon: int | None = None,
         **metadata,
     ) -> None:
-        """Track debug information for a denoising step at a given time.
+        """跟踪给定时间下某个去噪步骤的调试信息。
 
-        If a step with the given time already exists, it will be updated with the new data.
-        Otherwise, a new step will be created. Only non-None fields are updated/set.
+        如果已存在该时间对应的步骤，则用新数据更新；否则创建一个新步骤。
+        只会更新/设置非 None 的字段。
 
-        Note: This method is excluded from torch.compile to avoid graph breaks from
-        operations like .item() which are incompatible with compiled graphs.
+        注意：该方法被排除在 torch.compile 之外，以避免 .item() 等与编译图
+        不兼容的操作导致图中断。
 
         Args:
-            time (float | Tensor): Time parameter - used as the key to identify the step.
-            x_t (Tensor | None): Current latent/state tensor.
-            v_t (Tensor | None): Velocity from denoiser.
-            x1_t (Tensor | None): Denoised prediction.
-            correction (Tensor | None): Correction gradient tensor.
-            err (Tensor | None): Weighted error term.
-            weights (Tensor | None): Prefix attention weights.
-            guidance_weight (float | Tensor | None): Applied guidance weight.
-            inference_delay (int | None): Inference delay parameter.
-            execution_horizon (int | None): Execution horizon parameter.
-            **metadata: Additional metadata to store.
+            time (float | Tensor): 时间参数，用作标识该步骤的键。
+            x_t (Tensor | None): 当前的潜变量/状态张量。
+            v_t (Tensor | None): 去噪器给出的速度。
+            x1_t (Tensor | None): 去噪预测值。
+            correction (Tensor | None): 校正梯度张量。
+            err (Tensor | None): 加权误差项。
+            weights (Tensor | None): 前缀注意力权重。
+            guidance_weight (float | Tensor | None): 实际应用的引导权重。
+            inference_delay (int | None): 推理延迟参数。
+            execution_horizon (int | None): 执行时域参数。
+            **metadata: 要存储的附加元数据。
         """
         if not self.enabled:
             return
 
-        # Convert time to float and round to avoid float precision issues
+        # 将时间转换为 float 并四舍五入，以避免浮点数精度问题
         time_value = time.item() if isinstance(time, Tensor) else time
-        time_key = round(time_value, 6)  # Use rounded time as dictionary key
+        time_key = round(time_value, 6)  # 使用四舍五入后的时间作为字典键
 
-        # Check if step with this time already exists
+        # 检查是否已存在该时间对应的步骤
         if time_key in self._steps:
-            # Update existing step with non-None fields
+            # 用非 None 字段更新已有步骤
             existing_step = self._steps[time_key]
             if x_t is not None:
                 existing_step.x_t = x_t.detach().clone()
@@ -189,7 +189,7 @@ class Tracker:
             if metadata:
                 existing_step.metadata.update(metadata)
         else:
-            # Create new step
+            # 创建新步骤
             step = DebugStep(
                 step_idx=self._step_counter,
                 x_t=x_t.detach().clone() if x_t is not None else None,
@@ -205,21 +205,21 @@ class Tracker:
                 metadata=metadata,
             )
 
-            # Add to dictionary
+            # 添加到字典
             self._steps[time_key] = step
             self._step_counter += 1
 
-            # Enforce maxlen if set
+            # 若设置了 maxlen，则执行长度限制
             if self._maxlen is not None and len(self._steps) > self._maxlen:
-                # Remove oldest entry (first key in dict - Python 3.7+ preserves insertion order)
+                # 删除最旧的条目（字典中的第一个键——Python 3.7+ 保持插入顺序）
                 oldest_key = next(iter(self._steps))
                 del self._steps[oldest_key]
 
     def get_all_steps(self) -> list[DebugStep]:
-        """Get all recorded debug steps.
+        """获取所有已记录的调试步骤。
 
         Returns:
-            List of all DebugStep objects (may be empty if disabled).
+            所有 DebugStep 对象组成的列表（若禁用则可能为空）。
         """
         if not self.enabled or self._steps is None:
             return []
@@ -227,7 +227,7 @@ class Tracker:
         return list(self._steps.values())
 
     def __len__(self) -> int:
-        """Return the number of recorded debug steps."""
+        """返回已记录的调试步骤数量。"""
         if not self.enabled or self._steps is None:
             return 0
         return len(self._steps)

@@ -28,22 +28,22 @@ logger = getLogger(__name__)
 
 @dataclass
 class EvalPipelineConfig:
-    # Either the repo ID of a model hosted on the Hub or a path to a directory containing weights
-    # saved using `Policy.save_pretrained`. If not provided, the policy is initialized from scratch
-    # (useful for debugging). This argument is mutually exclusive with `--config`.
+    # 托管在 Hub 上的模型的仓库 ID，或包含使用 `Policy.save_pretrained` 保存的
+    # 权重的目录路径。如果未提供，策略将从头初始化（便于调试）。
+    # 此参数与 `--config` 互斥。
     env: envs.EnvConfig
     eval: EvalConfig = field(default_factory=EvalConfig)
     policy: PreTrainedConfig | None = None
     output_dir: Path | None = None
     job_name: str | None = None
     seed: int | None = 1000
-    # Rename map for the observation to override the image and state keys
+    # 观测值的重命名映射，用于覆盖 image 和 state 的键名
     rename_map: dict[str, str] = field(default_factory=dict)
-    # Explicit consent to execute remote code from the Hub (required for hub environments).
+    # 显式同意执行来自 Hub 的远程代码（hub 环境所必需）。
     trust_remote_code: bool = False
 
     def __post_init__(self) -> None:
-        # HACK: We parse again the cli args here to get the pretrained path if there was one.
+        # HACK: 这里再次解析 CLI 参数，以获取预训练路径（如果有的话）。
         policy_path = parser.get_path_arg("policy")
         if policy_path:
             yaml_overrides = parser.get_yaml_overrides("policy")
@@ -75,5 +75,5 @@ class EvalPipelineConfig:
 
     @classmethod
     def __get_path_fields__(cls) -> list[str]:
-        """This enables the parser to load config from the policy using `--policy.path=local/dir`"""
+        """这使得解析器可以使用 `--policy.path=local/dir` 从策略加载配置"""
         return ["policy"]

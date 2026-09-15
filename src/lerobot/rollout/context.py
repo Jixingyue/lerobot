@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Rollout context: shared state created once before strategy dispatch.
+"""Rollout 上下文：在策略分发之前一次性创建的共享状态。
 
-Grouped into five topical sub-contexts — :class:`RuntimeContext`,
-:class:`HardwareContext`, :class:`PolicyContext`, :class:`ProcessorContext`,
-and :class:`DatasetContext` — assembled into :class:`RolloutContext`.
+按主题分组为五个子上下文——:class:`RuntimeContext`、
+:class:`HardwareContext`、:class:`PolicyContext`、:class:`ProcessorContext`
+和 :class:`DatasetContext`——并组装成 :class:`RolloutContext`。
 """
 
 from __future__ import annotations
@@ -77,10 +77,10 @@ def _wrap_predict_action_chunk_with_torch_compile(
     backend: str,
     mode: str,
 ) -> bool:
-    """Install the JIT wrapper and report whether it was configured successfully.
+    """安装 JIT 包装器，并报告其是否配置成功。
 
-    ``torch.compile`` compiles lazily on the first invocation, so success here
-    does not guarantee that backend compilation will succeed during warm-up.
+    ``torch.compile`` 在首次调用时才进行惰性编译，因此这里的成功
+    并不能保证后端编译在预热期间一定会成功。
     """
     if not hasattr(torch, "compile"):
         logger.warning("torch.compile is not available in this PyTorch build")
@@ -101,7 +101,7 @@ def _wrap_predict_action_chunk_with_torch_compile(
 
 
 def _validate_trained_rtc_rollout_config(policy_config, inference_config: RTCInferenceConfig) -> None:
-    """Fail fast when rollout cannot retain every trained RTC prefix."""
+    """当 rollout 无法保留所有已训练的 RTC 前缀时快速失败。"""
     rtc = inference_config.rtc
     if not rtc.enabled or rtc.mode != "trained":
         return
@@ -128,8 +128,8 @@ def _validate_trained_rtc_rollout_config(policy_config, inference_config: RTCInf
             f"checkpoint's rtc_training_max_delay ({training_max_delay})."
         )
 
-    # RTC requires d <= s <= H - d (arXiv 2506.07339): an execution horizon past H - d would
-    # commit actions the next chunk can no longer re-plan, so the overlap never closes.
+    # RTC 要求 d <= s <= H - d（arXiv 2506.07339）：执行范围超过 H - d 将会
+    # 提交下一个块无法重新规划的动作，因此重叠部分永远无法闭合。
     chunk_size = int(getattr(policy_config, "chunk_size", 0))
     if chunk_size and rtc.execution_horizon > chunk_size - training_max_delay:
         raise ValueError(
@@ -142,7 +142,7 @@ def _validate_trained_rtc_rollout_config(policy_config, inference_config: RTCInf
 def _resolve_action_key_order(
     policy_action_names: list[str] | None, dataset_action_names: list[str]
 ) -> list[str]:
-    """Choose action name ordering for mapping policy tensor outputs to robot action dicts."""
+    """选择动作名称的顺序，用于将策略张量输出映射到机器人动作字典。"""
     if not policy_action_names:
         return dataset_action_names
     policy_action_names = list(policy_action_names)
@@ -162,7 +162,7 @@ def _resolve_action_key_order(
 def _align_state_feature_order(
     observation_features_hw: dict[str, type | tuple], policy_action_names: list[str] | None
 ) -> dict[str, type | tuple]:
-    """Order scalar state features to match the checkpoint's joint order."""
+    """对标量状态特征排序，使其与检查点的关节顺序一致。"""
     if not policy_action_names:
         return observation_features_hw
 
@@ -185,34 +185,33 @@ def _align_state_feature_order(
 
 
 # ---------------------------------------------------------------------------
-# Sub-contexts
+# 子上下文
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class RuntimeContext:
-    """Runtime knobs shared with every strategy."""
+    """与所有策略共享的运行时参数。"""
 
     cfg: RolloutConfig
     shutdown_event: Event
-    # Where the control loop's ``CycleTimer`` sends its cadence summaries; None
-    # leaves them on ``logger.info``.  A strategy declaring ``supports_interactive``
-    # must forward it to the timer it builds in ``run()``, since a session mutes
-    # everything below ERROR.
+    # 控制循环的 ``CycleTimer`` 向何处发送节奏摘要；None
+    # 表示继续使用 ``logger.info``。声明了 ``supports_interactive`` 的策略
+    # 必须将其转发给在 ``run()`` 中构建的计时器，因为会话期间
+    # 会静音所有低于 ERROR 级别的日志。
     cadence_report: Callable[[str], None] | None = None
 
 
 @dataclass
 class HardwareContext:
-    """Connected hardware.
+    """已连接的硬件。
 
-    The raw robot is available via ``robot_wrapper.inner`` when needed
-    (e.g. for disconnect); strategies should otherwise go through the
-    thread-safe wrapper.
+    原始机器人在需要时可通过 ``robot_wrapper.inner`` 获取
+    （例如用于断开连接）；其他情况下策略应通过
+    线程安全的包装器来访问。
 
-    ``initial_position`` stores the robot's joint positions at connect
-    time.  Strategies use it to return the robot to a safe pose before
-    shutting down.
+    ``initial_position`` 保存机器人连接时的关节位置。
+    策略在关闭前用它将机器人恢复到安全姿态。
     """
 
     robot_wrapper: ThreadSafeRobot
@@ -222,7 +221,7 @@ class HardwareContext:
 
 @dataclass
 class PolicyContext:
-    """Loaded policy and its inference engine."""
+    """已加载的策略及其推理引擎。"""
 
     policy: PreTrainedPolicy
     preprocessor: PolicyProcessorPipeline
@@ -232,7 +231,7 @@ class PolicyContext:
 
 @dataclass
 class ProcessorContext:
-    """Robot-side pipelines (run outside the policy)."""
+    """机器人侧流水线（在策略之外运行）。"""
 
     teleop_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction]
     robot_action_processor: RobotProcessorPipeline[tuple[RobotAction, RobotObservation], RobotAction]
@@ -241,7 +240,7 @@ class ProcessorContext:
 
 @dataclass
 class DatasetContext:
-    """Dataset and feature bookkeeping."""
+    """数据集与特征记录。"""
 
     dataset: LeRobotDataset | None
     dataset_features: dict = field(default_factory=dict)
@@ -251,9 +250,9 @@ class DatasetContext:
 
 @dataclass
 class RolloutContext:
-    """Bundle of sub-contexts passed to every rollout strategy.
+    """传递给每个 rollout 策略的子上下文集合。
 
-    Built once by :func:`build_rollout_context` before strategy dispatch.
+    由 :func:`build_rollout_context` 在策略分发之前一次性构建。
     """
 
     runtime: RuntimeContext
@@ -264,12 +263,11 @@ class RolloutContext:
 
 
 # ---------------------------------------------------------------------------
-# Build
-# ---------------------------------------------------------------------------
+#  构建# ---------------------------------------------------------------------------
 
 
 def _load_pretrained_policy(policy_config: PreTrainedConfig) -> PreTrainedPolicy:
-    """Load policy weights, keeping adapter and base-model revisions independent."""
+    """加载策略权重，使 adapter 和基础模型的版本保持相互独立。"""
     pretrained_revision = policy_config.pretrained_revision
     policy_class = get_policy_class(policy_config.type)
 
@@ -304,20 +302,20 @@ def build_rollout_context(
     robot_action_processor: RobotProcessorPipeline | None = None,
     robot_observation_processor: RobotProcessorPipeline | None = None,
 ) -> RolloutContext:
-    """Wire up policy, processors, hardware, dataset, and inference engine.
+    """装配策略、处理器、硬件、数据集和推理引擎。
 
-    The order is policy-first / hardware-last so a bad ``--policy.path``
-    fails fast without touching the robot. A missing policy configuration raises
-    ``ValueError`` before any policy access.
+    顺序是策略优先、硬件最后，这样无效的 ``--policy.path``
+    可以在不触碰机器人的情况下快速失败。在任何策略访问之前，
+    缺少策略配置会抛出 ``ValueError``。
     """
     is_rtc = isinstance(cfg.inference, RTCInferenceConfig)
 
-    # --- 1. Policy (heavy I/O, but no hardware yet) -------------------
+    # --- 1. 策略（繁重的 I/O，但尚未涉及硬件） -------------------
     policy_config = cfg.policy
     if policy_config is None:
         raise ValueError("--policy.path is required for rollout")
     logger.info("Loading policy from '%s'...", policy_config.pretrained_path)
-    # Policy constructors and custom processors must use the resolved rollout device too.
+    # 策略构造函数和自定义处理器也必须使用解析后的 rollout 设备。
     policy_config.device = cfg.device
 
     if is_rtc:
@@ -358,12 +356,12 @@ def build_rollout_context(
         )
 
     if cfg.use_torch_compile and not torch_compile_active:
-        # RolloutConfig.__post_init__ reloads the policy configuration, so avoid
-        # dataclasses.replace when carrying the effective state downstream.
+        # RolloutConfig.__post_init__ 会重新加载策略配置，因此在向下游
+        # 传递生效状态时避免使用 dataclasses.replace。
         cfg = copy(cfg)
         cfg.use_torch_compile = False
 
-    # --- 2. Robot-side processors (user-supplied or defaults) --------
+    # --- 2. 机器人侧处理器（用户提供或使用默认值） --------
     if (
         teleop_action_processor is None
         or robot_action_processor is None
@@ -374,13 +372,13 @@ def build_rollout_context(
         robot_action_processor = robot_action_processor or _r
         robot_observation_processor = robot_observation_processor or _o
 
-    # --- 3. Hardware (heaviest side-effect, deferred) -----------------
+    # --- 3. 硬件（副作用最重，延后处理） -----------------
     logger.info("Connecting robot (%s)...", cfg.robot.type if cfg.robot else "?")
     robot = make_robot_from_config(cfg.robot)
     robot.connect()
     logger.info("Robot connected: %s", robot.name)
 
-    # Store the initial joint positions so we can return to a safe pose on shutdown.
+    # 保存初始关节位置，以便在关闭时恢复到安全姿态。
     initial_obs = robot.get_observation()
     initial_position = {k: v for k, v in initial_obs.items() if k.endswith(".pos")}
     logger.info("Captured initial robot position (%d keys)", len(initial_position))
@@ -394,12 +392,12 @@ def build_rollout_context(
         teleop.connect()
         logger.info("Teleoperator connected")
 
-    # TODO(Steven): once Teleoperator motor-control methods are standardised
-    # (``enable_torque`` / ``disable_torque`` / ``write_goal_positions``), gate
-    # the DAgger strategy on their presence here and fail fast with a helpful
-    # message instead of relying on the operator to pre-align the leader by
-    # hand.  See :func:`DAggerStrategy._apply_transition` for the matching
-    # disabled call sites.
+    # TODO(Steven): 一旦 Teleoperator 的电机控制方法标准化
+    # （``enable_torque`` / ``disable_torque`` / ``write_goal_positions``），
+    # 就在这里根据这些方法的存在性来约束 DAgger 策略，并快速失败给出
+    # 有帮助的提示信息，而不是依赖操作者手动预对齐主手。
+    # 参见 :func:`DAggerStrategy._apply_transition` 中对应的
+    # 已禁用调用点。
     # if isinstance(cfg.strategy, DAggerStrategyConfig) and teleop is not None:
     #     required_teleop_methods = ("enable_torque", "disable_torque", "write_goal_positions")
     #     missing = [m for m in required_teleop_methods if not callable(getattr(teleop, m, None))]
@@ -410,19 +408,19 @@ def build_rollout_context(
     #             f"{required_teleop_methods}. '{type(teleop).__name__}' is missing: {missing}"
     #         )
 
-    # --- 4. Features + action-key reconciliation ---------------------
-    # TODO(Steven):Only ``.pos`` joint features are routed to the policy as state and as the
-    # action target; velocity and torque channels (when present) are kept in
-    # the raw observation but excluded from the policy-facing tensors.
+    # --- 4. 特征与动作键的对齐 ---------------------
+    # TODO(Steven): 只有 ``.pos`` 关节特征会作为状态和动作目标路由给策略；
+    # 速度和力矩通道（如果存在）保留在原始观测中，
+    # 但会被排除在面向策略的张量之外。
     all_obs_features = robot.observation_features
-    # ``observation_features`` values are either a tuple (camera shape) or the
-    # ``float`` type itself used as a sentinel for scalar motor features —
-    # see ``dict[str, type | tuple]`` annotation on ``Robot.observation_features``.
-    # Keep cameras (tuple) plus both joint-position (.pos) and base-velocity (.vel)
-    # scalar state features. LeKiwi's observation.state is 9-dim (6 arm .pos +
-    # x/y/theta.vel) and the policy was trained/normalized on all 9; the old .pos-only
-    # filter fed a 6-dim state into a 9-dim normalizer → RuntimeError (size 6 vs 9).
-    # Pure-arm robots have no .vel state keys, so this is a no-op for them.
+    # ``observation_features`` 的值要么是元组（相机形状），要么是
+    # ``float`` 类型本身，用作标量电机特征的哨兵值——
+    # 参见 ``Robot.observation_features`` 上的 ``dict[str, type | tuple]`` 注解。
+    # 保留相机（元组）以及关节位置（.pos）和底盘速度（.vel）两种
+    # 标量状态特征。LeKiwi 的 observation.state 是 9 维（6 个手臂 .pos +
+    # x/y/theta.vel），策略也是在这 9 维上训练/归一化的；旧的仅 .pos
+    # 过滤会把 6 维状态送入 9 维归一化器 → RuntimeError（size 6 vs 9）。
+    # 纯手臂机器人没有 .vel 状态键，因此对它们来说这是无操作。
     observation_features_hw = {
         k: v
         for k, v in all_obs_features.items()
@@ -433,21 +431,21 @@ def build_rollout_context(
         observation_features_hw,
         list(policy_action_names) if policy_action_names else None,
     )
-    # Keep both joint-position (.pos) and base-velocity (.vel) action features so
-    # mobile manipulators command the base too (e.g. LeKiwi: 6 arm .pos +
-    # x/y/theta.vel = 9-dim action). Pure-arm robots have no .vel keys, so this is
-    # a no-op for them. Without the .vel keys the base velocities are silently
-    # dropped from dataset_features[ACTION]/ordered_action_keys and the base never moves.
+    # 同时保留关节位置（.pos）和底盘速度（.vel）动作特征，
+    # 以便移动操作机器人也能控制底盘（例如 LeKiwi：6 个手臂 .pos +
+    # x/y/theta.vel = 9 维动作）。纯手臂机器人没有 .vel 键，
+    # 因此对它们来说这是无操作。如果没有 .vel 键，底盘速度会被
+    # 悄悄从 dataset_features[ACTION]/ordered_action_keys 中丢弃，底盘将永远不动。
     action_features_hw = {k: v for k, v in robot.action_features.items() if k.endswith((".pos", ".vel"))}
 
-    # The action side is always needed: sync inference reads action names from
-    # ``dataset_features[ACTION]`` to map policy tensors back to robot actions.
+    # 动作侧始终是必需的：同步推理从 ``dataset_features[ACTION]``
+    # 读取动作名称，以便将策略张量映射回机器人动作。
     action_dataset_features = aggregate_pipeline_dataset_features(
         pipeline=teleop_action_processor,
         initial_features=create_initial_features(action=action_features_hw),
         use_videos=cfg.dataset.video if cfg.dataset else True,
     )
-    # Observation-side aggregation is needed because of build_dataset_frame
+    # 由于 build_dataset_frame 的需要，观测侧的聚合也是必需的
     observation_dataset_features = aggregate_pipeline_dataset_features(
         pipeline=robot_observation_processor,
         initial_features=create_initial_features(observation=observation_features_hw),
@@ -461,7 +459,7 @@ def build_rollout_context(
         raw_action_keys,
     )
 
-    # Validate visual features if no rename_map is active
+    # 在未启用 rename_map 时校验视觉特征
     rename_map = cfg.rename_map
     if not rename_map:
         expected_visuals = {
@@ -481,12 +479,12 @@ def build_rollout_context(
                 f"""--rename_map='{{"observation.images.top": "observation.images.cam0"}}'"""
             )
 
-    # --- 5. Dataset -------------
+    # --- 5. 数据集 -------------
     dataset = None
     if cfg.dataset is not None:
         logger.info("Setting up dataset (repo_id=%s)...", cfg.dataset.repo_id)
-        # Strategy-owned columns join the robot/policy features above the resume/create
-        # split, so ``ctx.data.dataset_features`` describes the same schema on both paths.
+        # 策略拥有的列会在 resume/create 分支之上与机器人/策略特征合并，
+        # 因此 ``ctx.data.dataset_features`` 在两条路径上描述的是同一套模式。
         dataset_features.update(cfg.strategy.extra_dataset_features())
         if cfg.resume:
             dataset = LeRobotDataset.resume(
@@ -533,7 +531,7 @@ def build_rollout_context(
     if dataset is not None:
         logger.info("Dataset ready: %s (%d existing episodes)", dataset.repo_id, dataset.num_episodes)
 
-    # --- 6. Policy pre/post processors (needs dataset stats if any) ---
+    # --- 6. 策略前/后处理器（如有需要则使用数据集统计量） ---
     dataset_stats = None
     if dataset is not None:
         dataset_stats = rename_stats(
@@ -566,7 +564,7 @@ def build_rollout_context(
             "Use --inference.type=rtc or remove relative action processor steps from the policy pipeline."
         )
 
-    # --- 7. Inference strategy (needs policy + pre/post + hardware) --
+    # --- 7. 推理策略（需要策略 + 前/后处理器 + 硬件） --
     logger.info(
         "Creating inference engine (type=%s)...",
         cfg.inference.type if hasattr(cfg.inference, "type") else "sync",
@@ -589,7 +587,7 @@ def build_rollout_context(
         shutdown_event=shutdown_event,
     )
 
-    # --- 8. Assemble ---------------------------------------------------
+    # --- 8. 组装 ---------------------------------------------------
     logger.info("Rollout context assembled successfully")
     return RolloutContext(
         runtime=RuntimeContext(cfg=cfg, shutdown_event=shutdown_event),

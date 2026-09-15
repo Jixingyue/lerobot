@@ -33,18 +33,18 @@ def make_act_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Creates the pre- and post-processing pipelines for the ACT policy.
+    """为 ACT 策略创建预处理和后处理流水线。
 
-    The pre-processing pipeline handles normalization, batching, and device placement for the model inputs.
-    The post-processing pipeline handles unnormalization and moves the model outputs back to the CPU.
+    预处理流水线处理模型输入的归一化、批处理和设备放置。
+    后处理流水线处理反归一化，并将模型输出移回 CPU。
 
     Args:
-        config (ACTConfig): The ACT policy configuration object.
-        dataset_stats (dict[str, dict[str, torch.Tensor]] | None): A dictionary containing dataset
-            statistics (e.g., mean and std) used for normalization. Defaults to None.
+        config (ACTConfig): ACT 策略配置对象。
+        dataset_stats (dict[str, dict[str, torch.Tensor]] | None): 包含用于
+            归一化的数据集统计信息（例如均值和标准差）的字典。默认为 None。
 
     Returns:
-        tuple[PolicyProcessorPipeline[dict[str, Any], dict[str, Any]], PolicyProcessorPipeline[PolicyAction, PolicyAction]]: A tuple containing the
-        pre-processor pipeline and the post-processor pipeline.
+        tuple[PolicyProcessorPipeline[dict[str, Any], dict[str, Any]], PolicyProcessorPipeline[PolicyAction, PolicyAction]]: 包含
+        预处理器流水线和后处理器流水线的元组。
     """
     return make_default_pre_post_processors(config, dataset_stats, normalizer_device=config.device)

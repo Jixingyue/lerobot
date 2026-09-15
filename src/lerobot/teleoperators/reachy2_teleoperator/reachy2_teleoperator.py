@@ -34,7 +34,7 @@ from .config_reachy2_teleoperator import Reachy2TeleoperatorConfig
 
 logger = logging.getLogger(__name__)
 
-# {lerobot_keys: reachy2_sdk_keys}
+# {lerobot 键: reachy2_sdk 键}
 REACHY2_NECK_JOINTS = {
     "neck_yaw.pos": "head.neck.yaw",
     "neck_pitch.pos": "head.neck.pitch",
@@ -77,7 +77,7 @@ REACHY2_VEL = {
 
 class Reachy2Teleoperator(Teleoperator):
     """
-    [Reachy 2](https://www.pollen-robotics.com/reachy/), by Pollen Robotics.
+    [Reachy 2](https://www.pollen-robotics.com/reachy/)，由 Pollen Robotics 出品。
     """
 
     config_class = Reachy2TeleoperatorConfig

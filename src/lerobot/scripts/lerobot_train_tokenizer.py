@@ -11,19 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Train FAST tokenizer for action encoding.
+"""训练用于动作编码的 FAST 分词器。
 
-This script:
-1. Loads action chunks from LeRobotDataset (with episode sampling)
-2. Optionally applies relative transforms (relative vs absolute actions)
-3. Extracts specified action dimensions for encoding
-4. Applies normalization (MEAN_STD, MIN_MAX, QUANTILES, or other modes)
-5. Trains FAST tokenizer (BPE on DCT coefficients) on the action chunks
-6. Saves tokenizer to output directory
-7. Optionally pushes tokenizer to Hugging Face Hub
-8. Reports compression statistics
+此脚本：
+1. 从 LeRobotDataset 加载动作分块（含 episode 采样）
+2. 可选地应用相对变换（相对动作与绝对动作）
+3. 提取指定的动作维度用于编码
+4. 应用归一化（MEAN_STD、MIN_MAX、QUANTILES 或其他模式）
+5. 在动作分块上训练 FAST 分词器（对 DCT 系数做 BPE）
+6. 将分词器保存到输出目录
+7. 可选地将分词器推送到 Hugging Face Hub
+8. 报告压缩统计信息
 
-Example:
+示例：
 
 ```shell
 lerobot-train-tokenizer \
@@ -71,54 +71,54 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TokenizerTrainingConfig:
-    """Configuration for training FAST tokenizer."""
+    """训练 FAST 分词器的配置。"""
 
-    # LeRobot dataset repository ID
+    # LeRobot 数据集仓库 ID
     repo_id: str
-    # Root directory for dataset (default: ~/.cache/huggingface/lerobot)
+    # 数据集根目录（默认：~/.cache/huggingface/lerobot）
     root: str | None = None
-    # Number of future actions in each chunk
+    # 每个分块中未来动作的数量
     action_horizon: int = 10
-    # Max episodes to use (None = all episodes in dataset)
+    # 最多使用多少个 episode（None = 数据集中的所有 episode）
     max_episodes: int | None = None
-    # Fraction of chunks to sample per episode
+    # 每个 episode 中采样分块的比例
     sample_fraction: float = 0.1
-    # Comma-separated dimension ranges to encode (e.g., "0:6,7:23")
+    # 以逗号分隔的待编码维度范围（例如 "0:6,7:23"）
     encoded_dims: str = "0:6,7:23"
-    # Comma-separated dimension indices for relative transform (e.g., "0,1,2,3,4,5")
+    # 以逗号分隔的、用于相对变换的维度索引（例如 "0,1,2,3,4,5"）
     relative_dims: str | None = None
-    # Whether to apply relative transform (relative actions vs absolute actions)
+    # 是否应用相对变换（相对动作还是绝对动作）
     use_relative_transform: bool = False
-    # Dataset key for state observations (default: "observation.state")
+    # 状态观测对应的数据集键（默认："observation.state"）
     state_key: str = OBS_STATE
-    # Normalization mode (MEAN_STD, MIN_MAX, QUANTILES, QUANTILE10, IDENTITY)
+    # 归一化模式（MEAN_STD、MIN_MAX、QUANTILES、QUANTILE10、IDENTITY）
     normalization_mode: str = "QUANTILES"
-    # FAST vocabulary size (BPE vocab size)
+    # FAST 词表大小（BPE 词表大小）
     vocab_size: int = 1024
-    # DCT scaling factor (default: 10.0)
+    # DCT 缩放系数（默认：10.0）
     scale: float = 10.0
-    # Directory to save tokenizer (default: ./fast_tokenizer_{repo_id})
+    # 分词器保存目录（默认：./fast_tokenizer_{repo_id}）
     output_dir: str | None = None
-    # Whether to push the tokenizer to Hugging Face Hub
+    # 是否将分词器推送到 Hugging Face Hub
     push_to_hub: bool = False
-    # Hub repository ID (e.g., "username/tokenizer-name"). If None, uses output_dir name
+    # Hub 仓库 ID（例如 "username/tokenizer-name"）。为 None 时使用 output_dir 的名称
     hub_repo_id: str | None = None
-    # Whether to create a private repository on the Hub
+    # 是否在 Hub 上创建私有仓库
     hub_private: bool = False
 
 
 def apply_relative_transform(
     state: np.ndarray, actions: np.ndarray, relative_dims: list[int] | None
 ) -> np.ndarray:
-    """Apply relative transform to specified dimensions.
+    """对指定维度应用相对变换。
 
-    Args:
-        state: Current state [D]
-        actions: Future actions [D]
-        relative_dims: List of dimension indices to apply relative transform to
+    参数:
+        state: 当前状态 [D]
+        actions: 未来动作 [D]
+        relative_dims: 需要应用相对变换的维度索引列表
 
-    Returns:
-        Transformed actions [D]
+    返回:
+        变换后的动作 [D]
     """
     if relative_dims is None or len(relative_dims) == 0:
         return actions
@@ -136,16 +136,16 @@ def apply_normalization(
     mode: NormalizationMode,
     eps: float = 1e-8,
 ) -> np.ndarray:
-    """Apply normalization to data based on the specified mode.
+    """根据指定模式对数据应用归一化。
 
-    Args:
-        data: Data to normalize [N, H, D] or [D]
-        stats: Dictionary of statistics (mean, std, min, max, q01, q99, q10, q90)
-        mode: Normalization mode to apply
-        eps: Small epsilon for numerical stability
+    参数:
+        data: 待归一化的数据 [N, H, D] 或 [D]
+        stats: 统计信息字典（mean、std、min、max、q01、q99、q10、q90）
+        mode: 要应用的归一化模式
+        eps: 用于数值稳定性的小 epsilon
 
-    Returns:
-        Normalized data with the same shape as input
+    返回:
+        与输入形状相同的归一化后数据
     """
     if mode == NormalizationMode.IDENTITY:
         return data
@@ -171,7 +171,7 @@ def apply_normalization(
         if q01 is None or q99 is None:
             raise ValueError("QUANTILES mode requires 'q01' and 'q99' in stats")
         denom = np.maximum(q99 - q01, eps)
-        # Clip to quantile range then normalize to [-1, 1]
+        # 先裁剪到分位数范围，再归一化到 [-1, 1]
         clipped = np.clip(data, q01, q99)
         return 2.0 * (clipped - q01) / denom - 1.0
 
@@ -181,7 +181,7 @@ def apply_normalization(
         if q10 is None or q90 is None:
             raise ValueError("QUANTILE10 mode requires 'q10' and 'q90' in stats")
         denom = np.maximum(q90 - q10, eps)
-        # Clip to quantile range then normalize to [-1, 1]
+        # 先裁剪到分位数范围，再归一化到 [-1, 1]
         clipped = np.clip(data, q10, q90)
         return 2.0 * (clipped - q10) / denom - 1.0
 
@@ -189,11 +189,11 @@ def apply_normalization(
 
 
 def process_episode(args):
-    """Process single episode and return action chunks."""
+    """处理单个 episode 并返回动作分块。"""
     dataset, ep_idx, action_horizon, relative_dims, sample_fraction, state_key, use_relative_transform = args
 
     try:
-        # get episode info
+        # 获取 episode 信息
         ep_info = dataset.meta.episodes[ep_idx]
         from_idx = ep_info["dataset_from_index"]
         to_idx = ep_info["dataset_to_index"]
@@ -202,16 +202,16 @@ def process_episode(args):
         if ep_length < action_horizon:
             return None
 
-        # load all frames in episode
-        # if dataset has episode filtering, we need to use the mapping
+        # 加载 episode 中的所有帧
+        # 如果数据集带有 episode 过滤，则需要使用索引映射
         states = []
         actions = []
 
         for abs_idx in range(from_idx, to_idx):
-            # map absolute index to relative index if needed
+            # 如有必要，将绝对索引映射为相对索引
             if dataset.reader._absolute_to_relative_idx is not None:
                 if abs_idx not in dataset.reader._absolute_to_relative_idx:
-                    # this episode's frames aren't in the filtered dataset
+                    # 该 episode 的帧不在过滤后的数据集中
                     return None
                 rel_idx = dataset.reader._absolute_to_relative_idx[abs_idx]
             else:
@@ -219,7 +219,7 @@ def process_episode(args):
 
             frame = dataset.get_raw_item(rel_idx)
 
-            # get state (could be from observation.state or other state key)
+            # 获取状态（可能来自 observation.state 或其他状态键）
             if state_key in frame:
                 state = (
                     frame[state_key].numpy()
@@ -227,7 +227,7 @@ def process_episode(args):
                     else np.array(frame[state_key])
                 )
             else:
-                # if no state key, use zeros (no relative transform)
+                # 如果没有状态键，则使用零（不做相对变换）
                 state = np.zeros_like(
                     frame[ACTION].numpy() if torch.is_tensor(frame[ACTION]) else np.array(frame[ACTION])
                 )
@@ -240,16 +240,16 @@ def process_episode(args):
         states = np.array(states)
         actions = np.array(actions)
 
-        # create action chunks (sliding window)
-        # all actions in a chunk are relative to the FIRST state in that chunk
+        # 创建动作分块（滑动窗口）
+        # 一个分块中的所有动作都相对于该分块中的第一个状态
         action_chunks = []
 
         for i in range(len(states) - action_horizon + 1):
-            current_state = states[i]  # First state in chunk
+            current_state = states[i]  # 分块中的第一个状态
             future_absolute_actions = actions[i : i + action_horizon]
 
             if use_relative_transform:
-                # relative actions
+                # 相对动作
                 relative_chunk = np.zeros_like(future_absolute_actions)
                 for t in range(action_horizon):
                     relative_chunk[t] = apply_relative_transform(
@@ -259,7 +259,7 @@ def process_episode(args):
                     )
                 action_chunks.append(relative_chunk)
             else:
-                # absolute actions (no relative transform)
+                # 绝对动作（不做相对变换）
                 action_chunks.append(future_absolute_actions)
 
         if len(action_chunks) == 0:
@@ -267,7 +267,7 @@ def process_episode(args):
 
         action_chunks = np.array(action_chunks)
 
-        # sample chunks
+        # 对分块进行采样
         if sample_fraction < 1.0:
             n_chunks = len(action_chunks)
             n_samples = max(1, int(n_chunks * sample_fraction))
@@ -289,43 +289,43 @@ def train_fast_tokenizer(
     scale: float = 10.0,
 ) -> AutoProcessor:
     """
-    Train FAST tokenizer (BPE on DCT coefficients) on action chunks.
+    在动作分块上训练 FAST 分词器（对 DCT 系数做 BPE）。
 
-    Uses the .fit() method to train a new tokenizer on the provided data.
+    使用 .fit() 方法在给定数据上训练一个新的分词器。
 
-    Args:
-        action_chunks: Array of action chunks [N, H, D] where N=num_chunks, H=horizon, D=action_dim
-        vocab_size: BPE vocabulary size
-        scale: DCT scaling factor for quantization
+    参数:
+        action_chunks: 动作分块数组 [N, H, D]，其中 N=分块数，H=horizon，D=action_dim
+        vocab_size: BPE 词表大小
+        scale: 用于量化的 DCT 缩放系数
 
-    Returns:
-        Trained FAST tokenizer
+    返回:
+        训练好的 FAST 分词器
     """
     logger.info(f"Training FAST tokenizer on {len(action_chunks)} action chunks...")
     logger.info(f"Action chunk shape: {action_chunks.shape}")
     logger.info(f"Vocab size: {vocab_size}")
     logger.info(f"DCT scale: {scale}")
 
-    # download the tokenizer source code (not pretrained weights)
-    # we'll train a new tokenizer on our own data
+    # 下载分词器源代码（而非预训练权重）
+    # 我们将在自己的数据上训练一个新的分词器
     base_tokenizer = AutoProcessor.from_pretrained("lerobot/fast-action-tokenizer", trust_remote_code=True)
 
-    # convert action_chunks array to list of arrays (expected by .fit())
+    # 将 action_chunks 数组转换为数组列表（.fit() 所要求的格式）
     action_data_list = [action_chunks[i] for i in range(len(action_chunks))]
 
-    # train the new tokenizer on our action data using .fit()
-    # this trains the BPE tokenizer on DCT coefficients
+    # 使用 .fit() 在我们的动作数据上训练新分词器
+    # 这会在 DCT 系数上训练 BPE 分词器
     logger.info("Training new tokenizer (this may take a few minutes)...")
     tokenizer = base_tokenizer.fit(
         action_data_list,
         scale=scale,
         vocab_size=vocab_size,
         time_horizon=action_chunks.shape[1],  # action_horizon
-        action_dim=action_chunks.shape[2],  # encoded dimensions
+        action_dim=action_chunks.shape[2],  # 编码维度数
     )
     logger.info("✓ Tokenizer training complete!")
 
-    # validate it works
+    # 验证它可以正常工作
     sample_chunk = action_chunks[0]
     encoded = tokenizer(sample_chunk[None])[0]
     if isinstance(encoded, list):
@@ -336,10 +336,10 @@ def train_fast_tokenizer(
 
 
 def compute_compression_stats(tokenizer, action_chunks: np.ndarray):
-    """Compute compression statistics."""
+    """计算压缩统计信息。"""
     logger.info("\nComputing compression statistics...")
 
-    # sample for stats (use max 1000 chunks for speed)
+    # 为统计信息采样（为提高速度最多使用 1000 个分块）
     sample_size = min(1000, len(action_chunks))
     sample_indices = np.random.RandomState(42).choice(len(action_chunks), size=sample_size, replace=False)
     sample_chunks = action_chunks[sample_indices]
@@ -354,7 +354,7 @@ def compute_compression_stats(tokenizer, action_chunks: np.ndarray):
 
     token_lengths = np.array(token_lengths)
 
-    # compression ratio: (H * D) / avg_tokens
+    # 压缩比：(H * D) / 平均 token 数
     input_size = action_chunks.shape[1] * action_chunks.shape[2]
     avg_tokens = np.mean(token_lengths)
     compression_ratio = input_size / avg_tokens
@@ -380,17 +380,17 @@ def compute_compression_stats(tokenizer, action_chunks: np.ndarray):
 @parser.wrap()
 def train_tokenizer(cfg: TokenizerTrainingConfig):
     """
-    Train FAST tokenizer for action encoding.
+    训练用于动作编码的 FAST 分词器。
 
-    Args:
-        cfg: TokenizerTrainingConfig dataclass with all configuration parameters
+    参数:
+        cfg: 包含所有配置参数的 TokenizerTrainingConfig 数据类
     """
-    # load dataset
+    # 加载数据集
     logger.info(f"Loading dataset: {cfg.repo_id}")
     dataset = LeRobotDataset(repo_id=cfg.repo_id, root=cfg.root)
     logger.info(f"Dataset loaded: {dataset.num_episodes} episodes, {dataset.num_frames} frames")
 
-    # parse normalization mode
+    # 解析归一化模式
     try:
         norm_mode = NormalizationMode(cfg.normalization_mode)
     except ValueError as err:
@@ -400,7 +400,7 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
         ) from err
     logger.info(f"Normalization mode: {norm_mode.value}")
 
-    # parse encoded dimensions
+    # 解析编码维度
     encoded_dim_ranges = []
     for range_str in cfg.encoded_dims.split(","):
         start, end = map(int, range_str.strip().split(":"))
@@ -409,7 +409,7 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
     total_encoded_dims = sum(end - start for start, end in encoded_dim_ranges)
     logger.info(f"Encoding {total_encoded_dims} dimensions: {cfg.encoded_dims}")
 
-    # parse relative dimensions
+    # 解析相对变换维度
     relative_dim_list = None
     if cfg.relative_dims is not None and cfg.relative_dims.strip():
         relative_dim_list = [int(d.strip()) for d in cfg.relative_dims.split(",")]
@@ -427,14 +427,14 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
     logger.info(f"Action horizon: {cfg.action_horizon}")
     logger.info(f"State key: {cfg.state_key}")
 
-    # determine episodes to process
+    # 确定要处理的 episode 数量
     num_episodes = dataset.num_episodes
     if cfg.max_episodes is not None:
         num_episodes = min(cfg.max_episodes, num_episodes)
 
     logger.info(f"Processing {num_episodes} episodes...")
 
-    # process episodes sequentially (to avoid pickling issues with dataset)
+    # 顺序处理各个 episode（以避免数据集的 pickle 问题）
     all_chunks = []
     for ep_idx in range(num_episodes):
         if ep_idx % 10 == 0:
@@ -454,34 +454,34 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
         if chunks is not None:
             all_chunks.append(chunks)
 
-    # concatenate all chunks
+    # 拼接所有分块
     all_chunks = np.concatenate(all_chunks, axis=0)
     logger.info(f"Collected {len(all_chunks)} action chunks")
 
-    # extract only encoded dimensions FIRST (before normalization)
+    # 首先只提取待编码维度（在归一化之前）
     encoded_chunks = []
     for start, end in encoded_dim_ranges:
         encoded_chunks.append(all_chunks[:, :, start:end])
     encoded_chunks = np.concatenate(encoded_chunks, axis=-1)  # [N, H, D_encoded]
     logger.info(f"Extracted {encoded_chunks.shape[-1]} encoded dimensions")
 
-    # apply normalization to encoded dimensions
+    # 对编码维度应用归一化
     logger.info("\nBefore normalization - overall stats:")
     logger.info(f"  Min: {np.min(encoded_chunks):.4f}, Max: {np.max(encoded_chunks):.4f}")
     logger.info(f"  Mean: {np.mean(encoded_chunks):.4f}, Std: {np.std(encoded_chunks):.4f}")
 
-    # get normalization stats from dataset
+    # 从数据集中获取归一化统计信息
     norm_stats = dataset.meta.stats
     if norm_stats is not None and ACTION in norm_stats:
         action_stats = norm_stats[ACTION]
 
-        # build encoded dimension indices
+        # 构建编码维度的索引
         encoded_dim_indices = []
         for start, end in encoded_dim_ranges:
             encoded_dim_indices.extend(range(start, end))
         encoded_dim_indices = np.array(encoded_dim_indices)
 
-        # extract stats for encoded dimensions only
+        # 仅提取编码维度对应的统计信息
         encoded_stats = {}
         for stat_name, stat_values in action_stats.items():
             if isinstance(stat_values, (list, np.ndarray)):
@@ -497,7 +497,7 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
                     f"range=[{np.min(stat_values):.4f}, {np.max(stat_values):.4f}]"
                 )
 
-            # apply normalization based on mode
+            # 根据所选模式应用归一化
             try:
                 encoded_chunks = apply_normalization(encoded_chunks, encoded_stats, norm_mode, eps=1e-8)
                 logger.info(f"\nApplied {norm_mode.value} normalization")
@@ -522,17 +522,17 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
 
     logger.info(f"Encoded chunks shape: {encoded_chunks.shape}")
 
-    # train FAST tokenizer
+    # 训练 FAST 分词器
     tokenizer = train_fast_tokenizer(
         encoded_chunks,
         vocab_size=cfg.vocab_size,
         scale=cfg.scale,
     )
 
-    # compute compression statistics
+    # 计算压缩统计信息
     compression_stats = compute_compression_stats(tokenizer, encoded_chunks)
 
-    # save tokenizer
+    # 保存分词器
     output_dir = cfg.output_dir
     if output_dir is None:
         output_dir = f"fast_tokenizer_{cfg.repo_id.replace('/', '_')}"
@@ -541,7 +541,7 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
 
     tokenizer.save_pretrained(output_path)
 
-    # save metadata
+    # 保存元数据
     metadata = {
         "repo_id": cfg.repo_id,
         "vocab_size": cfg.vocab_size,
@@ -565,9 +565,9 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
     logger.info(f"\nSaved FAST tokenizer to {output_path}")
     logger.info(f"Metadata: {json.dumps(metadata, indent=2)}")
 
-    # push to Hugging Face Hub if requested
+    # 如果有要求，则推送到 Hugging Face Hub
     if cfg.push_to_hub:
-        # determine the hub repository ID
+        # 确定 hub 仓库 ID
         hub_repo_id = cfg.hub_repo_id
         if hub_repo_id is None:
             hub_repo_id = output_path.name
@@ -577,14 +577,14 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
         logger.info(f"   Private: {cfg.hub_private}")
 
         try:
-            # use the tokenizer's push_to_hub method
+            # 使用分词器自身的 push_to_hub 方法
             tokenizer.push_to_hub(
                 repo_id=hub_repo_id,
                 private=cfg.hub_private,
                 commit_message=f"Upload FAST tokenizer trained on {cfg.repo_id}",
             )
 
-            # also upload the metadata.json file separately
+            # 另外单独上传 metadata.json 文件
             api = HfApi()
             api.upload_file(
                 path_or_fileobj=str(output_path / "metadata.json"),
@@ -601,7 +601,7 @@ def train_tokenizer(cfg: TokenizerTrainingConfig):
 
 
 def main():
-    """CLI entry point that parses arguments and runs the tokenizer training."""
+    """CLI 入口点，负责解析参数并运行分词器训练。"""
     init_logging()
     train_tokenizer()
 

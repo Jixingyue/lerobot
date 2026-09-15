@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 def _tie_unused_qwen_lm_head(model: nn.Module) -> None:
-    """Restore the TF4 weight tie so the unused LM head stays frozen and is omitted on save."""
+    """恢复 TF4 的权重绑定，使未使用的 LM 头保持冻结，并在保存时被省略。"""
     lm_head = getattr(model, "lm_head", None)
     get_input_embeddings = getattr(model, "get_input_embeddings", None)
     if lm_head is None or not callable(get_input_embeddings):
@@ -148,12 +148,12 @@ GR00T_N1_7_DEFAULTS: dict[str, Any] = {
 
 
 class GR00TN17Config(PretrainedConfig):
-    """Configuration for NVIDIA GR00T N1.7.
+    """NVIDIA GR00T N1.7 的配置。
 
-    N1.7 uses the Cosmos-Reason2-2B / Qwen3-VL backbone and a multi-embodiment
-    flow-matching action head. This mirrors the public N1.7 checkpoint config
-    while keeping it local to LeRobot and independent from the external
-    Isaac-GR00T ``gr00t`` Python package.
+    N1.7 使用 Cosmos-Reason2-2B / Qwen3-VL 主干和多具身
+    flow-matching 动作头。此配置与公开的 N1.7 检查点配置保持一致，
+    同时将其保留在 LeRobot 内部，独立于外部的
+    Isaac-GR00T ``gr00t`` Python 包。
     """
 
     model_type = "Gr00tN1d7"
@@ -169,7 +169,7 @@ class GR00TN17Config(PretrainedConfig):
 
 
 class CategorySpecificLinear(nn.Module):
-    """Linear layer with category-specific weights for multi-embodiment support."""
+    """带有按类别区分权重的线性层，用于支持多具身。"""
 
     def __init__(self, num_categories: int, input_dim: int, hidden_dim: int):
         super().__init__()
@@ -184,7 +184,7 @@ class CategorySpecificLinear(nn.Module):
 
 
 class CategorySpecificMLP(nn.Module):
-    """Two-layer MLP with category-specific weights."""
+    """带有按类别区分权重的两层 MLP。"""
 
     def __init__(self, num_categories: int, input_dim: int, hidden_dim: int, output_dim: int):
         super().__init__()
@@ -197,12 +197,11 @@ class CategorySpecificMLP(nn.Module):
 
 
 class SinusoidalPositionalEncoding(nn.Module):
-    """Sinusoidal encoding of shape ``(B, T, D)`` for timestep tensors ``(B, T)``.
+    """为时间步张量 ``(B, T)`` 生成形状为 ``(B, T, D)`` 的正弦编码。
 
-    The frequency scalar is intentionally created on CPU and then broadcast with
-    the device-local arange result. That mirrors Isaac-GR00T's N1.7 timestep
-    embedding and avoids tiny dtype/device construction differences in parity
-    tests.
+    频率标量有意在 CPU 上创建，然后与设备本地的 arange 结果进行广播。
+    这与 Isaac-GR00T 的 N1.7 时间步嵌入保持一致，并避免了对等性测试中
+    微小的 dtype/设备构造差异。
     """
 
     def __init__(self, embedding_dim: int):
@@ -224,7 +223,7 @@ def swish(x: torch.Tensor) -> torch.Tensor:
 
 
 class MultiEmbodimentActionEncoder(nn.Module):
-    """Action encoder with category-specific projections and sinusoidal time encoding."""
+    """带有按类别区分投影和正弦时间编码的动作编码器。"""
 
     def __init__(self, action_dim: int, hidden_size: int, num_embodiments: int):
         super().__init__()
@@ -245,12 +244,11 @@ class MultiEmbodimentActionEncoder(nn.Module):
 
 
 class Qwen3Backbone(nn.Module):
-    """Cosmos-Reason2/Qwen3-VL backbone used by GR00T N1.7.
+    """GR00T N1.7 使用的 Cosmos-Reason2/Qwen3-VL 主干。
 
-    The public checkpoint stores the action head in the GR00T checkpoint but
-    uses a Hugging Face Qwen3-VL-compatible backbone interface. This wrapper
-    keeps the nested HF module layout compatible across transformer versions
-    and exposes the hidden states consumed by the action head.
+    公开检查点将动作头存储在 GR00T 检查点中，但使用与 Hugging Face
+    Qwen3-VL 兼容的主干接口。此封装使嵌套的 HF 模块布局在不同
+    transformer 版本之间保持兼容，并暴露动作头所消费的隐藏状态。
     """
 
     def __init__(
@@ -380,14 +378,13 @@ class Qwen3Backbone(nn.Module):
         model_input["mm_token_type_ids"] = mm_token_type_ids
 
     def _ensure_legacy_qwen3_position_ids(self, model_input: dict[str, torch.Tensor]) -> None:
-        """Restore the Qwen3-VL text position ids used by older Transformers releases.
+        """恢复旧版 Transformers 所使用的 Qwen3-VL 文本位置 id。
 
-        Transformers 5.x computes 3-row multimodal RoPE ids for Qwen3-VL and then
-        drops text position ids before calling text-layer flash attention. GR00T
-        N1.7 was aligned against the older Transformers path, where a fourth text
-        position row is forwarded alongside the temporal/height/width rows. Adding
-        the row here preserves the newer multimodal position computation while
-        keeping flash attention on the legacy code path.
+        Transformers 5.x 会为 Qwen3-VL 计算 3 行的多模态 RoPE id，然后在调用
+        文本层 flash attention 之前丢弃文本位置 id。GR00T N1.7 是针对旧版
+        Transformers 路径对齐的，在该路径中，第四行文本位置会与
+        时间/高度/宽度各行一起前向传递。在这里补上该行，既保留了较新的
+        多模态位置计算，又让 flash attention 继续走旧版代码路径。
         """
 
         if "position_ids" in model_input:
@@ -413,12 +410,12 @@ class Qwen3Backbone(nn.Module):
         model_input["position_ids"] = position_ids
 
     def _last_decoder_layer_output(self, model_input: dict[str, torch.Tensor]) -> torch.Tensor:
-        """Return the pre-final-norm decoder output consumed by the N1.7 action head.
+        """返回 N1.7 动作头所消费的、最终归一化之前的解码器输出。
 
-        Older Transformers releases exposed this tensor as ``hidden_states[-1]``.
-        Newer releases expose the post-final-norm tensor there instead. Capturing
-        the last decoder layer output directly keeps the N1.7 action head input
-        stable across Transformers versions.
+        旧版 Transformers 会将该张量作为 ``hidden_states[-1]`` 暴露。
+        新版则在该位置暴露经过最终归一化之后的张量。直接捕获最后一个
+        解码器层的输出，可以使 N1.7 动作头的输入在不同 Transformers
+        版本之间保持稳定。
         """
 
         captured: dict[str, torch.Tensor] = {}
@@ -749,7 +746,7 @@ def _is_cosmos_reason2_backbone(model_name: str) -> bool:
 
 
 def _cosmos_reason2_qwen3_vl_config() -> PretrainedConfig:
-    """Hard-coded copy of the nvidia/Cosmos-Reason2-2B config.json (a Qwen3-VL-2B-Instruct layout)."""
+    """nvidia/Cosmos-Reason2-2B config.json 的硬编码副本（Qwen3-VL-2B-Instruct 布局）。"""
 
     return Qwen3VLConfig(
         image_token_id=151655,
@@ -817,7 +814,7 @@ def get_backbone_cls(config: GR00TN17Config):
 
 
 class GR00TN17(PreTrainedModel):
-    """GR00T N1.7 model with a Cosmos-Reason2/Qwen3-VL backbone."""
+    """带有 Cosmos-Reason2/Qwen3-VL 主干的 GR00T N1.7 模型。"""
 
     config_class = GR00TN17Config
     supports_gradient_checkpointing = True
@@ -931,11 +928,11 @@ class GR00TN17(PreTrainedModel):
 
 
 def _register_with_transformers() -> None:
-    """Register GR00T N1.7 with transformers' Auto* factories.
+    """将 GR00T N1.7 注册到 transformers 的 Auto* 工厂。
 
-    Idempotent: ``register(..., exist_ok=True)`` makes repeat calls no-ops (with a fallback that
-    suppresses the already-registered error on transformers builds whose ``register()`` predates
-    ``exist_ok``), so no run-once guard is needed.
+    幂等：``register(..., exist_ok=True)`` 使重复调用成为空操作（对于
+    ``register()`` 早于 ``exist_ok`` 出现的 transformers 构建，有一个回退方案
+    来抑制"已注册"错误），因此不需要只运行一次的保护。
     """
     if AutoConfig is None or AutoModel is None:
         return

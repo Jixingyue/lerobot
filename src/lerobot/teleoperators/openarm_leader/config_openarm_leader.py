@@ -21,52 +21,52 @@ from ..config import TeleoperatorConfig
 
 @dataclass
 class OpenArmLeaderConfigBase:
-    """Base configuration for the OpenArms leader/teleoperator with Damiao motors."""
+    """使用 Damiao 电机的 OpenArms 主臂/遥操作设备的基础配置。"""
 
-    # CAN interfaces - one per arm
-    # Arm CAN interface (e.g., "can3")
-    # Linux: "can0", "can1", etc.
+    # CAN 接口——每条手臂一个
+    # 手臂的 CAN 接口（例如 "can3"）
+    # Linux："can0"、"can1" 等
     port: str
 
-    # CAN interface type: "socketcan" (Linux), "slcan" (serial), or "auto" (auto-detect)
+    # CAN 接口类型："socketcan"（Linux）、"slcan"（串口）或 "auto"（自动检测）
     can_interface: str = "socketcan"
 
-    # CAN FD settings (OpenArms uses CAN FD by default)
+    # CAN FD 设置（OpenArms 默认使用 CAN FD）
     use_can_fd: bool = True
-    can_bitrate: int = 1000000  # Nominal bitrate (1 Mbps)
-    can_data_bitrate: int = 5000000  # Data bitrate for CAN FD (5 Mbps)
+    can_bitrate: int = 1000000  # 标称比特率（1 Mbps）
+    can_data_bitrate: int = 5000000  # CAN FD 的数据比特率（5 Mbps）
 
-    # Motor configuration for OpenArms (7 DOF per arm)
-    # Maps motor names to (send_can_id, recv_can_id, motor_type)
-    # Based on: https://docs.openarm.dev/software/setup/configure-test
-    # OpenArms uses 4 types of motors:
-    # - DM8009 (DM-J8009P-2EC) for shoulders (high torque)
-    # - DM4340P and DM4340 for shoulder rotation and elbow
-    # - DM4310 (DM-J4310-2EC V1.1) for wrist and gripper
+    # OpenArms 的电机配置（每条手臂 7 个自由度）
+    # 将电机名称映射到 (send_can_id, recv_can_id, motor_type)
+    # 基于：https://docs.openarm.dev/software/setup/configure-test
+    # OpenArms 使用 4 种电机：
+    # - DM8009 (DM-J8009P-2EC) 用于肩部（高扭矩）
+    # - DM4340P 和 DM4340 用于肩部旋转和肘部
+    # - DM4310 (DM-J4310-2EC V1.1) 用于腕部和夹爪
     motor_config: dict[str, tuple[int, int, str]] = field(
         default_factory=lambda: {
-            "joint_1": (0x01, 0x11, "dm8009"),  # J1 - Shoulder pan (DM8009)
-            "joint_2": (0x02, 0x12, "dm8009"),  # J2 - Shoulder lift (DM8009)
-            "joint_3": (0x03, 0x13, "dm4340"),  # J3 - Shoulder rotation (DM4340)
-            "joint_4": (0x04, 0x14, "dm4340"),  # J4 - Elbow flex (DM4340)
-            "joint_5": (0x05, 0x15, "dm4310"),  # J5 - Wrist roll (DM4310)
-            "joint_6": (0x06, 0x16, "dm4310"),  # J6 - Wrist pitch (DM4310)
-            "joint_7": (0x07, 0x17, "dm4310"),  # J7 - Wrist rotation (DM4310)
-            "gripper": (0x08, 0x18, "dm4310"),  # J8 - Gripper (DM4310)
+            "joint_1": (0x01, 0x11, "dm8009"),  # J1 - 肩部水平旋转 (DM8009)
+            "joint_2": (0x02, 0x12, "dm8009"),  # J2 - 肩部俯仰 (DM8009)
+            "joint_3": (0x03, 0x13, "dm4340"),  # J3 - 肩部旋转 (DM4340)
+            "joint_4": (0x04, 0x14, "dm4340"),  # J4 - 肘部弯曲 (DM4340)
+            "joint_5": (0x05, 0x15, "dm4310"),  # J5 - 腕部横滚 (DM4310)
+            "joint_6": (0x06, 0x16, "dm4310"),  # J6 - 腕部俯仰 (DM4310)
+            "joint_7": (0x07, 0x17, "dm4310"),  # J7 - 腕部旋转 (DM4310)
+            "gripper": (0x08, 0x18, "dm4310"),  # J8 - 夹爪 (DM4310)
         }
     )
 
-    # Torque mode settings for manual control
-    # When enabled, motors have torque disabled for manual movement
+    # 手动控制的力矩模式设置
+    # 启用时，电机将禁用力矩以便手动移动
     manual_control: bool = True
 
-    # When True, expose `.vel` and `.torque` per motor in action features.
-    # Default False for compatibility with the position-only openarm_mini teleoperator.
+    # 为 True 时，在动作特征中暴露每个电机的 `.vel` 和 `.torque`。
+    # 默认为 False，以兼容仅使用位置的 openarm_mini 遥操作设备。
     use_velocity_and_torque: bool = False
 
-    # TODO(Steven, Pepijn): Not used ... ?
-    # MIT control parameters (used when manual_control=False for torque control)
-    # List of 8 values: [joint_1, joint_2, joint_3, joint_4, joint_5, joint_6, joint_7, gripper]
+    # TODO(Steven, Pepijn): 未使用……？
+    # MIT 控制参数（当 manual_control=False 时用于力矩控制）
+    # 8 个值的列表：[joint_1, joint_2, joint_3, joint_4, joint_5, joint_6, joint_7, gripper]
     position_kp: list[float] = field(
         default_factory=lambda: [240.0, 240.0, 240.0, 240.0, 24.0, 31.0, 25.0, 16.0]
     )

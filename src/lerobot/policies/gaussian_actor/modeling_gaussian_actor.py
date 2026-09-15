@@ -29,7 +29,7 @@ from ..pretrained import PreTrainedPolicy
 from ..utils import get_device_from_parameters
 from .configuration_gaussian_actor import GaussianActorConfig, is_image_feature
 
-DISCRETE_DIMENSION_INDEX = -1  # Gripper is always the last dimension
+DISCRETE_DIMENSION_INDEX = -1  # 夹爪始终是最后一个维度
 
 
 class GaussianActorPolicy(
@@ -46,7 +46,7 @@ class GaussianActorPolicy(
         config.validate_features()
         self.config = config
 
-        # Determine action dimension and initialize all components
+        # 确定动作维度并初始化所有组件
         continuous_action_dim = config.output_features[ACTION].shape[0]
         self._init_encoders()
         self._init_actor(continuous_action_dim)
@@ -63,19 +63,19 @@ class GaussianActorPolicy(
         return optim_params
 
     def reset(self):
-        """Reset the policy"""
+        """重置策略"""
         pass
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor]) -> Tensor:
-        """Predict a chunk of actions given environment observations."""
+        """根据环境观测预测一段动作序列。"""
         raise NotImplementedError(
             "GaussianActorPolicy does not support action chunking. It returns single actions!"
         )
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select action for inference/evaluation"""
+        """为推理/评估选择动作"""
 
         observations_features = None
         if self.shared_encoder and self.actor.encoder.has_images:
@@ -96,15 +96,14 @@ class GaussianActorPolicy(
         return actions
 
     def forward(self, batch: dict[str, Tensor | dict[str, Tensor]]) -> dict[str, Tensor]:
-        """Actor forward pass: sample actions and return log-probabilities.
+        """Actor 前向传播：采样动作并返回对数概率。
 
         Args:
-            batch: A flat observation dict, or a training dict containing
-                ``"state"`` (observations) and optionally ``"observation_feature"``
-                (pre-computed encoder features).
+            batch: 扁平的观测字典，或包含 ``"state"``（观测）以及可选的
+                ``"observation_feature"``（预先计算的编码器特征）的训练字典。
 
         Returns:
-            Dict with ``"action"``, ``"log_prob"``, and ``"action_mean"`` tensors.
+            包含 ``"action"``、``"log_prob"`` 和 ``"action_mean"`` 张量的字典。
         """
         observations = batch.get("state", batch)
         observation_features = batch.get("observation_feature") if isinstance(batch, dict) else None
@@ -112,7 +111,7 @@ class GaussianActorPolicy(
         return {"action": actions, "log_prob": log_probs, "action_mean": means}
 
     def _init_encoders(self):
-        """Initialize shared or separate encoders for actor and critic."""
+        """为 actor 和 critic 初始化共享或独立的编码器。"""
         self.shared_encoder = self.config.shared_encoder
         self.encoder_critic = GaussianActorObservationEncoder(self.config)
         self.encoder_actor = (
@@ -120,8 +119,8 @@ class GaussianActorPolicy(
         )
 
     def _init_actor(self, continuous_action_dim):
-        """Initialize policy actor network."""
-        # NOTE: The actor select only the continuous action part
+        """初始化策略 actor 网络。"""
+        # 注意：actor 只选择连续动作部分
         self.actor = Policy(
             encoder=self.encoder_actor,
             network=MLP(input_dim=self.encoder_actor.output_dim, **asdict(self.config.actor_network_kwargs)),
@@ -131,12 +130,12 @@ class GaussianActorPolicy(
         )
 
     def _init_discrete_critic(self) -> None:
-        """Initialize discrete critic network."""
+        """初始化离散 critic 网络。"""
         if self.config.num_discrete_actions is None:
             self.discrete_critic = None
             return
 
-        # TODO(Khalil): Compile the discrete critic
+        # TODO(Khalil)：编译离散 critic
         self.discrete_critic = DiscreteCritic(
             encoder=self.encoder_critic,
             input_dim=self.encoder_critic.output_dim,
@@ -146,7 +145,7 @@ class GaussianActorPolicy(
 
 
 class GaussianActorObservationEncoder(nn.Module):
-    """Encode image and/or state vector observations."""
+    """对图像和/或状态向量观测进行编码。"""
 
     def __init__(self, config: GaussianActorConfig) -> None:
         super().__init__()
@@ -242,27 +241,27 @@ class GaussianActorObservationEncoder(nn.Module):
         )
 
     def get_cached_image_features(self, obs: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Extract and optionally cache image features from observations.
+        """从观测中提取图像特征，并可选择性地缓存。
 
-        This function processes image observations through the vision encoder once and returns
-        the resulting features.
-        When the image encoder is shared between actor and critics AND frozen, these features can be safely cached and
-        reused across policy components (actor, critic, discrete_critic), avoiding redundant forward passes.
+        该函数将图像观测通过视觉编码器处理一次，并返回得到的特征。
+        当图像编码器在 actor 与 critic 之间共享且被冻结时，这些特征可以安全地
+        缓存并在各策略组件（actor、critic、discrete_critic）之间复用，
+        避免冗余的前向传播。
 
-        Performance impact:
-        - The vision encoder forward pass is typically the main computational bottleneck during training and inference
-        - Caching these features can provide 2-4x speedup in training and inference
+        性能影响：
+        - 视觉编码器的前向传播通常是训练和推理中的主要计算瓶颈
+        - 缓存这些特征可以在训练和推理中带来 2-4 倍的加速
 
-        Usage patterns:
-        - Called in select_action()
-        - Called in learner.py's get_observation_features() to pre-compute features for all policy components
-        - Called internally by forward()
+        使用场景：
+        - 在 select_action() 中调用
+        - 在 learner.py 的 get_observation_features() 中调用，为所有策略组件预计算特征
+        - 在 forward() 内部调用
 
         Args:
-            obs: Dictionary of observation tensors containing image keys
+            obs: 包含图像键的观测张量字典
 
         Returns:
-            Dictionary mapping image keys to their corresponding encoded features
+            将图像键映射到其对应编码特征的字典
         """
         batched = torch.cat([obs[k] for k in self.image_keys], dim=0)
         out = self.image_encoder(batched)
@@ -270,19 +269,19 @@ class GaussianActorObservationEncoder(nn.Module):
         return dict(zip(self.image_keys, chunks, strict=False))
 
     def _encode_images(self, cache: dict[str, Tensor], detach: bool) -> Tensor:
-        """Encode image features from cached observations.
+        """对缓存的观测进行图像特征编码。
 
-        This function takes pre-encoded image features from the cache and applies spatial embeddings and post-encoders.
-        It also supports detaching the encoded features if specified.
+        该函数从缓存中取出预先编码的图像特征，并应用空间嵌入与后编码器。
+        如有需要，也支持对编码后的特征进行 detach。
 
         Args:
-            cache (dict[str, Tensor]): The cached image features.
-            detach (bool): Usually when the encoder is shared between actor and critics,
-            we want to detach the encoded features on the policy side to avoid backprop through the encoder.
-            More detail here `https://cdn.aaai.org/ojs/17276/17276-13-20770-1-2-20210518.pdf`
+            cache (dict[str, Tensor]): 缓存的图像特征。
+            detach (bool): 通常当编码器在 actor 与 critic 之间共享时，
+            我们希望在策略侧对编码特征做 detach，以避免梯度回传穿过编码器。
+            更多细节见 `https://cdn.aaai.org/ojs/17276/17276-13-20770-1-2-20210518.pdf`
 
         Returns:
-            Tensor: The encoded image features.
+            Tensor: 编码后的图像特征。
         """
         feats = []
         for k, feat in cache.items():
@@ -300,24 +299,24 @@ class GaussianActorObservationEncoder(nn.Module):
 
 
 class MLP(nn.Module):
-    """Multi-layer perceptron builder.
+    """多层感知机构建器。
 
-    Dynamically constructs a sequence of layers based on `hidden_dims`:
+    根据 `hidden_dims` 动态构建层序列：
       1) Linear (in_dim -> out_dim)
-      2) Optional Dropout if `dropout_rate` > 0 and (not final layer or `activate_final`)
-      3) LayerNorm on the output features
-      4) Activation (standard for intermediate layers, `final_activation` for last layer if `activate_final`)
+      2) 当 `dropout_rate` > 0 且（不是最后一层或 `activate_final`）时，可选地添加 Dropout
+      3) 对输出特征应用 LayerNorm
+      4) 激活（中间层使用标准激活，若 `activate_final` 则最后一层使用 `final_activation`）
 
     Arguments:
-        input_dim (int): Size of input feature dimension.
-        hidden_dims (list[int]): Sizes for each hidden layer.
-        activations (Callable or str): Activation to apply between layers.
-        activate_final (bool): Whether to apply activation at the final layer.
-        dropout_rate (Optional[float]): Dropout probability applied before normalization and activation.
-        final_activation (Optional[Callable or str]): Activation for the final layer when `activate_final` is True.
+        input_dim (int): 输入特征的维度大小。
+        hidden_dims (list[int]): 各隐藏层的大小。
+        activations (Callable or str): 层与层之间应用的激活函数。
+        activate_final (bool): 是否在最后一层应用激活函数。
+        dropout_rate (Optional[float]): 在归一化和激活之前应用的 Dropout 概率。
+        final_activation (Optional[Callable or str]): 当 `activate_final` 为 True 时最后一层使用的激活函数。
 
-    For each layer, `in_dim` is updated to the previous `out_dim`. All constructed modules are
-    stored in `self.net` as an `nn.Sequential` container.
+    对于每一层，`in_dim` 会更新为上一层的 `out_dim`。所有构建的模块都作为
+    `nn.Sequential` 容器存放在 `self.net` 中。
     """
 
     def __init__(
@@ -335,11 +334,11 @@ class MLP(nn.Module):
         total = len(hidden_dims)
 
         for idx, out_dim in enumerate(hidden_dims):
-            # 1) linear transform
+            # 1) 线性变换
             layers.append(nn.Linear(in_dim, out_dim))
 
             is_last = idx == total - 1
-            # 2-4) optionally add dropout, normalization, and activation
+            # 2-4) 可选地添加 dropout、归一化和激活
             if not is_last or activate_final:
                 if dropout_rate and dropout_rate > 0:
                     layers.append(nn.Dropout(p=dropout_rate))
@@ -421,12 +420,12 @@ class Policy(nn.Module):
         self.use_tanh_squash = use_tanh_squash
         self.encoder_is_shared = encoder_is_shared
 
-        # Find the last Linear layer's output dimension
+        # 找到最后一个 Linear 层的输出维度
         for layer in reversed(network.net):
             if isinstance(layer, nn.Linear):
                 out_features = layer.out_features
                 break
-        # Mean layer
+        # 均值层
         self.mean_layer = nn.Linear(out_features, action_dim)
         if init_final is not None:
             nn.init.uniform_(self.mean_layer.weight, -init_final, init_final)
@@ -434,7 +433,7 @@ class Policy(nn.Module):
         else:
             orthogonal_init()(self.mean_layer.weight)
 
-        # Standard deviation layer or parameter
+        # 标准差层或参数
         if fixed_std is None:
             self.std_layer = nn.Linear(out_features, action_dim)
             if init_final is not None:
@@ -448,35 +447,35 @@ class Policy(nn.Module):
         observations: torch.Tensor,
         observation_features: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # We detach the encoder if it is shared to avoid backprop through it
-        # This is important to avoid the encoder to be updated through the policy
+        # 如果编码器是共享的，则对其做 detach，以避免梯度回传穿过它
+        # 这一点对防止编码器经由策略被更新非常重要
         obs_enc = self.encoder(observations, cache=observation_features, detach=self.encoder_is_shared)
 
-        # Get network outputs
+        # 获取网络输出
         outputs = self.network(obs_enc)
         means = self.mean_layer(outputs)
 
-        # Compute standard deviations
+        # 计算标准差
         if self.fixed_std is None:
             log_std = self.std_layer(outputs)
-            std = torch.exp(log_std)  # Match JAX "exp"
-            std = torch.clamp(std, self.std_min, self.std_max)  # Match JAX default clip
+            std = torch.exp(log_std)  # 与 JAX 的 "exp" 保持一致
+            std = torch.clamp(std, self.std_min, self.std_max)  # 与 JAX 的默认 clip 保持一致
         else:
             std = self.fixed_std.expand_as(means)
 
-        # Build transformed distribution
+        # 构建变换分布
         dist = TanhMultivariateNormalDiag(loc=means, scale_diag=std)
 
-        # Sample actions (reparameterized)
+        # 采样动作（重参数化）
         actions = dist.rsample()
 
-        # Compute log_probs
+        # 计算 log_probs
         log_probs = dist.log_prob(actions)
 
         return actions, log_probs, means
 
     def get_features(self, observations: torch.Tensor) -> torch.Tensor:
-        """Get encoded features from observations"""
+        """从观测中获取编码后的特征"""
         device = get_device_from_parameters(self)
         observations = observations.to(device)
         if self.encoder is not None:
@@ -526,7 +525,7 @@ class DefaultImageEncoder(nn.Module):
 
 
 def freeze_image_encoder(image_encoder: nn.Module):
-    """Freeze all parameters in the encoder"""
+    """冻结编码器中的所有参数"""
     for param in image_encoder.parameters():
         param.requires_grad = False
 
@@ -538,13 +537,13 @@ class PretrainedImageEncoder(nn.Module):
         self.image_enc_layers, self.image_enc_out_shape = self._load_pretrained_vision_encoder(config)
 
     def _load_pretrained_vision_encoder(self, config: GaussianActorConfig):
-        """Set up CNN encoder"""
+        """构建 CNN 编码器"""
         from transformers import AutoModel
 
         self.image_enc_layers = AutoModel.from_pretrained(config.vision_encoder_name, trust_remote_code=True)
 
         if hasattr(self.image_enc_layers.config, "hidden_sizes"):
-            self.image_enc_out_shape = self.image_enc_layers.config.hidden_sizes[-1]  # Last channel dimension
+            self.image_enc_out_shape = self.image_enc_layers.config.hidden_sizes[-1]  # 最后一个通道维度
         elif hasattr(self.image_enc_layers, "fc"):
             self.image_enc_out_shape = self.image_enc_layers.fc.in_features
         else:
@@ -563,13 +562,13 @@ def orthogonal_init():
 class SpatialLearnedEmbeddings(nn.Module):
     def __init__(self, height, width, channel, num_features=8):
         """
-        PyTorch implementation of learned spatial embeddings
+        可学习空间嵌入的 PyTorch 实现
 
         Args:
-            height: Spatial height of input features
-            width: Spatial width of input features
-            channel: Number of input channels
-            num_features: Number of output embedding dimensions
+            height: 输入特征的空间高度
+            width: 输入特征的空间宽度
+            channel: 输入通道数
+            num_features: 输出嵌入的维度数量
         """
         super().__init__()
         self.height = height
@@ -583,22 +582,22 @@ class SpatialLearnedEmbeddings(nn.Module):
 
     def forward(self, features):
         """
-        Forward pass for spatial embedding
+        空间嵌入的前向传播
 
         Args:
-            features: Input tensor of shape [B, C, H, W] where B is batch size,
-                     C is number of channels, H is height, and W is width
+            features: 形状为 [B, C, H, W] 的输入张量，其中 B 是批大小，
+                     C 是通道数，H 是高度，W 是宽度
         Returns:
-            Output tensor of shape [B, C*F] where F is the number of features
+            形状为 [B, C*F] 的输出张量，其中 F 是特征数量
         """
 
         features_expanded = features.unsqueeze(-1)  # [B, C, H, W, 1]
         kernel_expanded = self.kernel.unsqueeze(0)  # [1, C, H, W, F]
 
-        # Element-wise multiplication and spatial reduction
-        output = (features_expanded * kernel_expanded).sum(dim=(2, 3))  # Sum over H,W dimensions
+        # 逐元素相乘并在空间维度上归约
+        output = (features_expanded * kernel_expanded).sum(dim=(2, 3))  # 对 H、W 维度求和
 
-        # Reshape to combine channel and feature dimensions
+        # 重塑形状以合并通道维度与特征维度
         output = output.view(output.size(0), -1)  # [B, C*F]
 
         return output
@@ -613,12 +612,12 @@ class RescaleFromTanh(Transform):
         self.high = high
 
     def _call(self, x):
-        # Rescale from (-1, 1) to (low, high)
+        # 从 (-1, 1) 重缩放到 (low, high)
 
         return 0.5 * (x + 1.0) * (self.high - self.low) + self.low
 
     def _inverse(self, y):
-        # Rescale from (low, high) back to (-1, 1)
+        # 从 (low, high) 重缩放回 (-1, 1)
 
         return 2.0 * (y - self.low) / (self.high - self.low) - 1.0
 
@@ -646,7 +645,7 @@ class TanhMultivariateNormalDiag(TransformedDistribution):
         super().__init__(base_dist, transforms)
 
     def mode(self):
-        # Mode is mean of base distribution, passed through transforms
+        # 众数即基础分布的均值，再经过各变换得到
 
         x = self.base_dist.mean
 

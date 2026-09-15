@@ -37,22 +37,22 @@ def make_classifier_processor(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the reward classifier.
+    为奖励分类器构建前处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares input data for the classifier by:
-    1. Normalizing both input and output features based on dataset statistics.
-    2. Moving the data to the specified device.
+    前处理流水线通过以下步骤为分类器准备输入数据：
+    1. 基于数据集统计信息对输入和输出特征进行归一化。
+    2. 将数据移动到指定设备。
 
-    The post-processing pipeline handles the classifier's output by:
-    1. Moving the data to the CPU.
-    2. Applying an identity step, as no unnormalization is needed for the output logits.
+    后处理流水线通过以下步骤处理分类器的输出：
+    1. 将数据移动到 CPU。
+    2. 应用恒等步骤，因为输出 logits 不需要反归一化。
 
     Args:
-        config: The configuration object for the RewardClassifier.
-        dataset_stats: A dictionary of statistics for normalization.
+        config: RewardClassifier 的配置对象。
+        dataset_stats: 用于归一化的统计信息字典。
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+        包含已配置好的前处理器和后处理器流水线的元组。
     """
 
     input_steps = [

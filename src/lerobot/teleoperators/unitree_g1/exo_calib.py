@@ -15,11 +15,11 @@
 # limitations under the License.
 
 """
-This module handles calibration of hall effect sensors used in the exoskeleton.
-Each joint has a pair of ADC channels outputting sin and cos values that trace an ellipse
-as the joint rotates due to imprecision in magnet/sensor placement. We fit this ellipse to a unit circle,
-and calculate arctan2 of the unit circle to get the joint angle.
-We then store the ellipse parameters and the zero offset for each joint to be used at runtime.
+该模块负责处理外骨骼中使用的霍尔效应传感器的校准。
+由于磁铁/传感器放置不精确，每个关节都有一对输出 sin 和 cos 值的 ADC 通道，
+这些值会随着关节旋转而描绘出一个椭圆。我们将该椭圆拟合为单位圆，
+并计算单位圆的 arctan2 以得到关节角度。
+然后我们存储每个关节的椭圆参数和零位偏移，供运行时使用。
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 ADC_MAX = 2**12 - 1
 ADC_HALF = ADC_MAX / 2
 
-# exoskeleton joint names -> ADC channel pairs. TODO: add wrist pitch and wrist yaw
+# 外骨骼关节名称 -> ADC 通道对。TODO: 添加腕部俯仰和腕部偏航
 JOINTS = {
     "shoulder_pitch": (0, 1),
     "shoulder_yaw": (2, 3),
@@ -59,15 +59,15 @@ JOINTS = {
 
 @dataclass
 class ExoskeletonJointCalibration:
-    name: str  # joint name
-    center_fit: list[float]  # center of the ellipse
-    T: list[list[float]]  # 2x2 transformation matrix
-    zero_offset: float = 0.0  # angle at neutral pose
+    name: str  # 关节名称
+    center_fit: list[float]  # 椭圆中心
+    T: list[list[float]]  # 2x2 变换矩阵
+    zero_offset: float = 0.0  # 中立位姿的角度
 
 
 @dataclass
 class ExoskeletonCalibration:
-    """Full calibration data for an exoskeleton arm."""
+    """外骨骼手臂的完整校准数据。"""
 
     version: int = 2
     side: str = ""
@@ -124,26 +124,26 @@ class CalibParams:
 
 
 def normalize_angle(angle: float) -> float:
-    """Normalize angle to [-pi, pi]."""
+    """将角度归一化到 [-pi, pi]。"""
     return float(np.arctan2(np.sin(angle), np.cos(angle)))
 
 
 def joint_z_and_angle(raw16: list[int], j: ExoskeletonJointCalibration) -> tuple[np.ndarray, float]:
     """
-    Applies calibration to each joint: raw → centered → ellipse-to-circle → angle.
+    对每个关节应用校准：原始值 → 居中 → 椭圆转圆 → 角度。
     """
     pair = JOINTS[j.name]
-    s, c = raw16[pair[0]], raw16[pair[1]]  # get sin and cos
-    p = np.array([float(c) - ADC_HALF, float(s) - ADC_HALF])  # center the raw values
+    s, c = raw16[pair[0]], raw16[pair[1]]  # 获取 sin 和 cos
+    p = np.array([float(c) - ADC_HALF, float(s) - ADC_HALF])  # 将原始值居中
     z = np.asarray(j.T) @ (
         p - np.asarray(j.center_fit)
-    )  # center the ellipse and invert the transformation matrix to get unit circle coords
-    ang = float(np.arctan2(z[1], z[0])) - j.zero_offset  # calculate the anvgle and apply the zero offset
-    return z, normalize_angle(-ang)  # ensure range is [-pi, pi]
+    )  # 将椭圆居中并逆变换矩阵以得到单位圆坐标
+    ang = float(np.arctan2(z[1], z[0])) - j.zero_offset  # 计算角度并应用零位偏移
+    return z, normalize_angle(-ang)  # 确保范围为 [-pi, pi]
 
 
 def exo_raw_to_angles(raw16: list[int], calib: ExoskeletonCalibration) -> dict[str, float]:
-    """Convert raw sensor readings to joint angles using calibration."""
+    """使用校准将原始传感器读数转换为关节角度。"""
     return {j.name: joint_z_and_angle(raw16, j)[1] for j in calib.joints}
 
 
@@ -154,7 +154,7 @@ def run_exo_calibration(
     params: CalibParams | None = None,
 ) -> ExoskeletonCalibration:
     """
-    Run interactive calibration for an exoskeleton arm.
+    对外骨骼手臂运行交互式校准。
     """
     require_package("pyserial", extra="unitree_g1", import_name="serial")
     try:
@@ -169,7 +169,7 @@ def run_exo_calibration(
     from .exo_serial import read_raw_from_serial
 
     params = params or CalibParams()
-    joint_list = list(JOINTS.items())  # Convert dict to list for indexing
+    joint_list = list(JOINTS.items())  # 将字典转换为列表以便索引
     logger.info(f"Starting calibration for {side} exoskeleton arm")
 
     def running_median(win: deque) -> float:
@@ -180,47 +180,47 @@ def run_exo_calibration(
         return float(c) - ADC_HALF, float(s) - ADC_HALF, float(s), float(c)
 
     def select_fit_subset(xs, ys):
-        """Select and filter points for ellipse fitting. Trims outliers by radius and downsamples."""
+        """选择并过滤用于椭圆拟合的点。按半径修剪离群点并进行降采样。"""
         n = min(params.fit_window, len(xs))
         if n <= 0:
             return None, None
-        x = np.asarray(list(xs)[-n:], dtype=float)  # most recent n samples
+        x = np.asarray(list(xs)[-n:], dtype=float)  # 最近的 n 个样本
         y = np.asarray(list(ys)[-n:], dtype=float)
-        r = np.sqrt(x * x + y * y)  # radius from origin
+        r = np.sqrt(x * x + y * y)  # 到原点的半径
         if len(r) >= 20:
-            lo, hi = np.quantile(r, params.trim_low), np.quantile(r, params.trim_high)  # outlier bounds
+            lo, hi = np.quantile(r, params.trim_low), np.quantile(r, params.trim_high)  # 离群点边界
             keep = (r >= lo) & (r <= hi)
-            x, y = x[keep], y[keep]  # remove outliers
+            x, y = x[keep], y[keep]  # 移除离群点
         if len(x) > params.max_fit_points:
-            idx = np.linspace(0, len(x) - 1, params.max_fit_points).astype(int)  # downsample evenly
+            idx = np.linspace(0, len(x) - 1, params.max_fit_points).astype(int)  # 均匀降采样
             x, y = x[idx], y[idx]
         return x, y
 
     def fit_ellipse_opencv(x, y):
-        """Fit ellipse to (x,y) points using OpenCV. Returns center, axes, rotation matrix, and outline."""
+        """使用 OpenCV 将椭圆拟合到 (x,y) 点。返回中心、轴、旋转矩阵和轮廓。"""
         x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
         if len(x) < 5:
             return None
         pts = np.stack([x, y], axis=1).astype(np.float32).reshape(-1, 1, 2)
         try:
-            (xc, yc), (w, h), angle_deg = cv2.fitEllipse(pts)  # returns center, axes, rotation in degrees
+            (xc, yc), (w, h), angle_deg = cv2.fitEllipse(pts)  # 返回中心、轴、旋转角度（度）
         except cv2.error:
             return None
-        a, b = float(w) * 0.5, float(h) * 0.5  # get ellipse major and minor semi-axes
-        phi = np.deg2rad(float(angle_deg))  # to rad
-        if b > a:  # ensure major axis is a
+        a, b = float(w) * 0.5, float(h) * 0.5  # 得到椭圆的长短半轴
+        phi = np.deg2rad(float(angle_deg))  # 转为弧度
+        if b > a:  # 确保长轴为 a
             a, b = b, a
             phi += np.pi / 2.0
         if not np.isfinite(a) or not np.isfinite(b) or a <= 1e-6 or b <= 1e-6:
             return None
         cp, sp = float(np.cos(phi)), float(np.sin(phi))  #
-        rot = np.array([[cp, -sp], [sp, cp]], dtype=float)  # 2x2 rotation matrix
-        center = np.array([float(xc), float(yc)], dtype=float)  # offset vector
+        rot = np.array([[cp, -sp], [sp, cp]], dtype=float)  # 2x2 旋转矩阵
+        center = np.array([float(xc), float(yc)], dtype=float)  # 偏移向量
         tt = np.linspace(0, 2 * np.pi, 360)
-        outline = (rot @ np.stack([a * np.cos(tt), b * np.sin(tt)])).T + center  # for viz
+        outline = (rot @ np.stack([a * np.cos(tt), b * np.sin(tt)])).T + center  # 用于可视化
         return {"center": center, "a": a, "b": b, "R": rot, "ex": outline[:, 0], "ey": outline[:, 1]}
 
-    # Setup matplotlib
+    # 设置 matplotlib
     plt.ion()
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12, 6))
     ax0.set_xlabel("cos - center")
@@ -251,7 +251,7 @@ def run_exo_calibration(
     bg0 = fig.canvas.copy_from_bbox(ax0.bbox)
     bg1 = fig.canvas.copy_from_bbox(ax1.bbox)
 
-    # State
+    # 状态
     joints_out = []
     joint_idx = 0
     phase = "ellipse"
@@ -293,7 +293,7 @@ def run_exo_calibration(
         while plt.fignum_exists(fig.number):
             name, pair = joint_list[joint_idx]
 
-            # Handles calibration GUI state: ellipse → zero_pose → next joint -> ellipse -> ...
+            # 处理校准 GUI 状态：椭圆 → 零位姿 → 下一个关节 -> 椭圆 -> ...
             if phase == "ellipse" and advance_requested and state["have_transform"]:
                 joints_out.append(
                     {
@@ -323,7 +323,7 @@ def run_exo_calibration(
                     advance_requested = False
 
                     if joint_idx >= len(joint_list):
-                        # All joints done
+                        # 所有关节已完成
                         calib = ExoskeletonCalibration(
                             version=2,
                             side=side,
@@ -346,7 +346,7 @@ def run_exo_calibration(
                         plt.close(fig)
                         return calib
 
-                    # Next joint
+                    # 下一个关节
                     phase, state = "ellipse", reset_state()
                     name, pair = joint_list[joint_idx]
                     fig.canvas.manager.set_window_title(
@@ -363,7 +363,7 @@ def run_exo_calibration(
                     )
                     advance_requested = False
 
-            # Read sensor
+            # 读取传感器
             raw16 = read_raw_from_serial(ser)
             if raw16 is not None:
                 x_raw, y_raw, s_raw, c_raw = read_joint_point(raw16, pair)
@@ -385,7 +385,7 @@ def run_exo_calibration(
                     zero_samples.append(float(np.arctan2(z[1], z[0])))
                     state["latest_z"] = (float(z[0]), float(z[1]))
 
-            # Ellipse fitting
+            # 椭圆拟合
             t = time.time()
             if (
                 phase == "ellipse"
@@ -402,7 +402,7 @@ def run_exo_calibration(
                         state["have_transform"] = True
                 state["last_fit"] = t
 
-            # Drawing
+            # 绘图
             if (t - last_draw) >= 1.0 / params.draw_hz:
                 fig.canvas.restore_region(bg0)
                 fig.canvas.restore_region(bg1)

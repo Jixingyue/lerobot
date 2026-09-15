@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Rollout strategies — public API re-exports."""
+"""Rollout 策略——公共 API 的再导出。"""
 
 from .base import BaseStrategy
 from .core import (

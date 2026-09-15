@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class HomunculusArm(Teleoperator):
     """
-    Homunculus Arm designed by Hugging Face.
+    由 Hugging Face 设计的 Homunculus 手臂。
     """
 
     config_class = HomunculusArmConfig
@@ -61,10 +61,10 @@ class HomunculusArm(Teleoperator):
             "wrist_pitch": MotorNormMode.RANGE_M100_100,
         }
         n = 50
-        # EMA parameters ---------------------------------------------------
+        # EMA 参数 ---------------------------------------------------
         self.n: int = n
         self.alpha: float = 2 / (n + 1)
-        # one deque *per joint* so we can inspect raw history if needed
+        # 每个关节一个 deque，以便在需要时检查原始历史记录
         self._buffers: dict[str, deque[int]] = {
             joint: deque(maxlen=n)
             for joint in (
@@ -77,7 +77,7 @@ class HomunculusArm(Teleoperator):
                 "wrist_pitch",
             )
         }
-        # running EMA value per joint – lazily initialised on first read
+        # 每个关节的运行中 EMA 值 – 在首次读取时延迟初始化
         self._ema: dict[str, float | None] = dict.fromkeys(self._buffers)
 
         self._state: dict[str, float] | None = None
@@ -105,7 +105,7 @@ class HomunculusArm(Teleoperator):
             self.serial.open()
         self.thread.start()
 
-        # wait for the thread to ramp up & 1st state to be ready
+        # 等待线程启动并且第一个状态就绪
         if not self.new_state_event.wait(timeout=2):
             raise TimeoutError(f"{self}: Timed out waiting for state after 2s.")
 
@@ -138,25 +138,25 @@ class HomunculusArm(Teleoperator):
         self._save_calibration()
         print("Calibration saved to", self.calibration_fpath)
 
-    # TODO(Steven): This function is copy/paste from the `HomunculusGlove` class. Consider moving it to an utility to reduce duplicated code.
+    # TODO(Steven): 此函数是从 `HomunculusGlove` 类复制粘贴而来的。考虑将其移至工具函数以减少重复代码。
     def _record_ranges_of_motion(
         self, joints: list[str] | None = None, display_values: bool = True
     ) -> tuple[dict[str, int], dict[str, int]]:
-        """Interactively record the min/max encoder values of each joint.
+        """交互式记录每个关节的最小/最大编码器值。
 
-        Move the joints while the method streams live positions. Press :kbd:`Enter` to finish.
+        在该方法实时输出位置的同时移动关节。按 :kbd:`Enter` 结束。
 
         Args:
-            joints (list[str] | None, optional):  Joints to record. Defaults to every joint (`None`).
-            display_values (bool, optional): When `True` (default) a live table is printed to the console.
+            joints (list[str] | None, optional):  要记录的关节。默认为所有关节（`None`）。
+            display_values (bool, optional): 为 `True`（默认）时，会在控制台打印实时表格。
 
         Raises:
-            TypeError: `joints` is not `None` or a list.
-            ValueError: any joint's recorded min and max are the same.
+            TypeError: `joints` 不是 `None` 或列表。
+            ValueError: 任何关节记录的最小值和最大值相同。
 
         Returns:
-            tuple[dict[str, int], dict[str, int]]: Two dictionaries *mins* and *maxes* with the extreme values
-            observed for each joint.
+            tuple[dict[str, int], dict[str, int]]: 两个字典 *mins* 和 *maxes*，
+            包含每个关节观察到的极值。
         """
         if joints is None:
             joints = list(self.joints)
@@ -187,7 +187,7 @@ class HomunculusArm(Teleoperator):
                 user_pressed_enter = True
 
             if display_values and not user_pressed_enter:
-                # Move cursor up to overwrite the previous output
+                # 向上移动光标以覆盖之前的输出
                 move_cursor_up(len(joints) + 3)
 
         same_min_max = [joint for joint in joints if mins[joint] == maxes[joint]]
@@ -199,7 +199,7 @@ class HomunculusArm(Teleoperator):
     def configure(self) -> None:
         pass
 
-    # TODO(Steven): This function is copy/paste from the `HomunculusGlove` class. Consider moving it to an utility to reduce duplicated code.
+    # TODO(Steven): 此函数是从 `HomunculusGlove` 类复制粘贴而来的。考虑将其移至工具函数以减少重复代码。
     def _normalize(self, values: dict[str, int]) -> dict[str, float]:
         if not self.calibration:
             raise RuntimeError(f"{self} has no calibration registered.")
@@ -221,13 +221,13 @@ class HomunculusArm(Teleoperator):
         return normalized_values
 
     def _apply_ema(self, raw: dict[str, int]) -> dict[str, float]:
-        """Update buffers & running EMA values; return smoothed dict."""
+        """更新缓冲区和运行中的 EMA 值；返回平滑后的字典。"""
         smoothed: dict[str, float] = {}
         for joint, value in raw.items():
-            # maintain raw history
+            # 维护原始历史记录
             self._buffers[joint].append(value)
 
-            # initialise on first run
+            # 首次运行时初始化
             if self._ema[joint] is None:
                 self._ema[joint] = float(value)
             else:
@@ -240,8 +240,8 @@ class HomunculusArm(Teleoperator):
         self, joints: list[str] | None = None, normalize: bool = True, timeout: float = 1
     ) -> dict[str, int | float]:
         """
-        Return the most recent (single) values from self.last_d,
-        optionally applying calibration.
+        返回 self.last_d 中最新的（单个）值，
+        可选择是否应用校准。
         """
         if not self.new_state_event.wait(timeout=timeout):
             raise TimeoutError(f"{self}: Timed out waiting for state after {timeout}s.")
@@ -266,8 +266,7 @@ class HomunculusArm(Teleoperator):
 
     def _read_loop(self):
         """
-        Continuously read from the serial buffer in its own thread and sends values to the main thread through
-        a queue.
+        在独立线程中持续从串口缓冲区读取数据，并通过队列将值发送给主线程。
         """
         while not self.stop_event.is_set():
             try:
@@ -283,7 +282,7 @@ class HomunculusArm(Teleoperator):
                         if lines:
                             raw_values = lines[-1]
 
-                if raw_values is None or len(raw_values) != 21:  # 16 raw + 5 angle values
+                if raw_values is None or len(raw_values) != 21:  # 16 个原始值 + 5 个角度值
                     continue
 
                 joint_angles = {

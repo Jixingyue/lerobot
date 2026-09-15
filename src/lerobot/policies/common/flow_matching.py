@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flow-matching sampling primitives shared across policies.
+"""各策略共享的流匹配（flow-matching）采样原语。
 
-Canonical versions of the beta-distributed timestep sampler and the forward-Euler
-denoising loop (with its real-time-chunking hook) that the openpi-derived policies
-(pi0, pi05, smolvla, eo1) historically each carried a copy of. All functions are
-stateless; adopting them does not affect checkpoints.
+这里是 beta 分布时间步采样器和前向欧拉去噪循环（及其实时分块钩子）的规范版本；
+源自 openpi 的策略（pi0、pi05、smolvla、eo1）过去都各自携带一份副本。
+所有函数都是无状态的；采用它们不会影响检查点。
 """
 
 from collections.abc import Callable
@@ -32,8 +31,8 @@ if TYPE_CHECKING:
     from lerobot.policies.rtc.modeling_rtc import RTCProcessor
 
 
-def sample_beta(alpha: float, beta: float, bsize: int, device) -> Tensor:  # see openpi (exact copy)
-    # Beta sampling uses _sample_dirichlet which isn't implemented for MPS, so sample on CPU
+def sample_beta(alpha: float, beta: float, bsize: int, device) -> Tensor:  # 参见 openpi（完全一致的副本）
+    # Beta 采样使用的 _sample_dirichlet 未在 MPS 上实现，因此在 CPU 上采样
     alpha_t = torch.tensor(alpha, dtype=torch.float32)
     beta_t = torch.tensor(beta, dtype=torch.float32)
     dist = torch.distributions.Beta(alpha_t, beta_t)
@@ -41,7 +40,7 @@ def sample_beta(alpha: float, beta: float, bsize: int, device) -> Tensor:  # see
 
 
 def sample_noise(shape, device) -> Tensor:
-    """Standard-normal float32 noise, the flow-matching x_1 sample."""
+    """标准正态分布的 float32 噪声，即流匹配的 x_1 样本。"""
     return torch.normal(
         mean=0.0,
         std=1.0,
@@ -52,7 +51,7 @@ def sample_noise(shape, device) -> Tensor:
 
 
 def sample_time_beta(bsize: int, device, *, alpha: float, beta: float, scale: float, offset: float) -> Tensor:
-    """Beta-distributed flow-matching timesteps: ``Beta(alpha, beta) * scale + offset`` (openpi convention)."""
+    """Beta 分布的流匹配时间步：``Beta(alpha, beta) * scale + offset``（openpi 约定）。"""
     time_beta = sample_beta(alpha, beta, bsize, device)
     time = time_beta * scale + offset
     return time.to(dtype=torch.float32, device=device)
@@ -71,28 +70,28 @@ def euler_integrate(
     hard_prefix: Tensor | None = None,
     hard_prefix_mask: Tensor | None = None,
 ) -> Tensor:
-    """Forward-Euler integration of a velocity field from t=1 (noise) to t=0 (actions).
+    """对速度场做前向欧拉积分，从 t=1（噪声）到 t=0（动作）。
 
-    This is the openpi sampling loop: ``dt = -1/num_steps``, ``time = 1.0 + step*dt``,
-    ``x_t <- x_t + dt * v_t``, with the optional real-time-chunking (RTC) guidance hook
-    wrapping the velocity computation and debug tracking after each step.
+    这就是 openpi 的采样循环：``dt = -1/num_steps``，``time = 1.0 + step*dt``，
+    ``x_t <- x_t + dt * v_t``，并可选地用实时分块（RTC）引导钩子包裹速度计算，
+    以及在每一步之后进行调试跟踪。
 
     Args:
-        denoise_fn: Computes the velocity ``v_t`` from ``(x_t, time_tensor)`` where
-            ``time_tensor`` is a float32 tensor of shape ``(batch_size,)``. The returned
-            velocity must have the same shape and dtype as ``x_t``.
-        noise: Initial sample ``x_1`` of shape ``(batch_size, ...)``.
-        num_steps: Number of Euler steps.
-        rtc_processor: Optional RTC processor. Debug tracking fires whenever it is set and
-            has debugging enabled, even if RTC guidance itself is disabled (this mirrors
-            the historical per-policy loops).
-        rtc_enabled: Whether to route the velocity computation through
-            ``rtc_processor.denoise_step`` (requires ``rtc_processor``).
-        inference_delay: RTC guidance parameter, forwarded verbatim.
-        prev_chunk_left_over: RTC guidance parameter, forwarded verbatim.
-        execution_horizon: RTC guidance parameter, forwarded verbatim.
-        hard_prefix: Optional clean action prefix to clamp throughout denoising.
-        hard_prefix_mask: Boolean mask selecting the values clamped from ``hard_prefix``.
+        denoise_fn: 根据 ``(x_t, time_tensor)`` 计算速度 ``v_t``，其中
+            ``time_tensor`` 是形状为 ``(batch_size,)`` 的 float32 张量。返回的
+            速度必须与 ``x_t`` 具有相同的形状和 dtype。
+        noise: 形状为 ``(batch_size, ...)`` 的初始样本 ``x_1``。
+        num_steps: 欧拉步数。
+        rtc_processor: 可选的 RTC 处理器。只要设置了该处理器且启用了调试，
+            调试跟踪就会触发，即使 RTC 引导本身被禁用也是如此（这与
+            过去各策略自带的循环行为一致）。
+        rtc_enabled: 是否将速度计算路由到
+            ``rtc_processor.denoise_step``（需要 ``rtc_processor``）。
+        inference_delay: RTC 引导参数，原样转发。
+        prev_chunk_left_over: RTC 引导参数，原样转发。
+        execution_horizon: RTC 引导参数，原样转发。
+        hard_prefix: 可选的干净动作前缀，在整个去噪过程中被钳制。
+        hard_prefix_mask: 布尔掩码，选出从 ``hard_prefix`` 钳制得到的值。
     """
     bsize = noise.shape[0]
     device = noise.device

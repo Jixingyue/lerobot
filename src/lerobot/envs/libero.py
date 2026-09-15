@@ -36,7 +36,7 @@ from .utils import _LazyAsyncVectorEnv, parse_camera_names
 
 
 def _get_suite(name: str) -> benchmark.Benchmark:
-    """Instantiate a LIBERO suite by name with clear validation."""
+    """按名称实例化 LIBERO 套件，并带有清晰的校验。"""
     bench = benchmark.get_benchmark_dict()
     if name not in bench:
         raise ValueError(f"Unknown LIBERO suite '{name}'. Available: {', '.join(sorted(bench.keys()))}")
@@ -47,7 +47,7 @@ def _get_suite(name: str) -> benchmark.Benchmark:
 
 
 def _select_task_ids(total_tasks: int, task_ids: Iterable[int] | None) -> list[int]:
-    """Validate/normalize task ids. If None → all tasks."""
+    """校验/规范化 task id。若为 None → 选择所有任务。"""
     if task_ids is None:
         return list(range(total_tasks))
     ids = sorted({int(t) for t in task_ids})
@@ -57,10 +57,10 @@ def _select_task_ids(total_tasks: int, task_ids: Iterable[int] | None) -> list[i
     return ids
 
 
-# LIBERO-plus perturbation variants encode the perturbation in the filename
-# but on disk only the base `.pruned_init` exists — strip the suffix to match
-# LIBERO-plus's own suite.get_task_init_states() (we reimplement it here so we
-# can pass weights_only=False for PyTorch 2.6+ numpy pickles).
+# LIBERO-plus 的扰动变体将扰动信息编码在文件名中，
+# 但磁盘上只存在基础的 `.pruned_init` —— 去掉后缀以匹配
+# LIBERO-plus 自己的 suite.get_task_init_states()（我们在这里重新实现它，
+# 以便为 PyTorch 2.6+ 的 numpy pickle 传入 weights_only=False）。
 _LIBERO_PERTURBATION_SUFFIX_RE = re.compile(r"_(?:language|view|light)_[^.]*|_(?:table|tb)_\d+")
 
 
@@ -73,22 +73,22 @@ def get_task_init_states(task_suite: Any, i: int, is_libero_plus: bool = False) 
         init_states_path = root / task.problem_folder / filename.name
         return torch.load(init_states_path, weights_only=False)  # nosec B614
 
-    # LIBERO-plus: `_add_` / `_level` variants store extra-object layouts under
-    # libero_newobj/ as a flat array that must be reshaped to (1, -1).
+    # LIBERO-plus：`_add_` / `_level` 变体将额外物体布局以一维数组的形式
+    # 存储在 libero_newobj/ 下，必须将其 reshape 为 (1, -1)。
     if "_add_" in filename.name or "_level" in filename.name:
         init_states_path = root / "libero_newobj" / task.problem_folder / filename.name
         init_states = torch.load(init_states_path, weights_only=False)  # nosec B614
         return init_states.reshape(1, -1)
 
-    # LIBERO-plus perturbation variants encode the perturbation in the filename
-    # but on disk only the base `.pruned_init` exists — strip the suffix to match.
+    # LIBERO-plus 的扰动变体将扰动信息编码在文件名中，
+    # 但磁盘上只存在基础的 `.pruned_init` —— 去掉后缀以匹配。
     stripped = _LIBERO_PERTURBATION_SUFFIX_RE.sub("", filename.stem) + filename.suffix
     init_states_path = root / task.problem_folder / stripped
     return torch.load(init_states_path, weights_only=False)  # nosec B614
 
 
 def get_libero_dummy_action():
-    """Get dummy/no-op action, used to roll out the simulation while the robot does nothing."""
+    """获取虚拟/空操作动作，用于在机器人不做任何动作时推进模拟。"""
     return [0, 0, 0, 0, 0, 0, -1]
 
 
@@ -96,11 +96,11 @@ ACTION_DIM = 7
 ACTION_LOW = -1.0
 ACTION_HIGH = 1.0
 TASK_SUITE_MAX_STEPS: dict[str, int] = {
-    "libero_spatial": 280,  # longest training demo has 193 steps
-    "libero_object": 280,  # longest training demo has 254 steps
-    "libero_goal": 300,  # longest training demo has 270 steps
-    "libero_10": 520,  # longest training demo has 505 steps
-    "libero_90": 400,  # longest training demo has 373 steps
+    "libero_spatial": 280,  # 最长的训练 demo 有 193 步
+    "libero_object": 280,  # 最长的训练 demo 有 254 步
+    "libero_goal": 300,  # 最长的训练 demo 有 270 步
+    "libero_10": 520,  # 最长的训练 demo 有 505 步
+    "libero_90": 400,  # 最长的训练 demo 有 373 步
 }
 
 
@@ -146,13 +146,13 @@ class LiberoEnv(gym.Env):
         self.init_states = init_states
         self.camera_name = parse_camera_names(
             camera_name
-        )  # agentview_image (main) or robot0_eye_in_hand_image (wrist)
+        )  # agentview_image（主视角）或 robot0_eye_in_hand_image（腕部）
 
-        # Map raw camera names to "image1" and "image2".
-        # The preprocessing step `preprocess_observation` will then prefix these with `.images.*`,
-        # following the LeRobot convention (e.g., `observation.images.image`, `observation.images.image2`).
-        # This ensures the policy consistently receives observations in the
-        # expected format regardless of the original camera naming.
+        # 将原始相机名称映射为 "image1" 和 "image2"。
+        # 随后预处理步骤 `preprocess_observation` 会按照 LeRobot 约定
+        # 为它们加上 `.images.*` 前缀（例如 `observation.images.image`、`observation.images.image2`）。
+        # 这确保无论原始相机如何命名，策略都能一致地接收到
+        # 期望格式的观测。
         if camera_name_mapping is None:
             camera_name_mapping = {
                 "agentview_image": "image",
@@ -164,17 +164,17 @@ class LiberoEnv(gym.Env):
         self.hard_reset = hard_reset
         self.episode_index = episode_index
         self.episode_length = episode_length
-        # Load once and keep
+        # 加载一次并保留
         self._init_states = (
             get_task_init_states(task_suite, self.task_id, is_libero_plus=self.is_libero_plus)
             if self.init_states
             else None
         )
-        self._reset_stride = n_envs  # when performing a reset, append `_reset_stride` to `init_state_id`.
+        self._reset_stride = n_envs  # 执行重置时，将 `_reset_stride` 累加到 `init_state_id` 上。
 
-        self.init_state_id = self.episode_index  # tie each sub-env to a fixed init state
+        self.init_state_id = self.episode_index  # 将每个子环境绑定到一个固定的初始状态
 
-        # Extract task metadata without allocating GPU resources (safe before fork).
+        # 在不分配 GPU 资源的情况下提取任务元数据（在 fork 之前是安全的）。
         task = task_suite.get_task(task_id)
         self.task = task.name
         self.task_description = task.language
@@ -182,7 +182,7 @@ class LiberoEnv(gym.Env):
             get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
         )
         self._env: OffScreenRenderEnv | None = (
-            None  # deferred — created on first reset() inside the worker subprocess
+            None  # 延迟创建 —— 在 worker 子进程内首次 reset() 时创建
         )
 
         default_steps = 500
@@ -256,11 +256,11 @@ class LiberoEnv(gym.Env):
         )
 
     def _ensure_env(self) -> None:
-        """Create the underlying OffScreenRenderEnv on first use.
+        """在首次使用时创建底层的 OffScreenRenderEnv。
 
-        Called inside the worker subprocess after fork(), so each worker gets
-        its own clean EGL context rather than inheriting a stale one from the
-        parent process (which causes EGL_BAD_CONTEXT crashes with AsyncVectorEnv).
+        在 fork() 之后于 worker 子进程内调用，这样每个 worker 都能获得
+        自己干净的 EGL 上下文，而不是从父进程继承一个过期的上下文
+        （那会在 AsyncVectorEnv 中导致 EGL_BAD_CONTEXT 崩溃）。
         """
         if self._env is not None:
             return
@@ -269,8 +269,8 @@ class LiberoEnv(gym.Env):
             camera_heights=self.observation_height,
             camera_widths=self.observation_width,
             control_freq=self.control_freq,
-            # Soft resets skip LIBERO's model and renderer rebuild. They are opt-in
-            # because settle steps can make their observations differ from hard resets.
+            # 软重置会跳过 LIBERO 的模型和渲染器重建。它需要显式启用，
+            # 因为稳定步（settle steps）可能使其观测与硬重置不同。
             hard_reset=self.hard_reset,
         )
         env.reset()
@@ -281,7 +281,7 @@ class LiberoEnv(gym.Env):
         raw_obs = self._env.env._get_observations()
         pixels = self._format_raw_obs(raw_obs)["pixels"]
         image = next(iter(pixels.values()))
-        image = image[::-1, ::-1]  # flip both H and W for visualization
+        image = image[::-1, ::-1]  # 为可视化同时翻转 H 和 W
         return image
 
     def _format_raw_obs(self, raw_obs: RobotObservation) -> RobotObservation:
@@ -294,7 +294,7 @@ class LiberoEnv(gym.Env):
         eef_pos = raw_obs.get("robot0_eef_pos")
         eef_quat = raw_obs.get("robot0_eef_quat")
 
-        # rotation matrix from controller
+        # 来自控制器的旋转矩阵
         eef_mat = self._env.robots[0].controller.ee_ori_mat if eef_pos is not None else None
         gripper_qpos = raw_obs.get("robot0_gripper_qpos")
         gripper_qvel = raw_obs.get("robot0_gripper_qvel")
@@ -322,7 +322,7 @@ class LiberoEnv(gym.Env):
             return {"pixels": images.copy()}
 
         if self.obs_type == "pixels_agent_pos":
-            # Validate required fields are present
+            # 校验必需字段是否存在
             if eef_pos is None or eef_quat is None or gripper_qpos is None:
                 raise ValueError(
                     f"Missing required robot state fields in raw observation. "
@@ -343,11 +343,11 @@ class LiberoEnv(gym.Env):
         raw_obs = self._env.reset()
         if self.init_states and self._init_states is not None:
             raw_obs = self._env.set_init_state(self._init_states[self.init_state_id % len(self._init_states)])
-            self.init_state_id += self._reset_stride  # Change init_state_id when reset
+            self.init_state_id += self._reset_stride  # 重置时更改 init_state_id
 
-        # After reset, objects may be unstable (slightly floating, intersecting, etc.).
-        # Step the simulator with a no-op action for a few frames so everything settles.
-        # Increasing this value can improve determinism and reproducibility across resets.
+        # 重置后，物体可能不稳定（轻微漂浮、相互穿插等）。
+        # 用空操作动作让模拟器运行几帧，使一切稳定下来。
+        # 增大该值可以提高各次重置之间的确定性和可复现性。
         for _ in range(self.num_steps_wait):
             raw_obs, _, _, _ = self._env.step(get_libero_dummy_action())
 
@@ -384,9 +384,9 @@ class LiberoEnv(gym.Env):
             }
         )
         observation = self._format_raw_obs(raw_obs)
-        # Return the terminal observation unchanged. The caller owns resetting after
-        # termination; vector envs created below use NEXT_STEP autoreset. Resetting here
-        # would therefore reset twice and skip an initial state.
+        # 原样返回终止时的观测。终止后的重置由调用方负责；
+        # 下面创建的向量化环境使用 NEXT_STEP 自动重置。因此在这里重置
+        # 会导致重置两次，并跳过一个初始状态。
         truncated = False
         return observation, reward, terminated, truncated, info
 
@@ -395,8 +395,8 @@ class LiberoEnv(gym.Env):
             try:
                 self._env.close()
             finally:
-                # LIBERO deletes its inner env on close, so this wrapper must
-                # be recreated before the next reset.
+                # LIBERO 在 close 时会删除其内部环境，因此该包装器
+                # 必须在下次重置之前重新创建。
                 self._env = None
 
 
@@ -414,7 +414,7 @@ def _make_env_fns(
     camera_name_mapping: dict[str, str] | None = None,
     is_libero_plus: bool = False,
 ) -> list[Callable[[], LiberoEnv]]:
-    """Build n_envs factory callables for a single (suite, task_id)."""
+    """为单个 (suite, task_id) 构建 n_envs 个工厂可调用对象。"""
 
     def _make_env(episode_index: int, **kwargs) -> LiberoEnv:
         local_kwargs = dict(kwargs)
@@ -455,14 +455,14 @@ def create_libero_envs(
     is_libero_plus: bool = False,
 ) -> dict[str, dict[int, Any]]:
     """
-    Create vectorized LIBERO environments with a consistent return shape.
+    创建具有统一返回结构的向量化 LIBERO 环境。
 
     Returns:
-        dict[suite_name][task_id] -> vec_env (env_cls([...]) with exactly n_envs factories)
+        dict[suite_name][task_id] -> vec_env（env_cls([...])，恰好包含 n_envs 个工厂）
     Notes:
-        - n_envs is the number of rollouts *per task* (episode_index = 0..n_envs-1).
-        - `task` can be a single suite or a comma-separated list of suites.
-        - You may pass `task_ids` (list[int]) inside `gym_kwargs` to restrict tasks per suite.
+        - n_envs 是*每个任务*的 rollout 数量（episode_index = 0..n_envs-1）。
+        - `task` 可以是单个套件，也可以是以逗号分隔的套件列表。
+        - 可以在 `gym_kwargs` 中传入 `task_ids`（list[int]）来限定每个套件的任务。
     """
     if env_cls is None or not callable(env_cls):
         raise ValueError("env_cls must be a callable that wraps a list of environment factory callables.")
@@ -470,7 +470,7 @@ def create_libero_envs(
         raise ValueError(f"n_envs must be a positive int; got {n_envs}.")
 
     gym_kwargs = dict(gym_kwargs or {})
-    task_ids_filter = gym_kwargs.pop("task_ids", None)  # optional: limit to specific tasks
+    task_ids_filter = gym_kwargs.pop("task_ids", None)  # 可选：限定到特定任务
 
     camera_names = parse_camera_names(camera_name)
     suite_names = [s.strip() for s in str(task).split(",") if s.strip()]
@@ -494,8 +494,8 @@ def create_libero_envs(
         if not selected:
             raise ValueError(f"No tasks selected for suite '{suite_name}' (available: {total}).")
 
-        # All tasks in a suite share identical observation/action spaces.
-        # Probe once and reuse to avoid creating a temp env per task.
+        # 同一套件中的所有任务共享相同的观测/动作空间。
+        # 探测一次并复用，避免为每个任务创建临时环境。
         cached_obs_space: spaces.Space | None = None
         cached_act_space: spaces.Space | None = None
         cached_metadata: dict[str, Any] | None = None

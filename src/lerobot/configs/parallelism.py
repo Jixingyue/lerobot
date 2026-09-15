@@ -13,26 +13,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Declarative process topology for distributed training and inference.
+"""用于分布式训练和推理的声明式进程拓扑。
 
-The mesh convention (canonical row-major rank layout, outermost first)::
+mesh 约定（规范的行优先 rank 布局，最外层在前）::
 
     (dp_replicate, dp_shard, ring, ulysses)
 
-- ``dp_replicate x dp_shard`` is the data-parallel world: HSDP replicates over
-  ``dp_replicate`` and shards parameters over ``dp_shard``. FSDP2's actual shard
-  group folds context parallelism in (``dp_shard x ring x ulysses``), matching
-  accelerate's ``dp_shard_cp`` flattening and torchtitan's ``fsdp`` axis.
-- ``ring`` is the outer and ``ulysses`` the inner context-parallel dim
-  (diffusers convention: ulysses all-to-all exchanges run over adjacent, typically
-  NVLink-connected ranks).
-- ``cfg_parallel`` (classifier-free-guidance parallelism) is a branch-parallel,
-  inference-only dim that sits between dp and the sequence dims. It never
-  affects weight sharding or checkpoints.
+- ``dp_replicate x dp_shard`` 是数据并行世界：HSDP 在 ``dp_replicate`` 上复制，
+  在 ``dp_shard`` 上分片参数。FSDP2 的实际分片组会并入上下文并行
+  （``dp_shard x ring x ulysses``），与 accelerate 的 ``dp_shard_cp`` 展平
+  以及 torchtitan 的 ``fsdp`` 轴一致。
+- ``ring`` 是外层、``ulysses`` 是内层的上下文并行维度
+  （diffusers 约定：ulysses 的 all-to-all 交换在相邻的、通常通过
+  NVLink 连接的 rank 之间进行）。
+- ``cfg_parallel``（classifier-free-guidance 并行）是一个分支并行的、
+  仅用于推理的维度，位于 dp 和序列维度之间。它永远不会
+  影响权重分片或检查点。
 
-This module is pure configuration: plain-typed dataclasses that draccus can
-round-trip through the CLI and ``train_config.json``. Runtime objects (device
-meshes, process groups) live in :mod:`lerobot.distributed`.
+本模块是纯配置：draccus 可以通过 CLI 和 ``train_config.json`` 往返的
+简单类型 dataclass。运行时对象（设备 mesh、进程组）位于
+:mod:`lerobot.distributed`。
 """
 
 import os
@@ -41,21 +41,21 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ContextParallelConfig:
-    """Ring x Ulysses context parallelism (sequence parallelism for attention).
+    """Ring x Ulysses 上下文并行（注意力的序列并行）。
 
-    Both degrees are configured placeholders in this release: the CP engine is not implemented
-    yet, and enabling either degree > 1 fails fast at config validation. The fields exist now so
-    that the CLI surface, checkpoint metadata, and mesh math are stable when the engine lands.
+    在本版本中，两个度数都是配置的占位符：CP 引擎尚未实现，
+    启用任一度数 > 1 都会在配置验证时快速失败。这些字段现在存在，
+    是为了在引擎落地时，CLI 接口、检查点元数据和 mesh 计算保持稳定。
     """
 
     ring_degree: int = 1
     ulysses_degree: int = 1
 
     def __post_init__(self) -> None:
-        """Validate the declared context-parallel degrees.
+        """验证声明的上下文并行度数。
 
         Raises:
-            ValueError: If ``ring_degree`` or ``ulysses_degree`` is < 1.
+            ValueError: 如果 ``ring_degree`` 或 ``ulysses_degree`` < 1。
         """
         if self.ring_degree < 1 or self.ulysses_degree < 1:
             raise ValueError(
@@ -65,42 +65,42 @@ class ContextParallelConfig:
 
     @property
     def size(self) -> int:
-        """Total number of ranks a full sequence is sharded across."""
+        """完整序列被分片到的总 rank 数。"""
         return self.ring_degree * self.ulysses_degree
 
 
 @dataclass
 class ParallelismConfig:
-    """Degrees of every parallelism dim. Invariant: their product equals the world size.
+    """所有并行维度的度数。不变量：它们的乘积等于世界大小。
 
-    Degradations are expressed purely through the degrees (no mode flags):
+    降级完全通过度数来表达（没有模式标志）：
 
-    - single process: all degrees 1;
-    - DDP: ``dp_replicate == world_size`` (auto-filled when every sharding field is left at its
-      default — plain ``torchrun`` keeps today's out-of-the-box behavior);
-    - FSDP: ``dp_shard > 1`` (or ``-1`` to fill the remaining world into the shard dim);
-    - HSDP: ``dp_replicate > 1`` and ``dp_shard > 1``.
+    - 单进程：所有度数为 1；
+    - DDP：``dp_replicate == world_size``（当所有分片字段保持默认值时自动填充——
+      普通的 ``torchrun`` 保持现有的开箱即用行为）；
+    - FSDP：``dp_shard > 1``（或 ``-1`` 表示将剩余的世界大小填入分片维度）；
+    - HSDP：``dp_replicate > 1`` 且 ``dp_shard > 1``。
 
-    ``resolve()`` turns the declared degrees into concrete ones once the world size is known and
-    is the single place the world-size equation is enforced. It is called by
-    :func:`lerobot.distributed.factory.make_accelerator`; the config is inert until then.
+    ``resolve()`` 在世界大小已知后将声明的度数转换为具体值，
+    并且是唯一执行世界大小等式的地方。它由
+    :func:`lerobot.distributed.factory.make_accelerator` 调用；在此之前配置处于惰性状态。
     """
 
     dp_replicate: int = 1
-    # -1 is an explicit opt-in sentinel: shard over world_size // (dp_replicate * cp).
+    # -1 是一个显式的选择加入哨兵值：在 world_size // (dp_replicate * cp) 上分片。
     dp_shard: int = 1
     context_parallel: ContextParallelConfig = field(default_factory=ContextParallelConfig)
-    # Classifier-free-guidance parallelism — inference-only (cosmos/vllm-omni precedent:
-    # cond/uncond branches on different ranks). Reserved for the serving round; training
-    # validates it to 1. Meaningful values are 1 or 2 (Cosmos3 has two CFG branches).
+    # Classifier-free-guidance 并行 —— 仅用于推理（cosmos/vllm-omni 先例：
+    # cond/uncond 分支位于不同的 rank）。保留给 serving 轮次；训练时
+    # 验证其为 1。有意义的值是 1 或 2（Cosmos3 有两个 CFG 分支）。
     cfg_parallel: int = 1
 
     def __post_init__(self) -> None:
-        """Validate the declared degrees (world-size-independent checks only).
+        """验证声明的度数（仅进行与世界大小无关的检查）。
 
         Raises:
-            ValueError: If ``dp_replicate`` is < 1, ``dp_shard`` is neither >= 1 nor the
-                ``-1`` infer sentinel, or ``cfg_parallel`` is not 1 or 2.
+            ValueError: 如果 ``dp_replicate`` < 1，``dp_shard`` 既不 >= 1 也不是
+                ``-1`` 推断哨兵值，或 ``cfg_parallel`` 不是 1 或 2。
         """
         if self.dp_replicate < 1:
             raise ValueError(f"dp_replicate must be >= 1, got {self.dp_replicate}.")
@@ -111,49 +111,49 @@ class ParallelismConfig:
 
     @property
     def cp_size(self) -> int:
-        """Total context-parallel size (``ring_degree * ulysses_degree``)."""
+        """上下文并行总大小（``ring_degree * ulysses_degree``）。"""
         return self.context_parallel.size
 
     @property
     def is_sharded(self) -> bool:
-        """True when the run uses FSDP2 (parameters sharded); selects the sharded engine path."""
+        """当运行使用 FSDP2（参数已分片）时为 True；用于选择分片引擎路径。"""
         return self.dp_shard != 1 or self.cp_size > 1
 
     @property
     def is_replicated_only(self) -> bool:
-        """True for plain DDP (weights replicated, no sharding)."""
+        """对于普通 DDP（权重复制，无分片）为 True。"""
         return not self.is_sharded and self.dp_replicate > 1
 
     @property
     def dp_world_size(self) -> int:
-        """Number of distinct data-parallel workers (batches are sharded this many ways).
+        """不同数据并行 worker 的数量（批次按此数量分片）。
 
         Returns:
-            int: ``dp_replicate * dp_shard``.
+            int: ``dp_replicate * dp_shard``。
 
         Raises:
-            RuntimeError: If accessed while ``dp_shard`` is still the ``-1`` sentinel, i.e.
-                before :meth:`resolve` has bound the degrees to a world size.
+            RuntimeError: 如果在 ``dp_shard`` 仍为 ``-1`` 哨兵值时访问，
+                即在 :meth:`resolve` 将度数绑定到世界大小之前。
         """
         if self.dp_shard == -1:
             raise RuntimeError("dp_world_size is undefined before resolve() fills dp_shard=-1.")
         return self.dp_replicate * self.dp_shard
 
     def resolve(self, world_size: int) -> None:
-        """Bind the declared degrees to a concrete world size (idempotent).
+        """将声明的度数绑定到具体的世界大小（幂等）。
 
-        Fills the ``dp_shard=-1`` sentinel, auto-fills ``dp_replicate`` for the DDP degradation,
-        and enforces ``dp_replicate * dp_shard * cp == world_size`` with every degree echoed on
-        failure.
+        填充 ``dp_shard=-1`` 哨兵值，为 DDP 降级自动填充 ``dp_replicate``，
+        并强制 ``dp_replicate * dp_shard * cp == world_size``，失败时
+        回显所有度数。
 
         Args:
-            world_size (int): Total number of launched processes (torchrun's ``WORLD_SIZE``).
+            world_size (int): 启动的进程总数（torchrun 的 ``WORLD_SIZE``）。
 
         Raises:
-            ValueError: If a context-parallel degree is > 1 (the CP engine is not implemented
-                yet), if ``dp_shard=-1`` cannot be inferred because ``world_size`` is not
-                divisible by ``dp_replicate * cp``, or if the resolved degrees do not multiply
-                to ``world_size``.
+            ValueError: 如果上下文并行度数 > 1（CP 引擎尚未实现），
+                如果由于 ``world_size`` 不能被 ``dp_replicate * cp`` 整除而
+                无法推断 ``dp_shard=-1``，或者如果解析后的度数乘积
+                不等于 ``world_size``。
         """
         if self.cp_size > 1:
             raise ValueError(
@@ -169,7 +169,7 @@ class ParallelismConfig:
                         f"dp_replicate={self.dp_replicate} * cp={self.cp_size}."
                     )
         elif self.dp_replicate == 1:
-            # Untouched config on a multi-process launch: fill the DDP degradation.
+            # 多进程启动时配置未被改动：填充 DDP 降级。
             self.dp_replicate = world_size
         total = self.dp_replicate * self.dp_shard * self.cp_size
         if total != world_size:
@@ -182,9 +182,9 @@ class ParallelismConfig:
 
 
 def world_size_from_env() -> int:
-    """World size as set by torchrun (or 1 outside distributed launches).
+    """torchrun 设置的世界大小（非分布式启动时为 1）。
 
     Returns:
-        int: The ``WORLD_SIZE`` environment variable, or 1 when unset.
+        int: ``WORLD_SIZE`` 环境变量，未设置时为 1。
     """
     return int(os.environ.get("WORLD_SIZE", "1"))

@@ -44,64 +44,64 @@ def lekiwi_cameras_config() -> dict[str, CameraConfig]:
 @RobotConfig.register_subclass("lekiwi")
 @dataclass
 class LeKiwiConfig(RobotConfig):
-    port: str = "/dev/ttyACM0"  # port to connect to the bus
+    port: str = "/dev/ttyACM0"  # 连接总线的端口
 
     disable_torque_on_disconnect: bool = True
 
-    # `max_relative_target` limits the magnitude of the relative positional target vector for safety purposes.
-    # Set this to a positive scalar to have the same value for all motors, or a dictionary that maps motor
-    # names to the max_relative_target value for that motor.
+    # `max_relative_target` 出于安全目的限制相对位置目标向量的大小。
+    # 将其设为正标量可让所有电机使用相同的值，或者设为将电机名称
+    # 映射到该电机 max_relative_target 值的字典。
     max_relative_target: float | dict[str, float] | None = None
 
     cameras: dict[str, CameraConfig] = field(default_factory=lekiwi_cameras_config)
 
-    # Set to `True` for backward compatibility with previous policies/dataset
+    # 为向后兼容以前的策略/数据集，请设为 `True`
     use_degrees: bool = True
 
-    # Number of extra attempts when a `sync_read` of the motors fails. Feetech buses can occasionally
-    # return a corrupted status packet ("Incorrect status packet!"), especially when several joints move
-    # at once, which otherwise aborts the control loop. Retries are immediate (no sleep) and only happen on
-    # failure, so the steady-state read cost is unchanged.
+    # 电机 `sync_read` 失败时的额外重试次数。Feetech 总线偶尔会
+    # 返回损坏的状态包（"Incorrect status packet!"），尤其是在多个关节同时
+    # 移动时，这会导致控制循环中止。重试是立即执行的（无休眠）且仅在
+    # 失败时发生，因此稳态读取开销不变。
     num_read_retries: int = 2
 
 
 @dataclass
 class LeKiwiHostConfig:
-    # Network Configuration
+    # 网络配置
     port_zmq_cmd: int = 5555
     port_zmq_observations: int = 5556
 
-    # Duration of the application
+    # 应用程序运行时长
     connection_time_s: int = 30
 
-    # Watchdog: stop the robot if no command is received for over 0.5 seconds.
+    # 看门狗：如果超过 0.5 秒未收到命令，则停止机器人。
     watchdog_timeout_ms: int = 500
 
-    # If robot jitters decrease the frequency and monitor cpu load with `top` in cmd
+    # 如果机器人出现抖动，请降低频率，并在命令行中用 `top` 监控 CPU 负载
     max_loop_freq_hz: int = 30
 
 
 @RobotConfig.register_subclass("lekiwi_client")
 @dataclass
 class LeKiwiClientConfig(RobotConfig):
-    # Network Configuration
+    # 网络配置
     remote_ip: str
     port_zmq_cmd: int = 5555
     port_zmq_observations: int = 5556
 
     teleop_keys: dict[str, str] = field(
         default_factory=lambda: {
-            # Movement
+            # 移动
             "forward": "w",
             "backward": "s",
             "left": "a",
             "right": "d",
             "rotate_left": "z",
             "rotate_right": "x",
-            # Speed control
+            # 速度控制
             "speed_up": "r",
             "speed_down": "f",
-            # quit teleop
+            # 退出遥操作
             "quit": "q",
         }
     )

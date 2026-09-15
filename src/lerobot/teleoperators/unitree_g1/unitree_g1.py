@@ -43,17 +43,17 @@ logger = logging.getLogger(__name__)
 
 
 class RemoteController:
-    """Unitree remote controller data parser for joystick and button state."""
+    """Unitree 遥控器数据解析器，用于摇杆和按键状态。"""
 
-    # ADC parameters for exoskeleton joystick (12-bit ADC)
+    # 外骨骼摇杆的 ADC 参数（12 位 ADC）
     ADC_MAX = 4095
     ADC_HALF = ADC_MAX / 2
-    JOYSTICK_X_IDX = 11  # X axis in raw ADC array
-    JOYSTICK_BTN_IDX = 12  # Button in raw ADC array
-    JOYSTICK_Y_IDX = 13  # Y axis in raw ADC array
+    JOYSTICK_X_IDX = 11  # 原始 ADC 数组中的 X 轴
+    JOYSTICK_BTN_IDX = 12  # 原始 ADC 数组中的按键
+    JOYSTICK_Y_IDX = 13  # 原始 ADC 数组中的 Y 轴
 
-    # Map SDK named buttons to positional indices matching the wireless_remote
-    # byte layout (little-endian uint16 from bytes 2-3).
+    # 将 SDK 命名的按键映射到与 wireless_remote 字节布局
+    #（字节 2-3 的小端 uint16）匹配的位置索引。
     _BUTTON_MAP: list[str] = [
         "RB",
         "LB",
@@ -81,20 +81,20 @@ class RemoteController:
         self.button = [0] * 16
         self.remote_action = dict.fromkeys(REMOTE_AXES, 0.0)
 
-        # SDK joystick parser for wireless remote bytes
+        # 用于无线遥控器字节的 SDK 摇杆解析器
         self._joystick = Joystick()
-        # Disable axis smoothing and deadzone to preserve raw values
+        # 禁用轴平滑和死区以保留原始值
         for axis in (self._joystick.lx, self._joystick.ly, self._joystick.rx, self._joystick.ry):
             axis.smooth = 1.0
             axis.deadzone = 0.0
 
-        # Joystick center calibration (read at connect time)
+        # 摇杆中心校准（在连接时读取）
         self.left_center_x = self.ADC_HALF
         self.left_center_y = self.ADC_HALF
         self.right_center_x = self.ADC_HALF
         self.right_center_y = self.ADC_HALF
 
-        # Whether to use exo joystick (detected at connect time)
+        # 是否使用外骨骼摇杆（在连接时检测）
         self.use_left_exo_joystick = False
         self.use_right_exo_joystick = False
 
@@ -141,7 +141,7 @@ class RemoteController:
         self.button[0] = 1 if raw16[self.JOYSTICK_BTN_IDX] < self.ADC_HALF else 0
 
     def set_from_wireless(self, wireless_remote: bytes) -> None:
-        """Parse Unitree wireless remote raw bytes into joystick + button state."""
+        """将 Unitree 无线遥控器的原始字节解析为摇杆 + 按键状态。"""
         if len(wireless_remote) < 24:
             return
         self._joystick.extract(wireless_remote)
@@ -158,10 +158,10 @@ class RemoteController:
 
 class UnitreeG1Teleoperator(Teleoperator):
     """
-    Bimanual exoskeleton arms teleoperator for Unitree G1 arms.
+    用于 Unitree G1 手臂的双臂外骨骼遥操作设备。
 
-    Uses inverse kinematics: exoskeleton FK computes end-effector pose,
-    G1 IK solves for joint angles.
+    使用逆运动学：外骨骼 FK 计算末端执行器位姿，
+    G1 IK 求解关节角度。
     """
 
     config_class = UnitreeG1TeleoperatorConfig
@@ -178,7 +178,7 @@ class UnitreeG1Teleoperator(Teleoperator):
             )
         self._arm_control_enabled = left_exo_enabled and right_exo_enabled
 
-        # Setup calibration directory
+        # 设置校准目录
         self.calibration_dir = (
             config.calibration_dir
             if config.calibration_dir
@@ -189,7 +189,7 @@ class UnitreeG1Teleoperator(Teleoperator):
         left_id = f"{config.id}_left" if config.id else "left"
         right_id = f"{config.id}_right" if config.id else "right"
 
-        # Create exoskeleton arm instances
+        # 创建外骨骼手臂实例
         self.left_arm = ExoskeletonArm(
             port=config.left_arm_config.port,
             baud_rate=config.left_arm_config.baud_rate,
@@ -242,7 +242,7 @@ class UnitreeG1Teleoperator(Teleoperator):
         self.ik_helper = ExoskeletonIKHelper(frozen_joints=frozen_joints)
         logger.info("IK helper initialized")
 
-        time.sleep(0.1)  # Give serial time to populate buffer
+        time.sleep(0.1)  # 给串口留出填充缓冲区的时间
 
         left_raw = self.left_arm.read_raw()
         right_raw = self.right_arm.read_raw()
@@ -280,7 +280,7 @@ class UnitreeG1Teleoperator(Teleoperator):
             right_angles = self.right_arm.get_angles()
             joint_action = self.ik_helper.compute_g1_joints_from_exo(left_angles, right_angles)
 
-        # Wireless remote has priority when non-zero; otherwise, use exo joystick.
+        # 无线遥控器在非零时具有优先级；否则使用外骨骼摇杆。
         rc = self.remote_controller
         wireless_active = (
             abs(rc.lx) > 1e-3 or abs(rc.ly) > 1e-3 or abs(rc.rx) > 1e-3 or abs(rc.ry) > 1e-3
@@ -302,7 +302,7 @@ class UnitreeG1Teleoperator(Teleoperator):
         self.right_arm.disconnect()
 
     def run_visualization_loop(self):
-        """Run interactive Meshcat visualization loop to verify tracking."""
+        """运行交互式 Meshcat 可视化循环以验证跟踪效果。"""
         if self.ik_helper is None:
             frozen_joints = [j.strip() for j in self.config.frozen_joints.split(",") if j.strip()]
             self.ik_helper = ExoskeletonIKHelper(frozen_joints=frozen_joints)

@@ -27,54 +27,54 @@ from .pipeline import ObservationProcessorStep, ProcessorStepRegistry
 @ProcessorStepRegistry.register(name="libero_processor")
 class LiberoProcessorStep(ObservationProcessorStep):
     """
-    Processes LIBERO observations into the LeRobot format.
+    将 LIBERO 观测处理为 LeRobot 格式。
 
-    This step handles the specific observation structure from LIBERO environments,
-    which includes nested robot_state dictionaries and image observations.
+    该步骤处理来自 LIBERO 环境的特定观测结构，
+    其中包括嵌套的 robot_state 字典和图像观测。
 
-    **State Processing:**
-    -   Processes the `robot_state` dictionary which contains nested end-effector,
-        gripper, and joint information.
-    -   Extracts and concatenates:
-        - End-effector position (3D)
-        - End-effector quaternion converted to axis-angle (3D)
-        - Gripper joint positions (2D)
-    -   Maps the concatenated state to `"observation.state"`.
+    **状态处理：**
+    -   处理 `robot_state` 字典，其中包含嵌套的末端执行器、
+        夹爪和关节信息。
+    -   提取并拼接：
+        - 末端执行器位置（3D）
+        - 转换为轴角表示的末端执行器四元数（3D）
+        - 夹爪关节位置（2D）
+    -   将拼接后的状态映射到 `"observation.state"`。
 
-    **Image Processing:**
-    -   Rotates images by 180 degrees by flipping both height and width dimensions.
-    -   This accounts for the HuggingFaceVLA/libero camera orientation convention.
+    **图像处理：**
+    -   通过翻转高度和宽度两个维度将图像旋转 180 度。
+    -   这是为了适配 HuggingFaceVLA/libero 的相机朝向约定。
     """
 
     def _process_observation(self, observation):
         """
-        Processes both image and robot_state observations from LIBERO.
+        处理来自 LIBERO 的图像和 robot_state 观测。
         """
         processed_obs = observation.copy()
         for key in list(processed_obs.keys()):
             if key.startswith(f"{OBS_IMAGES}."):
                 img = processed_obs[key]
 
-                # Flip both H and W
+                # 同时翻转 H 和 W
                 img = torch.flip(img, dims=[2, 3])
 
                 processed_obs[key] = img
-        # Process robot_state into a flat state vector
+        # 将 robot_state 处理为扁平的状态向量
         observation_robot_state_str = OBS_PREFIX + "robot_state"
         if observation_robot_state_str in processed_obs:
             robot_state = processed_obs.pop(observation_robot_state_str)
 
-            # Extract components
+            # 提取各分量
             eef_pos = robot_state["eef"]["pos"]  # (B, 3,)
             eef_quat = robot_state["eef"]["quat"]  # (B, 4,)
             gripper_qpos = robot_state["gripper"]["qpos"]  # (B, 2,)
 
-            # Convert quaternion to axis-angle
+            # 将四元数转换为轴角表示
             eef_axisangle = self._quat2axisangle(eef_quat)  # (B, 3)
-            # Concatenate into a single state vector
+            # 拼接为单个状态向量
             state = torch.cat((eef_pos, eef_axisangle, gripper_qpos), dim=-1)
 
-            # ensure float32
+            # 确保为 float32
             state = state.float()
             if state.dim() == 1:
                 state = state.unsqueeze(0)
@@ -86,19 +86,19 @@ class LiberoProcessorStep(ObservationProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        Transforms feature keys from the LIBERO format to the LeRobot standard.
+        将特征键从 LIBERO 格式转换为 LeRobot 标准格式。
         """
         new_features: dict[PipelineFeatureType, dict[str, PolicyFeature]] = {}
 
-        # copy over non-STATE features
+        # 复制非 STATE 特征
         for ft, feats in features.items():
             if ft != FeatureType.STATE:
                 new_features[ft] = feats.copy()
 
-        # rebuild STATE features
+        # 重建 STATE 特征
         state_feats = {}
 
-        # add our new flattened state
+        # 添加新的扁平化状态
         state_feats[OBS_STATE] = PolicyFeature(
             type=FeatureType.STATE,
             shape=(8,),  # [eef_pos(3), axis_angle(3), gripper(2)]
@@ -113,18 +113,18 @@ class LiberoProcessorStep(ObservationProcessorStep):
 
     def _quat2axisangle(self, quat: torch.Tensor) -> torch.Tensor:
         """
-        Convert batched quaternions to axis-angle format.
-        Only accepts torch tensors of shape (B, 4).
+        将批量的四元数转换为轴角格式。
+        仅接受形状为 (B, 4) 的 torch 张量。
 
         Args:
-            quat (Tensor): (B, 4) tensor of quaternions in (x, y, z, w) format
+            quat (Tensor): 形状为 (B, 4)、格式为 (x, y, z, w) 的四元数张量
 
         Returns:
-            Tensor: (B, 3) axis-angle vectors
+            Tensor: 形状为 (B, 3) 的轴角向量
 
         Raises:
-            TypeError: if input is not a torch tensor
-            ValueError: if shape is not (B, 4)
+            TypeError: 如果输入不是 torch 张量
+            ValueError: 如果形状不是 (B, 4)
         """
 
         if not isinstance(quat, torch.Tensor):
@@ -157,27 +157,27 @@ class LiberoProcessorStep(ObservationProcessorStep):
 @ProcessorStepRegistry.register(name="isaaclab_arena_processor")
 class IsaaclabArenaProcessorStep(ObservationProcessorStep):
     """
-    Processes IsaacLab Arena observations into LeRobot format.
+    将 IsaacLab Arena 观测处理为 LeRobot 格式。
 
-    **State Processing:**
-    - Extracts state components from obs["policy"] based on `state_keys`.
-    - Concatenates into a flat vector mapped to "observation.state".
+    **状态处理：**
+    - 根据 `state_keys` 从 obs["policy"] 中提取状态分量。
+    - 拼接为扁平向量并映射到 "observation.state"。
 
-    **Image Processing:**
-    - Extracts images from obs["camera_obs"] based on `camera_keys`.
-    - Converts from (B, H, W, C) uint8 to (B, C, H, W) float32 [0, 1].
-    - Maps to "observation.images.<camera_name>".
+    **图像处理：**
+    - 根据 `camera_keys` 从 obs["camera_obs"] 中提取图像。
+    - 从 (B, H, W, C) uint8 转换为 (B, C, H, W) float32 [0, 1]。
+    - 映射到 "observation.images.<camera_name>"。
     """
 
-    # Configurable from IsaacLabEnv config / cli args: --env.state_keys="robot_joint_pos,left_eef_pos"
+    # 可通过 IsaacLabEnv 配置 / 命令行参数配置：--env.state_keys="robot_joint_pos,left_eef_pos"
     state_keys: tuple[str, ...]
 
-    # Configurable from IsaacLabEnv config / cli args: --env.camera_keys="robot_pov_cam_rgb"
+    # 可通过 IsaacLabEnv 配置 / 命令行参数配置：--env.camera_keys="robot_pov_cam_rgb"
     camera_keys: tuple[str, ...]
 
     def _process_observation(self, observation):
         """
-        Processes both image and policy state observations from IsaacLab Arena.
+        处理来自 IsaacLab Arena 的图像和策略状态观测。
         """
         processed_obs = {}
 
@@ -196,16 +196,16 @@ class IsaaclabArenaProcessorStep(ObservationProcessorStep):
 
                 processed_obs[f"{OBS_IMAGES}.{cam_name}"] = img
 
-        # Process policy state -> observation.state
+        # 处理策略状态 -> observation.state
         if f"{OBS_STR}.policy" in observation:
             policy_obs = observation[f"{OBS_STR}.policy"]
 
-            # Collect state components in order
+            # 按顺序收集状态分量
             state_components = []
             for key in self.state_keys:
                 if key in policy_obs:
                     component = policy_obs[key]
-                    # Flatten extra dims: (B, N, M) -> (B, N*M)
+                    # 展平多余的维度：(B, N, M) -> (B, N*M)
                     if component.dim() > 2:
                         batch_size = component.shape[0]
                         component = component.view(batch_size, -1)
@@ -221,7 +221,7 @@ class IsaaclabArenaProcessorStep(ObservationProcessorStep):
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
-        """Not used for policy evaluation."""
+        """不用于策略评估。"""
         return features
 
     def observation(self, observation):

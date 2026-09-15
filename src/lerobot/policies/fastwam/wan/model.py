@@ -6,13 +6,13 @@ import torch.nn as nn
 
 
 def sinusoidal_embedding_1d(dim, position):
-    # preprocess
+    # 预处理
     if dim % 2 != 0:
         raise ValueError(f"dim must be even, got {dim}.")
     half = dim // 2
     position = position.type(torch.float64)
 
-    # calculation
+    # 计算
     sinusoid = torch.outer(position, torch.pow(10000, -torch.arange(half).to(position).div(half)))
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
@@ -33,15 +33,15 @@ def rope_params(max_seq_len, dim, theta=10000):
 def rope_apply(x, grid_sizes, freqs):
     n, c = x.size(2), x.size(3) // 2
 
-    # split freqs
+    # 拆分 freqs
     freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
 
-    # loop over samples
+    # 遍历样本
     output = []
     for i, (f, h, w) in enumerate(grid_sizes.tolist()):
         seq_len = f * h * w
 
-        # precompute multipliers
+        # 预计算乘子
         x_i = torch.view_as_complex(x[i, :seq_len].to(torch.float64).reshape(seq_len, n, -1, 2))
         freqs_i = torch.cat(
             [
@@ -52,11 +52,11 @@ def rope_apply(x, grid_sizes, freqs):
             dim=-1,
         ).reshape(seq_len, 1, -1)
 
-        # apply rotary embedding
+        # 应用旋转位置编码
         x_i = torch.view_as_real(x_i * freqs_i).flatten(2)
         x_i = torch.cat([x_i, x[i, seq_len:]])
 
-        # append to collection
+        # 加入结果集合
         output.append(x_i)
     return torch.stack(output).float()
 
@@ -70,8 +70,8 @@ class WanRMSNorm(nn.Module):
 
     def forward(self, x):
         r"""
-        Args:
-            x(Tensor): Shape [B, L, C]
+        参数：
+            x(Tensor): 形状 [B, L, C]
         """
         return self._norm(x.float()).type_as(x) * self.weight
 
@@ -85,8 +85,8 @@ class WanLayerNorm(nn.LayerNorm):
 
     def forward(self, x):
         r"""
-        Args:
-            x(Tensor): Shape [B, L, C]
+        参数：
+            x(Tensor): 形状 [B, L, C]
         """
         return super().forward(x.float()).type_as(x)
 
@@ -99,7 +99,7 @@ class WanSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
 
-        # layers
+        # 各层
         self.q = nn.Linear(dim, dim)
         self.k = nn.Linear(dim, dim)
         self.v = nn.Linear(dim, dim)
@@ -107,11 +107,11 @@ class WanSelfAttention(nn.Module):
         self.norm_q = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm_k = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
-    # NOTE: FastWAM never runs the upstream Wan attention forward. FastWAMAttentionBlock
-    # reuses only the q/k/v/o/norm submodules defined above and computes attention via
-    # `fastwam_masked_attention` (SDPA). The original flash-attention forward was removed,
-    # which also collapsed the former WanCrossAttention subclass into this class (it only
-    # differed by its forward): self- and cross-attention now share the same projection module.
+    # 注意：FastWAM 从不运行上游 Wan 注意力的 forward。FastWAMAttentionBlock
+    # 只复用上面定义的 q/k/v/o/norm 子模块，并通过 `fastwam_masked_attention`
+    # （SDPA）计算注意力。原始的 flash-attention forward 已被移除，这也使得
+    # 原先的 WanCrossAttention 子类被合并进本类（它只在 forward 上有所不同）：
+    # 自注意力和交叉注意力现在共享同一个投影模块。
 
 
 class WanAttentionBlock(nn.Module):
@@ -124,7 +124,7 @@ class WanAttentionBlock(nn.Module):
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
 
-        # layers
+        # 各层
         self.norm1 = WanLayerNorm(dim, eps)
         self.self_attn = WanSelfAttention(dim, num_heads, qk_norm, eps)
         self.norm3 = WanLayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
@@ -134,13 +134,12 @@ class WanAttentionBlock(nn.Module):
             nn.Linear(dim, ffn_dim), nn.GELU(approximate="tanh"), nn.Linear(ffn_dim, dim)
         )
 
-        # modulation
+        # 调制
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
 
-    # NOTE: The upstream Wan block forward (self-attention + cross-attention + FFN via
-    # flash-attention) was removed. FastWAM subclasses this block as FastWAMAttentionBlock
-    # and overrides forward to use SDPA with explicit boolean masks; only __init__ (the
-    # norm/attention/ffn submodules) is reused here.
+    # 注意：上游 Wan 块的 forward（基于 flash-attention 的自注意力 + 交叉注意力 +
+    # FFN）已被移除。FastWAM 将此块子类化为 FastWAMAttentionBlock，并重写 forward
+    # 以使用带显式布尔掩码的 SDPA；这里只复用 __init__（norm/attention/ffn 子模块）。
 
 
 class Head(nn.Module):
@@ -151,19 +150,19 @@ class Head(nn.Module):
         self.patch_size = patch_size
         self.eps = eps
 
-        # layers
+        # 各层
         out_dim = math.prod(patch_size) * out_dim
         self.norm = WanLayerNorm(dim, eps)
         self.head = nn.Linear(dim, out_dim)
 
-        # modulation
+        # 调制
         self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
 
     def forward(self, x, e):
         r"""
         Args:
-            x(Tensor): Shape [B, L1, C]
-            e(Tensor): Shape [B, L1, C]
+            x(Tensor): 形状 [B, L1, C]
+            e(Tensor): 形状 [B, L1, C]
         """
         with torch.amp.autocast("cuda", dtype=torch.float32):
             e = (self.modulation.unsqueeze(0) + e.unsqueeze(2)).chunk(2, dim=2)
@@ -173,7 +172,7 @@ class Head(nn.Module):
 
 class WanModel(nn.Module):
     r"""
-    Wan diffusion backbone supporting both text-to-video and image-to-video.
+    Wan 扩散骨干网络，同时支持文本生成视频和图像生成视频。
     """
 
     def __init__(
@@ -194,37 +193,37 @@ class WanModel(nn.Module):
         eps=1e-6,
     ):
         r"""
-        Initialize the diffusion model backbone.
+        初始化扩散模型骨干网络。
 
         Args:
             model_type (`str`, *optional*, defaults to 't2v'):
-                Model variant - 't2v' (text-to-video) or 'i2v' (image-to-video)
+                模型变体 - 't2v'（文本生成视频）或 'i2v'（图像生成视频）
             patch_size (`tuple`, *optional*, defaults to (1, 2, 2)):
-                3D patch dimensions for video embedding (t_patch, h_patch, w_patch)
+                视频嵌入的 3D 补丁维度 (t_patch, h_patch, w_patch)
             text_len (`int`, *optional*, defaults to 512):
-                Fixed length for text embeddings
+                文本嵌入的固定长度
             in_dim (`int`, *optional*, defaults to 16):
-                Input video channels (C_in)
+                输入视频通道数 (C_in)
             dim (`int`, *optional*, defaults to 2048):
-                Hidden dimension of the transformer
+                transformer 的隐藏维度
             ffn_dim (`int`, *optional*, defaults to 8192):
-                Intermediate dimension in feed-forward network
+                前馈网络的中间维度
             freq_dim (`int`, *optional*, defaults to 256):
-                Dimension for sinusoidal time embeddings
+                正弦时间嵌入的维度
             text_dim (`int`, *optional*, defaults to 4096):
-                Input dimension for text embeddings
+                文本嵌入的输入维度
             out_dim (`int`, *optional*, defaults to 16):
-                Output video channels (C_out)
+                输出视频通道数 (C_out)
             num_heads (`int`, *optional*, defaults to 16):
-                Number of attention heads
+                注意力头数量
             num_layers (`int`, *optional*, defaults to 32):
-                Number of transformer blocks
+                transformer 块数量
             qk_norm (`bool`, *optional*, defaults to True):
-                Enable query/key normalization
+                启用查询/键归一化
             cross_attn_norm (`bool`, *optional*, defaults to False):
-                Enable cross-attention normalization
+                启用交叉注意力归一化
             eps (`float`, *optional*, defaults to 1e-6):
-                Epsilon value for normalization layers
+                归一化层的 epsilon 值
         """
 
         super().__init__()
@@ -247,7 +246,7 @@ class WanModel(nn.Module):
         self.cross_attn_norm = cross_attn_norm
         self.eps = eps
 
-        # embeddings
+        # 嵌入层
         self.patch_embedding = nn.Conv3d(in_dim, dim, kernel_size=patch_size, stride=patch_size)
         self.text_embedding = nn.Sequential(
             nn.Linear(text_dim, dim), nn.GELU(approximate="tanh"), nn.Linear(dim, dim)
@@ -256,7 +255,7 @@ class WanModel(nn.Module):
         self.time_embedding = nn.Sequential(nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
 
-        # blocks
+        # 块
         self.blocks = nn.ModuleList(
             [
                 WanAttentionBlock(dim, ffn_dim, num_heads, qk_norm, cross_attn_norm, eps)
@@ -264,10 +263,10 @@ class WanModel(nn.Module):
             ]
         )
 
-        # head
+        # 头部
         self.head = Head(dim, out_dim, patch_size, eps)
 
-        # buffers (don't use register_buffer otherwise dtype will be changed in to())
+        # 缓冲区（不要使用 register_buffer，否则 dtype 会在 to() 中被改变）
         if (dim % num_heads) != 0 or (dim // num_heads) % 2 != 0:
             raise ValueError(
                 f"dim ({dim}) must be divisible by num_heads ({num_heads}) with an even head dim."
@@ -282,29 +281,29 @@ class WanModel(nn.Module):
             dim=1,
         )
 
-        # initialize weights
+        # 初始化权重
         self.init_weights()
 
-    # NOTE: The upstream Wan diffusion forward (flash-attention based) was removed.
-    # FastWAM's WanVideoDiT subclasses this model, rebuilds `self.blocks` with
-    # FastWAMAttentionBlock, and provides its own SDPA-based forward. Only the
-    # constructor (embeddings, blocks, head, rope buffers) and the helpers below
-    # (unpatchify / init_weights) are reused. WanModel is never run directly.
+    # 注意：上游 Wan 扩散的 forward（基于 flash-attention）已被移除。
+    # FastWAM 的 WanVideoDiT 将本模型子类化，使用 FastWAMAttentionBlock
+    # 重建 `self.blocks`，并提供自己基于 SDPA 的 forward。只有构造函数
+    # （嵌入层、块、头部、rope 缓冲区）和下面的辅助函数
+    # （unpatchify / init_weights）被复用。WanModel 永远不会被直接运行。
 
     def unpatchify(self, x, grid_sizes):
         r"""
-        Reconstruct video tensors from patch embeddings.
+        从补丁嵌入重建视频张量。
 
         Args:
             x (List[Tensor]):
-                List of patchified features, each with shape [L, C_out * prod(patch_size)]
+                补丁化特征列表，每个形状为 [L, C_out * prod(patch_size)]
             grid_sizes (Tensor):
-                Original spatial-temporal grid dimensions before patching,
-                    shape [B, 3] (3 dimensions correspond to F_patches, H_patches, W_patches)
+                补丁化之前的原始时空网格维度，
+                    形状为 [B, 3]（3 个维度对应 F_patches、H_patches、W_patches）
 
         Returns:
             List[Tensor]:
-                Reconstructed video tensors with shape [C_out, F, H / 8, W / 8]
+                重建的视频张量，形状为 [C_out, F, H / 8, W / 8]
         """
 
         c = self.out_dim
@@ -318,17 +317,17 @@ class WanModel(nn.Module):
 
     def init_weights(self):
         r"""
-        Initialize model parameters using Xavier initialization.
+        使用 Xavier 初始化初始化模型参数。
         """
 
-        # basic init
+        # 基础初始化
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-        # init embeddings
+        # 初始化嵌入层
         nn.init.xavier_uniform_(self.patch_embedding.weight.flatten(1))
         for m in self.text_embedding.modules():
             if isinstance(m, nn.Linear):
@@ -337,5 +336,5 @@ class WanModel(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, std=0.02)
 
-        # init output layer
+        # 初始化输出层
         nn.init.zeros_(self.head.head.weight)

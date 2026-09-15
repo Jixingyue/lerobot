@@ -189,10 +189,10 @@ class DiT(ModelMixin, ConfigMixin):
 
 @dataclass
 class ActionModelPreset:
-    """Default head geometry per `action_model_type`.
+    """每种 `action_model_type` 的默认头部几何配置。
 
-    Only the attention geometry is preset; the DiT's width comes from
-    `config.action_hidden_size`, so there is deliberately no `hidden_size` here.
+    这里只预设注意力几何结构；DiT 的宽度来自
+    `config.action_hidden_size`，因此这里刻意不设置 `hidden_size`。
     """
 
     attention_head_dim: int
@@ -213,7 +213,7 @@ class VLAJEPAActionHead(nn.Module):
         self.config = config
         num_heads = config.action_num_heads or preset.num_attention_heads
         head_dim = config.action_attention_head_dim or preset.attention_head_dim
-        inner_dim = num_heads * head_dim  # e.g. DiT-B: 12 × 64 = 768
+        inner_dim = num_heads * head_dim  # 例如 DiT-B：12 × 64 = 768
 
         self.input_embedding_dim = inner_dim
         self.action_horizon = config.chunk_size
@@ -271,10 +271,10 @@ class VLAJEPAActionHead(nn.Module):
         state: torch.Tensor | None,
         timesteps: torch.Tensor,
     ) -> torch.Tensor:
-        """Build the DiT's own token sequence: [state?, future queries, noisy actions].
+        """构建 DiT 自身的 token 序列：[state?, future queries, noisy actions]。
 
-        The conditioning tokens are not part of this sequence; they reach the DiT as
-        `encoder_hidden_states` through cross-attention.
+        条件 token 不属于该序列；它们通过交叉注意力以
+        `encoder_hidden_states` 的形式传入 DiT。
         """
         action_features = self.action_encoder(actions, timesteps)
         pos_ids = torch.arange(action_features.shape[1], device=actions.device)
@@ -316,7 +316,7 @@ class VLAJEPAActionHead(nn.Module):
         loss = F.mse_loss(pred_actions, velocity, reduction="none")  # [B, T, action_dim]
         valid_mask = ~action_is_pad.unsqueeze(-1)  # [B, T, 1]
         if reduction == "none":
-            # Per-sample loss (B,) for sample weighting (RA-BC): mask-average over T and action_dim.
+            # 用于样本加权（RA-BC）的逐样本损失 (B,)：在 T 和 action_dim 上按掩码求平均。
             per_sample_valid = valid_mask.sum(dim=(1, 2)) * loss.shape[-1]  # [B]
             return (loss * valid_mask).sum(dim=(1, 2)) / per_sample_valid.clamp_min(1)
         num_valid = valid_mask.sum() * loss.shape[-1]

@@ -31,24 +31,24 @@ from .schedulers import (
     save_scheduler_state,
 )
 
-# NOTE: make_optimizer_and_scheduler is intentionally NOT re-exported here
-# to avoid circular dependencies (it imports lerobot.configs.train and lerobot.policies).
-# Import directly: ``from lerobot.optim.factory import make_optimizer_and_scheduler``
+# 注意：make_optimizer_and_scheduler 有意不在此处重新导出，
+# 以避免循环依赖（它会导入 lerobot.configs.train 和 lerobot.policies）。
+# 请直接导入：``from lerobot.optim.factory import make_optimizer_and_scheduler``
 
 __all__ = [
-    # Optimizer configs
+    # 优化器配置
     "AdamConfig",
     "AdamWConfig",
     "MultiAdamConfig",
     "OptimizerConfig",
     "SGDConfig",
     "XVLAAdamWConfig",
-    # Scheduler configs
+    # 调度器配置
     "CosineDecayWithWarmupSchedulerConfig",
     "DiffuserSchedulerConfig",
     "LRSchedulerConfig",
     "VQBeTSchedulerConfig",
-    # State management
+    # 状态管理
     "load_optimizer_state",
     "load_scheduler_state",
     "save_optimizer_state",

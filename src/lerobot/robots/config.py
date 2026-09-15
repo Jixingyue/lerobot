@@ -21,9 +21,9 @@ import draccus
 
 @dataclass(kw_only=True)
 class RobotConfig(draccus.ChoiceRegistry, abc.ABC):
-    # Allows to distinguish between different robots of the same type
+    # 用于区分同一类型的不同机器人
     id: str | None = None
-    # Directory to store calibration file
+    # 用于存储校准文件的目录
     calibration_dir: Path | None = None
 
     def __post_init__(self):

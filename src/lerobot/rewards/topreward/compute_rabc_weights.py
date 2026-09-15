@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compute per-frame TOPReward progress curves for a LeRobot dataset.
+"""为 LeRobot 数据集计算逐帧的 TOPReward 进度曲线。
 
-For each episode, scores trajectory prefixes of increasing length using
-the TOPReward reward model, min-max normalises the raw log-prob rewards per episode,
-and writes a parquet file with one row per frame.
+对每个 episode，使用 TOPReward 奖励模型对长度递增的轨迹前缀进行评分，
+按 episode 对原始 log-prob 奖励做最小-最大归一化，
+并写入一个每帧一行的 parquet 文件。
 
-The parquet uses the same schema as SARM's :mod:`lerobot.rewards.sarm.compute_rabc_weights`.
+该 parquet 使用与 SARM 的 :mod:`lerobot.rewards.sarm.compute_rabc_weights` 相同的模式（schema）。
 
 Usage:
     # Sparse-dense mode (15 anchors per episode, matches upstream)
@@ -57,7 +57,7 @@ DEFAULT_OUTPUT_FILENAME = "topreward_progress.parquet"
 
 
 def get_reward_model_path_from_parquet(parquet_path: Path) -> str | None:
-    """Read ``reward_model_path`` from parquet metadata if available."""
+    """如果可用，从 parquet 元数据中读取 ``reward_model_path``。"""
     if not parquet_path.exists():
         return None
     try:
@@ -70,7 +70,7 @@ def get_reward_model_path_from_parquet(parquet_path: Path) -> str | None:
 
 
 def _resolve_task(sample: dict[str, Any], default: str) -> str:
-    """Best-effort task extraction from a dataset sample."""
+    """尽力从数据集样本中提取任务描述。"""
     task = sample.get("task")
     if isinstance(task, str) and task:
         return task
@@ -78,7 +78,7 @@ def _resolve_task(sample: dict[str, Any], default: str) -> str:
 
 
 def normalize_rewards(rewards: list[float] | np.ndarray) -> np.ndarray:
-    """Min-max normalise raw log-prob rewards into ``[0, 1]``."""
+    """将原始 log-prob 奖励最小-最大归一化到 ``[0, 1]``。"""
     rewards_arr = np.asarray(rewards, dtype=np.float64)
     if rewards_arr.size == 0:
         return rewards_arr.astype(np.float32)
@@ -101,7 +101,7 @@ def compute_instruction_rewards_for_prefixes(
     num_samples: int | None,
     device: str,
 ) -> np.ndarray:
-    """Score an episode via prefix sweep and return a per-frame normalised curve."""
+    """通过前缀扫描对 episode 进行评分，并返回逐帧归一化的曲线。"""
     if num_samples is None or num_samples >= num_frames:
         prefix_lengths = np.arange(1, num_frames + 1, dtype=np.int64)
     else:
@@ -148,7 +148,7 @@ def compute_topreward_progress(
     fps: float | None = None,
     episodes: list[int] | None = None,
 ) -> Path:
-    """Run TOPReward over a dataset and write per-frame progress."""
+    """在数据集上运行 TOPReward 并写入逐帧进度。"""
     if reward_model_path is not None:
         logging.info(f"Loading TOPReward config from: {reward_model_path}")
         model = TOPRewardModel.from_pretrained(reward_model_path)
@@ -175,7 +175,7 @@ def compute_topreward_progress(
         image_key=config.image_key,
         task_key=config.task_key,
         default_task=config.default_task,
-        max_frames=None,  # no tail-crop: we control prefix length explicitly
+        max_frames=None,  # 不进行尾部裁剪：我们显式控制前缀长度
         fps=config.fps,
         prompt_prefix=config.prompt_prefix,
         prompt_suffix_template=config.prompt_suffix_template,

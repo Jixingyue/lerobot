@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Provides the Reachy2Camera class for capturing frames from Reachy 2 cameras using Reachy 2's CameraManager.
+提供 Reachy2Camera 类，用于使用 Reachy 2 的 CameraManager 从 Reachy 2 相机捕获帧。
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ import platform
 import time
 from typing import TYPE_CHECKING, Any
 
-from numpy.typing import NDArray  # type: ignore  # TODO: add type stubs for numpy.typing
+from numpy.typing import NDArray  # type: ignore  # TODO: 为 numpy.typing 添加类型存根
 
-# Fix MSMF hardware transform compatibility for Windows before importing cv2
+# 在导入 cv2 之前，修复 Windows 上 MSMF 硬件变换的兼容性问题
 if platform.system() == "Windows" and "OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS" not in os.environ:
     os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
-import cv2  # type: ignore  # TODO: add type stubs for OpenCV
-import numpy as np  # type: ignore  # TODO: add type stubs for numpy
+import cv2  # type: ignore  # TODO: 为 OpenCV 添加类型存根
+import numpy as np  # type: ignore  # TODO: 为 numpy 添加类型存根
 
 from lerobot.utils.decorators import check_if_not_connected
 from lerobot.utils.import_utils import _reachy2_sdk_available, require_package
@@ -56,25 +56,24 @@ logger = logging.getLogger(__name__)
 
 class Reachy2Camera(Camera):
     """
-    Manages Reachy 2 camera using Reachy 2 CameraManager.
+    使用 Reachy 2 CameraManager 管理 Reachy 2 相机。
 
-    This class provides a high-level interface to connect to, configure, and read
-    frames from Reachy 2 cameras. It supports both synchronous and asynchronous
-    frame reading.
+    该类提供了一个高级接口，用于连接、配置和读取
+    Reachy 2 相机的帧。它支持同步和异步两种
+    帧读取方式。
 
-    An Reachy2Camera instance requires a camera name (e.g., "teleop") and an image
-    type (e.g., "left") to be specified in the configuration.
+    Reachy2Camera 实例需要在配置中指定相机名称
+    （如 "teleop"）和图像类型（如 "left"）。
 
-    The camera's default settings (FPS, resolution, color mode) are used unless
-    overridden in the configuration.
+    除非在配置中覆盖，否则使用相机的默认设置（FPS、分辨率、颜色模式）。
     """
 
     def __init__(self, config: Reachy2CameraConfig):
         """
-        Initializes the Reachy2Camera instance.
+        初始化 Reachy2Camera 实例。
 
-        Args:
-            config: The configuration settings for the camera.
+        参数：
+            config: 相机的配置项。
         """
         require_package("reachy2_sdk", extra="reachy2")
         super().__init__(config)
@@ -92,7 +91,7 @@ class Reachy2Camera(Camera):
 
     @property
     def is_connected(self) -> bool:
-        """Checks if the camera is currently connected and opened."""
+        """检查相机当前是否已连接并打开。"""
         if self.config.name == "teleop":
             return bool(
                 self.cam_manager._grpc_connected and self.cam_manager.teleop if self.cam_manager else False
@@ -106,10 +105,10 @@ class Reachy2Camera(Camera):
 
     def connect(self, warmup: bool = True) -> None:
         """
-        Connects to the Reachy2 CameraManager as specified in the configuration.
+        按配置连接到 Reachy2 CameraManager。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
         """
         self.cam_manager = CameraManager(host=self.config.ip_address, port=self.config.port)
         if self.cam_manager is None:
@@ -121,21 +120,21 @@ class Reachy2Camera(Camera):
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:
         """
-        Detection not implemented for Reachy2 cameras.
+        Reachy2 相机未实现检测功能。
         """
         raise NotImplementedError("Camera detection is not implemented for Reachy2 cameras.")
 
     @check_if_not_connected
     def read(self, color_mode: ColorMode | None = None) -> NDArray[Any]:
         """
-        Reads a single frame synchronously from the camera.
+        以同步方式从相机读取单帧。
 
-        This method retrieves the most recent frame available in Reachy 2's low-level software.
+        此方法获取 Reachy 2 底层软件中最新可用的帧。
 
-        Returns:
-            np.ndarray: The captured frame as a NumPy array in the format
-                       (height, width, channels), using the specified or default
-                       color mode and applying any configured rotation.
+        返回：
+            np.ndarray: 捕获的帧（NumPy 数组），格式为
+                       (height, width, channels)，使用指定或默认的
+                       颜色模式，并应用已配置的旋转。
         """
         start_time = time.perf_counter()
 
@@ -188,37 +187,37 @@ class Reachy2Camera(Camera):
     @check_if_not_connected
     def async_read(self, timeout_ms: float = 200) -> NDArray[Any]:
         """
-        Same as read()
+        与 read() 相同
 
-        Returns:
-            np.ndarray: The latest captured frame as a NumPy array in the format
-                       (height, width, channels), processed according to configuration.
+        返回：
+            np.ndarray: 最新捕获的帧（NumPy 数组），格式为
+                       (height, width, channels)，已按配置处理。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            TimeoutError: If no frame becomes available within the specified timeout.
-            RuntimeError: If an unexpected error occurs.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            TimeoutError: 如果在指定超时内没有帧可用。
+            RuntimeError: 如果发生意外错误。
         """
 
         return self.read()
 
     @check_if_not_connected
     def read_latest(self, max_age_ms: int = 500) -> NDArray[Any]:
-        """Return the most recent frame captured immediately (Peeking).
+        """立即返回最近捕获的帧（窥视模式）。
 
-        This method is non-blocking and returns whatever is currently in the
-        memory buffer. The frame may be stale,
-        meaning it could have been captured a while ago (hanging camera scenario e.g.).
+        此方法是非阻塞的，直接返回当前内存缓冲区中的内容。
+        该帧可能已过期，
+        即它可能是很久之前捕获的（例如相机挂起的场景）。
 
-        Returns:
+        返回：
             tuple[NDArray, float]:
-                - The frame image (numpy array).
-                - The timestamp (time.perf_counter) when this frame was captured.
+                - 帧图像（numpy 数组）。
+                - 捕获该帧时的时间戳 (time.perf_counter)。
 
-        Raises:
-            TimeoutError: If the latest frame is older than `max_age_ms`.
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If the camera is connected but has not captured any frames yet.
+        异常：
+            TimeoutError: 如果最新帧的年龄超过 `max_age_ms`。
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果相机已连接但尚未捕获任何帧。
         """
 
         if self.latest_frame is None or self.latest_timestamp is None:
@@ -235,10 +234,10 @@ class Reachy2Camera(Camera):
     @check_if_not_connected
     def disconnect(self) -> None:
         """
-        Stops the background read thread (if running).
+        停止后台读取线程（如果正在运行）。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is already disconnected.
+        异常：
+            DeviceNotConnectedError: 如果相机已断开连接。
         """
 
         if self.cam_manager is not None:

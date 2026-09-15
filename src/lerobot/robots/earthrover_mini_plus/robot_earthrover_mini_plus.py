@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""EarthRover Mini Plus robot using Frodobots SDK."""
+"""使用 Frodobots SDK 的 EarthRover Mini Plus 机器人。"""
 
 import base64
 import logging
@@ -32,15 +32,15 @@ from .config_earthrover_mini_plus import EarthRoverMiniPlusConfig
 
 logger = logging.getLogger(__name__)
 
-# Action feature keys
+# 动作特征键
 ACTION_LINEAR_VEL = "linear_velocity"
 ACTION_ANGULAR_VEL = "angular_velocity"
 
-# Observation feature keys — cameras
+# 观测特征键 — 相机
 OBS_FRONT = "front"
 OBS_REAR = "rear"
 
-# Observation feature keys — telemetry
+# 观测特征键 — 遥测
 OBS_SPEED = "speed"
 OBS_BATTERY_LEVEL = "battery_level"
 OBS_ORIENTATION = "orientation"
@@ -51,7 +51,7 @@ OBS_SIGNAL_LEVEL = "signal_level"
 OBS_VIBRATION = "vibration"
 OBS_LAMP = "lamp"
 
-# Observation feature keys — IMU sensors
+# 观测特征键 — IMU 传感器
 OBS_ACCELEROMETER_X = "accelerometer_x"
 OBS_ACCELEROMETER_Y = "accelerometer_y"
 OBS_ACCELEROMETER_Z = "accelerometer_z"
@@ -62,7 +62,7 @@ OBS_MAGNETOMETER_X = "magnetometer_filtered_x"
 OBS_MAGNETOMETER_Y = "magnetometer_filtered_y"
 OBS_MAGNETOMETER_Z = "magnetometer_filtered_z"
 
-# Observation feature keys — wheel RPMs
+# 观测特征键 — 车轮转速（RPM）
 OBS_WHEEL_RPM_0 = "wheel_rpm_0"
 OBS_WHEEL_RPM_1 = "wheel_rpm_1"
 OBS_WHEEL_RPM_2 = "wheel_rpm_2"
@@ -71,68 +71,68 @@ OBS_WHEEL_RPM_3 = "wheel_rpm_3"
 
 class EarthRoverMiniPlus(Robot):
     """
-    EarthRover Mini Plus robot controlled via Frodobots SDK HTTP API.
+    通过 Frodobots SDK HTTP API 控制的 EarthRover Mini Plus 机器人。
 
-    This robot uses cloud-based control through the Frodobots SDK instead of direct
-    hardware connection. Cameras stream via WebRTC through Agora cloud, and control
-    commands are sent via HTTP POST requests.
+    该机器人通过 Frodobots SDK 使用基于云的控制，而不是直接
+    连接硬件。相机通过 Agora 云以 WebRTC 方式传输视频流，控制
+    命令通过 HTTP POST 请求发送。
 
-    The robot supports:
-    - Dual cameras (front and rear) accessed via SDK HTTP endpoints
-    - Linear and angular velocity control
-    - Battery and orientation telemetry
+    该机器人支持：
+    - 通过 SDK HTTP 端点访问的双相机（前和后）
+    - 线速度和角速度控制
+    - 电池和朝向遥测
 
     Attributes:
-        config: Robot configuration
-        sdk_base_url: Base URL of the Frodobots SDK server, taken from
-            ``config.sdk_url`` (default: http://localhost:8000)
+        config: 机器人配置
+        sdk_base_url: Frodobots SDK 服务器的基础 URL，取自
+            ``config.sdk_url``（默认：http://localhost:8000）
     """
 
     config_class = EarthRoverMiniPlusConfig
     name = "earthrover_mini_plus"
 
     def __init__(self, config: EarthRoverMiniPlusConfig):
-        """Initialize EarthRover Mini Plus robot.
+        """初始化 EarthRover Mini Plus 机器人。
 
         Args:
-            config: Robot configuration including SDK URL
+            config: 机器人配置，包括 SDK URL
         """
         super().__init__(config)
         self.config = config
         self.sdk_base_url = config.sdk_url
 
-        # Empty cameras dict for compatibility with recording script
-        # Cameras are accessed directly via SDK, not through Camera objects
+        # 空的相机字典，用于兼容录制脚本
+        # 相机通过 SDK 直接访问，而不是通过 Camera 对象
         self.cameras = {}
         self._is_connected = False
 
-        # Cache for camera frames (fallback when requests fail)
+        # 相机帧缓存（请求失败时的回退）
         self._last_front_frame = None
         self._last_rear_frame = None
 
-        # Cache for robot telemetry data (fallback when requests fail)
+        # 机器人遥测数据缓存（请求失败时的回退）
         self._last_robot_data = None
 
         logger.info(f"Initialized {self.name} with SDK at {self.sdk_base_url}")
 
     @property
     def is_connected(self) -> bool:
-        """Check if robot is connected to SDK."""
+        """检查机器人是否已连接到 SDK。"""
         return self._is_connected
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
-        """Connect to robot via Frodobots SDK.
+        """通过 Frodobots SDK 连接到机器人。
 
         Args:
-            calibrate: Not used for SDK-based robot (kept for API compatibility)
+            calibrate: 对基于 SDK 的机器人不使用（为 API 兼容性而保留）
 
         Raises:
-            DeviceAlreadyConnectedError: If robot is already connected
-            DeviceNotConnectedError: If cannot connect to SDK server
+            DeviceAlreadyConnectedError: 如果机器人已连接
+            DeviceNotConnectedError: 如果无法连接到 SDK 服务器
         """
 
-        # Verify SDK is running and accessible
+        # 验证 SDK 正在运行且可访问
         try:
             response = requests.get(f"{self.sdk_base_url}/data", timeout=10.0)
             if response.status_code != 200:
@@ -150,58 +150,58 @@ class EarthRoverMiniPlus(Robot):
             self.calibrate()
 
     def calibrate(self) -> None:
-        """Calibration not needed for SDK-based robot."""
+        """基于 SDK 的机器人不需要校准。"""
         logger.info("Calibration not required for SDK-based robot")
 
     @property
     def is_calibrated(self) -> bool:
-        """SDK robot doesn't require calibration.
+        """SDK 机器人不需要校准。
 
         Returns:
-            bool: Always True for SDK-based robots
+            bool: 对基于 SDK 的机器人始终为 True
         """
         return True
 
     def configure(self) -> None:
-        """Configure robot (no-op for SDK-based robot)."""
+        """配置机器人（对基于 SDK 的机器人为空操作）。"""
         pass
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
-        """Define the observation space for dataset recording.
+        """定义用于数据集录制的观测空间。
 
         Returns:
-            dict: Observation features with types/shapes:
-                - front: (480, 640, 3) - Front camera RGB image
-                - rear: (480, 640, 3) - Rear camera RGB image
-                - speed: float - Current speed (raw SDK value)
-                - battery_level: float - Battery level (0-100)
-                - orientation: float - Robot orientation in degrees
-                - gps_latitude: float - GPS latitude coordinate
-                - gps_longitude: float - GPS longitude coordinate
-                - gps_signal: float - GPS signal strength (percentage)
-                - signal_level: float - Network signal level (0-5)
-                - vibration: float - Vibration sensor reading
-                - lamp: float - Lamp state (0=off, 1=on)
-                - accelerometer_x: float - Accelerometer X axis (raw SDK value)
-                - accelerometer_y: float - Accelerometer Y axis (raw SDK value)
-                - accelerometer_z: float - Accelerometer Z axis (raw SDK value)
-                - gyroscope_x: float - Gyroscope X axis (raw SDK value)
-                - gyroscope_y: float - Gyroscope Y axis (raw SDK value)
-                - gyroscope_z: float - Gyroscope Z axis (raw SDK value)
-                - magnetometer_filtered_x: float - Magnetometer X axis (raw SDK value)
-                - magnetometer_filtered_y: float - Magnetometer Y axis (raw SDK value)
-                - magnetometer_filtered_z: float - Magnetometer Z axis (raw SDK value)
-                - wheel_rpm_0: float - Wheel 0 RPM
-                - wheel_rpm_1: float - Wheel 1 RPM
-                - wheel_rpm_2: float - Wheel 2 RPM
-                - wheel_rpm_3: float - Wheel 3 RPM
+            dict: 带类型/形状的观测特征：
+                - front: (480, 640, 3) - 前相机 RGB 图像
+                - rear: (480, 640, 3) - 后相机 RGB 图像
+                - speed: float - 当前速度（SDK 原始值）
+                - battery_level: float - 电池电量（0-100）
+                - orientation: float - 机器人朝向（度）
+                - gps_latitude: float - GPS 纬度坐标
+                - gps_longitude: float - GPS 经度坐标
+                - gps_signal: float - GPS 信号强度（百分比）
+                - signal_level: float - 网络信号等级（0-5）
+                - vibration: float - 振动传感器读数
+                - lamp: float - 灯状态（0=关，1=开）
+                - accelerometer_x: float - 加速度计 X 轴（SDK 原始值）
+                - accelerometer_y: float - 加速度计 Y 轴（SDK 原始值）
+                - accelerometer_z: float - 加速度计 Z 轴（SDK 原始值）
+                - gyroscope_x: float - 陀螺仪 X 轴（SDK 原始值）
+                - gyroscope_y: float - 陀螺仪 Y 轴（SDK 原始值）
+                - gyroscope_z: float - 陀螺仪 Z 轴（SDK 原始值）
+                - magnetometer_filtered_x: float - 磁力计 X 轴（SDK 原始值）
+                - magnetometer_filtered_y: float - 磁力计 Y 轴（SDK 原始值）
+                - magnetometer_filtered_z: float - 磁力计 Z 轴（SDK 原始值）
+                - wheel_rpm_0: float - 车轮 0 转速（RPM）
+                - wheel_rpm_1: float - 车轮 1 转速（RPM）
+                - wheel_rpm_2: float - 车轮 2 转速（RPM）
+                - wheel_rpm_3: float - 车轮 3 转速（RPM）
         """
         return {
-            # Cameras (height, width, channels)
+            # 相机（高度、宽度、通道数）
             OBS_FRONT: (480, 640, 3),
             OBS_REAR: (480, 640, 3),
-            # Telemetry
+            # 遥测
             OBS_SPEED: float,
             OBS_BATTERY_LEVEL: float,
             OBS_ORIENTATION: float,
@@ -211,19 +211,19 @@ class EarthRoverMiniPlus(Robot):
             OBS_SIGNAL_LEVEL: float,
             OBS_VIBRATION: float,
             OBS_LAMP: float,
-            # IMU — accelerometer
+            # IMU — 加速度计
             OBS_ACCELEROMETER_X: float,
             OBS_ACCELEROMETER_Y: float,
             OBS_ACCELEROMETER_Z: float,
-            # IMU — gyroscope
+            # IMU — 陀螺仪
             OBS_GYROSCOPE_X: float,
             OBS_GYROSCOPE_Y: float,
             OBS_GYROSCOPE_Z: float,
-            # IMU — magnetometer
+            # IMU — 磁力计
             OBS_MAGNETOMETER_X: float,
             OBS_MAGNETOMETER_Y: float,
             OBS_MAGNETOMETER_Z: float,
-            # Wheel RPMs
+            # 车轮转速（RPM）
             OBS_WHEEL_RPM_0: float,
             OBS_WHEEL_RPM_1: float,
             OBS_WHEEL_RPM_2: float,
@@ -232,12 +232,12 @@ class EarthRoverMiniPlus(Robot):
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        """Define the action space.
+        """定义动作空间。
 
         Returns:
-            dict: Action features with types:
-                - linear_velocity: float - Target linear velocity (-1 to 1)
-                - angular_velocity: float - Target angular velocity (-1 to 1)
+            dict: 带类型的动作特征：
+                - linear_velocity: float - 目标线速度（-1 到 1）
+                - angular_velocity: float - 目标角速度（-1 到 1）
         """
         return {
             ACTION_LINEAR_VEL: float,
@@ -246,53 +246,53 @@ class EarthRoverMiniPlus(Robot):
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
-        """Get current robot observation from SDK.
+        """从 SDK 获取当前机器人观测。
 
-        Camera frames are retrieved from SDK endpoints /v2/front and /v2/rear.
-        Frames are decoded from base64 and converted from BGR to RGB format.
-        Robot telemetry is retrieved from /data endpoint.
-        Sensor arrays (accels, gyros, mags, rpms) each contain entries of
-        [values..., timestamp]; the latest reading from each array is used.
+        相机帧从 SDK 端点 /v2/front 和 /v2/rear 获取。
+        帧从 base64 解码，并从 BGR 格式转换为 RGB 格式。
+        机器人遥测从 /data 端点获取。
+        传感器数组（accels、gyros、mags、rpms）的每个条目都是
+        [values..., timestamp] 的形式；使用每个数组中的最新读数。
 
         Returns:
-            RobotObservation: Observation containing:
-                - front: Front camera image (480, 640, 3) in RGB format
-                - rear: Rear camera image (480, 640, 3) in RGB format
-                - speed: float - Current speed (raw SDK value)
-                - battery_level: float - Battery level (0-100)
-                - orientation: float - Robot orientation in degrees
-                - gps_latitude: float - GPS latitude coordinate
-                - gps_longitude: float - GPS longitude coordinate
-                - gps_signal: float - GPS signal strength (percentage)
-                - signal_level: float - Network signal level (0-5)
-                - vibration: float - Vibration sensor reading
-                - lamp: float - Lamp state (0=off, 1=on)
-                - accelerometer_x/y/z: float - Accelerometer axes (raw SDK value)
-                - gyroscope_x/y/z: float - Gyroscope axes (raw SDK value)
-                - magnetometer_filtered_x/y/z: float - Magnetometer axes (raw SDK value)
-                - wheel_rpm_0/1/2/3: float - Wheel RPMs
+            RobotObservation: 包含以下内容的观测：
+                - front: 前相机图像 (480, 640, 3)，RGB 格式
+                - rear: 后相机图像 (480, 640, 3)，RGB 格式
+                - speed: float - 当前速度（SDK 原始值）
+                - battery_level: float - 电池电量（0-100）
+                - orientation: float - 机器人朝向（度）
+                - gps_latitude: float - GPS 纬度坐标
+                - gps_longitude: float - GPS 经度坐标
+                - gps_signal: float - GPS 信号强度（百分比）
+                - signal_level: float - 网络信号等级（0-5）
+                - vibration: float - 振动传感器读数
+                - lamp: float - 灯状态（0=关，1=开）
+                - accelerometer_x/y/z: float - 加速度计各轴（SDK 原始值）
+                - gyroscope_x/y/z: float - 陀螺仪各轴（SDK 原始值）
+                - magnetometer_filtered_x/y/z: float - 磁力计各轴（SDK 原始值）
+                - wheel_rpm_0/1/2/3: float - 车轮转速（RPM）
 
         Raises:
-            DeviceNotConnectedError: If robot is not connected
+            DeviceNotConnectedError: 如果机器人未连接
 
         Note:
-            Camera frames are retrieved from SDK endpoints /v2/front and /v2/rear.
-            Frames are decoded from base64 and converted from BGR to RGB format.
-            Robot telemetry is retrieved from /data endpoint.
-            All SDK values are normalized to appropriate ranges for dataset recording.
+            相机帧从 SDK 端点 /v2/front 和 /v2/rear 获取。
+            帧从 base64 解码，并从 BGR 格式转换为 RGB 格式。
+            机器人遥测从 /data 端点获取。
+            所有 SDK 值都归一化到适合数据集录制的范围。
         """
 
         observation = {}
 
-        # Get camera images from SDK
+        # 从 SDK 获取相机图像
         frames = self._get_camera_frames()
         observation[OBS_FRONT] = frames["front"]
         observation[OBS_REAR] = frames["rear"]
 
-        # Get robot state from SDK
+        # 从 SDK 获取机器人状态
         robot_data = self._get_robot_data()
 
-        # Telemetry
+        # 遥测
         observation[OBS_SPEED] = float(robot_data["speed"])
         observation[OBS_BATTERY_LEVEL] = float(robot_data["battery"])
         observation[OBS_ORIENTATION] = float(robot_data["orientation"])
@@ -303,25 +303,25 @@ class EarthRoverMiniPlus(Robot):
         observation[OBS_VIBRATION] = float(robot_data["vibration"])
         observation[OBS_LAMP] = float(robot_data["lamp"])
 
-        # Accelerometer — latest reading from accels array [x, y, z, ts]
+        # 加速度计 — accels 数组的最新读数 [x, y, z, ts]
         accel = self._latest_sensor_reading(robot_data, "accels", n_values=3)
         observation[OBS_ACCELEROMETER_X] = accel[0]
         observation[OBS_ACCELEROMETER_Y] = accel[1]
         observation[OBS_ACCELEROMETER_Z] = accel[2]
 
-        # Gyroscope — latest reading from gyros array [x, y, z, ts]
+        # 陀螺仪 — gyros 数组的最新读数 [x, y, z, ts]
         gyro = self._latest_sensor_reading(robot_data, "gyros", n_values=3)
         observation[OBS_GYROSCOPE_X] = gyro[0]
         observation[OBS_GYROSCOPE_Y] = gyro[1]
         observation[OBS_GYROSCOPE_Z] = gyro[2]
 
-        # Magnetometer — latest reading from mags array [x, y, z, ts]
+        # 磁力计 — mags 数组的最新读数 [x, y, z, ts]
         mag = self._latest_sensor_reading(robot_data, "mags", n_values=3)
         observation[OBS_MAGNETOMETER_X] = mag[0]
         observation[OBS_MAGNETOMETER_Y] = mag[1]
         observation[OBS_MAGNETOMETER_Z] = mag[2]
 
-        # Wheel RPMs — latest reading from rpms array [w0, w1, w2, w3, ts]
+        # 车轮转速 — rpms 数组的最新读数 [w0, w1, w2, w3, ts]
         rpm = self._latest_sensor_reading(robot_data, "rpms", n_values=4)
         observation[OBS_WHEEL_RPM_0] = rpm[0]
         observation[OBS_WHEEL_RPM_1] = rpm[1]
@@ -332,22 +332,22 @@ class EarthRoverMiniPlus(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Send action to robot via SDK.
+        """通过 SDK 向机器人发送动作。
 
         Args:
-            action: Action dict with keys:
-                - linear_velocity: Target linear velocity (-1 to 1)
-                - angular_velocity: Target angular velocity (-1 to 1)
+            action: 包含以下键的动作字典：
+                - linear_velocity: 目标线速度（-1 到 1）
+                - angular_velocity: 目标角速度（-1 到 1）
 
         Returns:
-            RobotAction: The action that was sent (matches action_features keys)
+            RobotAction: 已发送的动作（与 action_features 的键匹配）
 
         Raises:
-            DeviceNotConnectedError: If robot is not connected
+            DeviceNotConnectedError: 如果机器人未连接
 
         Note:
-            Actions are sent to SDK via POST /control endpoint.
-            SDK expects commands in range [-1, 1].
+            动作通过 POST /control 端点发送到 SDK。
+            SDK 期望命令在 [-1, 1] 范围内。
         """
         linear = float(action.get(ACTION_LINEAR_VEL, 0.0))
         angular = float(action.get(ACTION_ANGULAR_VEL, 0.0))
@@ -364,15 +364,15 @@ class EarthRoverMiniPlus(Robot):
 
     @check_if_not_connected
     def disconnect(self) -> None:
-        """Disconnect from robot.
+        """断开与机器人的连接。
 
-        Stops the robot and closes connection to SDK.
+        停止机器人并关闭与 SDK 的连接。
 
         Raises:
-            DeviceNotConnectedError: If robot is not connected
+            DeviceNotConnectedError: 如果机器人未连接
         """
 
-        # Stop the robot before disconnecting
+        # 断开连接前先停止机器人
         try:
             self._send_command_to_sdk(0.0, 0.0)
         except Exception as e:
@@ -381,25 +381,25 @@ class EarthRoverMiniPlus(Robot):
         self._is_connected = False
         logger.info(f"{self.name} disconnected")
 
-    # Private helper methods for SDK communication
+    # 用于 SDK 通信的私有辅助方法
 
     def _get_camera_frames(self) -> dict[str, np.ndarray]:
-        """Get camera frames from SDK using v2 endpoints with caching fallback.
+        """使用 v2 端点从 SDK 获取相机帧，带缓存回退。
 
         Returns:
-            dict: Dictionary with 'front' and 'rear' keys containing:
-                - Current frame (if request succeeds)
-                - Cached frame (if request fails but cache exists)
-                - Zero array (if request fails and no cache exists yet)
+            dict: 包含 'front' 和 'rear' 键的字典，内容为：
+                - 当前帧（如果请求成功）
+                - 缓存帧（如果请求失败但缓存存在）
+                - 零数组（如果请求失败且尚无缓存）
 
         Note:
-            Uses /v2/front and /v2/rear endpoints which are 15x faster than /screenshot.
-            Images are base64 encoded, resized to 640x480, and converted from BGR to RGB.
-            If request fails, returns the last successfully retrieved frame (cached).
+            使用 /v2/front 和 /v2/rear 端点，比 /screenshot 快 15 倍。
+            图像为 base64 编码，调整为 640x480 大小，并从 BGR 转换为 RGB。
+            如果请求失败，返回最后一次成功获取的帧（缓存）。
         """
         frames = {}
 
-        # Get front camera
+        # 获取前相机
         try:
             response = requests.get(f"{self.sdk_base_url}/v2/front", timeout=2.0)
             if response.status_code == 200:
@@ -407,23 +407,23 @@ class EarthRoverMiniPlus(Robot):
                 if "front_frame" in data and data["front_frame"]:
                     front_img = self._decode_base64_image(data["front_frame"])
                     if front_img is not None:
-                        # Resize and convert BGR to RGB
+                        # 调整大小并将 BGR 转换为 RGB
                         front_img = cv2.resize(front_img, (640, 480))
                         front_rgb = cv2.cvtColor(front_img, cv2.COLOR_BGR2RGB)
                         frames["front"] = front_rgb
-                        # Cache the successful frame
+                        # 缓存成功的帧
                         self._last_front_frame = front_rgb
         except Exception as e:
             logger.warning(f"Error fetching front camera: {e}")
 
-        # Fallback: use cache or zero array
+        # 回退：使用缓存或零数组
         if "front" not in frames:
             if self._last_front_frame is not None:
                 frames["front"] = self._last_front_frame
             else:
                 frames["front"] = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        # Get rear camera
+        # 获取后相机
         try:
             response = requests.get(f"{self.sdk_base_url}/v2/rear", timeout=2.0)
             if response.status_code == 200:
@@ -431,16 +431,16 @@ class EarthRoverMiniPlus(Robot):
                 if "rear_frame" in data and data["rear_frame"]:
                     rear_img = self._decode_base64_image(data["rear_frame"])
                     if rear_img is not None:
-                        # Resize and convert BGR to RGB
+                        # 调整大小并将 BGR 转换为 RGB
                         rear_img = cv2.resize(rear_img, (640, 480))
                         rear_rgb = cv2.cvtColor(rear_img, cv2.COLOR_BGR2RGB)
                         frames["rear"] = rear_rgb
-                        # Cache the successful frame
+                        # 缓存成功的帧
                         self._last_rear_frame = rear_rgb
         except Exception as e:
             logger.warning(f"Error fetching rear camera: {e}")
 
-        # Fallback: use cache or zero array
+        # 回退：使用缓存或零数组
         if "rear" not in frames:
             if self._last_rear_frame is not None:
                 frames["rear"] = self._last_rear_frame
@@ -450,31 +450,31 @@ class EarthRoverMiniPlus(Robot):
         return frames
 
     def _decode_base64_image(self, base64_string: str) -> np.ndarray | None:
-        """Decode base64 string to image.
+        """将 base64 字符串解码为图像。
 
         Args:
-            base64_string: Base64 encoded image string
+            base64_string: Base64 编码的图像字符串
 
         Returns:
-            np.ndarray: Decoded image in BGR format (OpenCV default), or None if decoding fails
+            np.ndarray: BGR 格式的解码图像（OpenCV 默认），解码失败则返回 None
         """
         try:
             img_bytes = base64.b64decode(base64_string)
             nparr = np.frombuffer(img_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            return img  # Return in BGR format (OpenCV default)
+            return img  # 以 BGR 格式返回（OpenCV 默认）
         except Exception as e:
             logger.error(f"Error decoding image: {e}")
             return None
 
     @staticmethod
     def _latest_sensor_reading(robot_data: dict, key: str, n_values: int) -> list[float]:
-        """Extract the latest sensor reading from an SDK sensor array.
+        """从 SDK 传感器数组中提取最新的传感器读数。
 
-        The SDK returns sensor arrays like ``accels``, ``gyros``, ``mags``,
-        ``rpms`` where each entry is ``[value_0, ..., value_n, timestamp]``.
-        This helper returns the *n_values* leading floats from the last entry,
-        falling back to zeros when the key is missing or the array is empty.
+        SDK 返回如 ``accels``、``gyros``、``mags``、``rpms`` 这样的
+        传感器数组，其中每个条目都是 ``[value_0, ..., value_n, timestamp]``。
+        此辅助方法返回最后一个条目的前 *n_values* 个浮点数，
+        当键缺失或数组为空时回退为零。
         """
         readings = robot_data.get(key)
         if readings and len(readings) > 0:
@@ -483,34 +483,34 @@ class EarthRoverMiniPlus(Robot):
         return [0.0] * n_values
 
     def _get_robot_data(self) -> dict:
-        """Get robot telemetry data from SDK.
+        """从 SDK 获取机器人遥测数据。
 
         Returns:
-            dict: Robot telemetry data including battery, speed, orientation, GPS,
-                and sensor arrays (accels, gyros, mags, rpms):
-                - Current data (if request succeeds)
-                - Cached data (if request fails but cache exists)
-                - Default values (if request fails and no cache exists yet)
+            dict: 机器人遥测数据，包括电池、速度、朝向、GPS
+                和传感器数组（accels、gyros、mags、rpms）：
+                - 当前数据（如果请求成功）
+                - 缓存数据（如果请求失败但缓存存在）
+                - 默认值（如果请求失败且尚无缓存）
 
         Note:
-            Uses /data endpoint which provides comprehensive robot state.
-            If request fails, returns the last successfully retrieved data (cached).
+            使用提供完整机器人状态的 /data 端点。
+            如果请求失败，返回最后一次成功获取的数据（缓存）。
         """
         try:
             response = requests.get(f"{self.sdk_base_url}/data", timeout=2.0)
             if response.status_code == 200:
                 data = response.json()
-                # Cache the successful data
+                # 缓存成功的数据
                 self._last_robot_data = data
                 return data
         except Exception as e:
             logger.warning(f"Error fetching robot data: {e}")
 
-        # Fallback: use cache or default values
+        # 回退：使用缓存或默认值
         if self._last_robot_data is not None:
             return self._last_robot_data
 
-        # Return dict with default values (used only on first failure before any cache exists)
+        # 返回带默认值的字典（仅在任何缓存存在之前的首次失败时使用）
         return {
             "speed": 0,
             "battery": 0,
@@ -528,18 +528,18 @@ class EarthRoverMiniPlus(Robot):
         }
 
     def _send_command_to_sdk(self, linear: float, angular: float, lamp: int = 0) -> bool:
-        """Send control command to SDK.
+        """向 SDK 发送控制命令。
 
         Args:
-            linear: Linear velocity command (-1 to 1)
-            angular: Angular velocity command (-1 to 1)
-            lamp: Lamp control (0=off, 1=on)
+            linear: 线速度命令（-1 到 1）
+            angular: 角速度命令（-1 到 1）
+            lamp: 灯控制（0=关，1=开）
 
         Returns:
-            bool: True if command sent successfully, False otherwise
+            bool: 命令发送成功返回 True，否则返回 False
 
         Note:
-            Uses POST /control endpoint. Commands are sent as JSON payload.
+            使用 POST /control 端点。命令以 JSON 负载形式发送。
         """
         try:
             payload = {

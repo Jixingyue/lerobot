@@ -33,22 +33,19 @@ from ..rtc.configuration_rtc import RTCConfig
 
 
 class MolmoAct2AdamW(torch.optim.AdamW):
-    """AdamW with component clipping and low-memory BF16 update compensation.
+    """带有按组件裁剪和低显存 BF16 更新补偿的 AdamW。
 
-    LeRobot's shared trainer clips the full policy as one vector before calling
-    ``Optimizer.step``.  Official MolmoAct2 instead clips each optimizer group
-    (LLM, ViT, connector, and action expert) independently.  Keeping the clip
-    here lets the policy match that behavior without changing the shared
-    trainer or any other policy.
+    LeRobot 的共享训练器在调用 ``Optimizer.step`` 之前会把整个策略作为一个
+    向量进行裁剪。而官方 MolmoAct2 则是独立裁剪每个优化器组（LLM、ViT、
+    connector 和 action expert）。在这里保留裁剪逻辑可以让该策略与官方行为
+    保持一致，而无需修改共享训练器或其他任何策略。
 
-    Parameter and optimizer-state dtypes follow the Pi0.5-style storage policy:
-    the large VLM tensors remain BF16, while the action expert and explicitly
-    sensitive tensors remain FP32. A lazy BF16 Kahan-style residual preserves
-    VLM updates smaller than one BF16 parameter ULP. This costs one BF16 tensor
-    per trainable BF16 parameter, rather than the FP32 parameter and optimizer
-    copies required by the official AMP/FSDP recipe. Native AdamW remains the
-    fast path for FP32 parameters (including the complete action expert and
-    LoRA adapters).
+    参数和优化器状态的 dtype 遵循 Pi0.5 风格的存储策略：大型 VLM 张量保持
+    BF16，而 action expert 和明确标记为敏感的张量保持 FP32。一个惰性创建的
+    BF16 Kahan 风格残差可以保留小于一个 BF16 参数 ULP 的 VLM 更新。这为每个
+    可训练的 BF16 参数额外消耗一个 BF16 张量，而不是官方 AMP/FSDP 方案所需的
+    FP32 参数副本和优化器副本。原生 AdamW 仍然是 FP32 参数（包括完整的
+    action expert 和 LoRA 适配器）的快速路径。
     """
 
     def __init__(self, params, *, group_grad_clip_norm: float, **kwargs) -> None:
@@ -73,7 +70,7 @@ class MolmoAct2AdamW(torch.optim.AdamW):
         return tuple(norms)
 
     def _step_native_non_bfloat16(self) -> None:
-        """Run PyTorch's native AdamW only for non-BF16 parameters."""
+        """仅对非 BF16 参数运行 PyTorch 原生 AdamW。"""
         original_group_params: list[list[torch.Tensor]] = []
         try:
             for group in self.param_groups:
@@ -86,13 +83,12 @@ class MolmoAct2AdamW(torch.optim.AdamW):
                 group["params"] = original_params
 
     def _step_compensated_bfloat16(self) -> None:
-        """Apply AdamW to BF16 storage while retaining sub-ULP updates.
+        """对 BF16 存储的参数应用 AdamW，同时保留亚 ULP 级别的更新。
 
-        Adam moments intentionally remain in BF16 to keep the Pi0.5-style
-        memory envelope. ``effective_parameter`` is one per-parameter FP32
-        temporary, never a persistent model-sized master copy. The residual is
-        BF16 and is initialized lazily only for parameters that receive a
-        gradient, so frozen VLM weights and LoRA-only runs pay no extra cost.
+        Adam 动量刻意保持为 BF16，以维持 Pi0.5 风格的显存开销。
+        ``effective_parameter`` 是每个参数的一个 FP32 临时量，绝不是持久化的
+        模型级主副本。残差为 BF16，且仅对收到梯度的参数惰性初始化，因此冻结的
+        VLM 权重和仅 LoRA 的训练不会产生额外开销。
         """
         for group in self.param_groups:
             bfloat16_group = dict(group)
@@ -159,7 +155,7 @@ class MolmoAct2AdamW(torch.optim.AdamW):
 
     @staticmethod
     def _any_nonfinite_across_ranks(norms: tuple[torch.Tensor, ...]) -> bool:
-        """Match official MolmoAct2's all-rank non-finite step guard."""
+        """与官方 MolmoAct2 的全 rank 非有限值步进保护保持一致。"""
         local_nonfinite = any(not bool(torch.isfinite(norm).all().item()) for norm in norms)
         if not torch.distributed.is_available() or not torch.distributed.is_initialized():
             return local_nonfinite
@@ -175,17 +171,17 @@ class MolmoAct2AdamW(torch.optim.AdamW):
 
     @torch.no_grad()
     def step(self, closure=None):
-        # LeRobot never supplies a closure, but preserve standard Optimizer
-        # semantics for callers that do.
+        # LeRobot 从不传入 closure，但为确实传入的调用者保留标准
+        # Optimizer 语义。
         loss = None
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
         grad_norms = self._clip_grad_groups()
         if self._any_nonfinite_across_ranks(grad_norms):
-            # Official MolmoAct2 skips the update on every rank and clears the
-            # invalid gradients.  In particular, Adam moments and step counts
-            # must not advance when one component has a non-finite norm.
+            # 官方 MolmoAct2 会在所有 rank 上跳过本次更新并清除无效梯度。
+            # 特别地，当某个组件的范数为非有限值时，Adam 动量和步数
+            # 绝不能前进。
             self.zero_grad(set_to_none=True)
             return loss
         self._step_native_non_bfloat16()
@@ -196,14 +192,14 @@ class MolmoAct2AdamW(torch.optim.AdamW):
 @OptimizerConfig.register_subclass("molmoact2_adamw")
 @dataclass
 class MolmoAct2AdamWConfig(OptimizerConfig):
-    """Policy-local AdamW preset with independent per-component clipping."""
+    """策略内置的 AdamW 预设，支持按组件独立裁剪。"""
 
     lr: float = 1e-5
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-6
     weight_decay: float = 0.0
-    # Zero disables the shared trainer's global clipping. The policy's existing
-    # optimizer_grad_clip_norm is passed through as the group-wise threshold.
+    # 设为零可禁用共享训练器的全局裁剪。策略现有的
+    # optimizer_grad_clip_norm 会作为按组的阈值透传。
     grad_clip_norm: float = 0.0
     group_grad_clip_norm: float = 1.0
 
@@ -221,13 +217,12 @@ class MolmoAct2AdamWConfig(OptimizerConfig):
 @LRSchedulerConfig.register_subclass("molmoact2_cosine_with_warmup")
 @dataclass
 class MolmoAct2CosineWithWarmupSchedulerConfig(LRSchedulerConfig):
-    """Official MolmoAct2 warmup followed by cosine decay.
+    """官方 MolmoAct2 的预热后接余弦衰减。
 
-    The shared LeRobot Pi0 scheduler evaluates its cosine against the absolute
-    global step. That creates a learning-rate discontinuity at the end of
-    warmup (especially visible in short profiles). Native MolmoAct2 instead
-    starts cosine time at zero after warmup and applies the same multiplier to
-    every component-specific base LR.
+    LeRobot 共享的 Pi0 调度器是基于绝对全局步数来计算余弦值的。这会在预热
+    结束时造成学习率不连续（在较短的调度中尤为明显）。原生 MolmoAct2 则是在
+    预热结束后将余弦时间从零开始，并对每个组件专属的基础学习率应用相同的
+    乘数。
     """
 
     num_warmup_steps: int
@@ -247,19 +242,18 @@ class MolmoAct2CosineWithWarmupSchedulerConfig(LRSchedulerConfig):
                 f"decay_lr must be in [0, peak_lr), got decay_lr={self.decay_lr}, peak_lr={self.peak_lr}."
             )
 
-        # Official Trainer uses its configured max_duration as the cosine
-        # endpoint. Keep that clock when LeRobot intentionally runs a shorter
-        # diagnostic gate (for example, 3K updates on the configured 24K schedule).
-        # Clamping here would silently compress the gate to the decay floor.
+        # 官方 Trainer 使用其配置的 max_duration 作为余弦终点。当 LeRobot
+        # 刻意运行较短的诊断性检查时（例如在配置的 24K 调度上只跑 3K 次更新），
+        # 保留该时钟。在这里做截断会悄悄地把检查压缩到衰减下限。
         decay_steps = int(self.num_decay_steps)
         warmup_steps = min(int(self.num_warmup_steps), decay_steps)
         alpha = float(self.decay_lr / self.peak_lr)
 
         def lr_lambda(current_step: int) -> float:
-            # LambdaLR installs lambda(0) before the first optimizer update and
-            # LeRobot advances it after every update. Official MolmoAct2 first
-            # increments global_step, then evaluates the LR before that
-            # update, so its kth optimizer update uses f(k), not f(k - 1).
+            # LambdaLR 会在第一次优化器更新之前安装 lambda(0)，而 LeRobot
+            # 在每次更新之后才推进它。官方 MolmoAct2 是先递增 global_step，
+            # 然后在该次更新之前计算学习率，因此其第 k 次优化器更新使用的是
+            # f(k)，而不是 f(k - 1)。
             step = max(int(current_step) + 1, 0)
             if warmup_steps > 0 and step < warmup_steps:
                 return float(step / warmup_steps)
@@ -278,7 +272,7 @@ class MolmoAct2CosineWithWarmupSchedulerConfig(LRSchedulerConfig):
 @PreTrainedConfig.register_subclass("molmoact2")
 @dataclass
 class MolmoAct2Config(PreTrainedConfig):
-    """MolmoAct2 policy backed by the converted HF checkpoint implementation."""
+    """基于转换后的 HF 检查点实现的 MolmoAct2 策略。"""
 
     checkpoint_path: str = "allenai/MolmoAct2"
     checkpoint_revision: str | None = None
@@ -288,17 +282,15 @@ class MolmoAct2Config(PreTrainedConfig):
     chunk_size: int = 30
     n_action_steps: int = 30
 
-    # Official MolmoAct2 robot fine-tuning optimizes only the continuous
-    # flow-matching objective. Released checkpoints retain discrete-action
-    # weights and ``both`` remains available as an explicit ablation.
+    # 官方 MolmoAct2 机器人微调只优化连续 flow-matching 目标。已发布的
+    # 检查点保留了离散动作权重，``both`` 仍可作为显式消融选项使用。
     action_mode: str = "continuous"
     inference_action_mode: str | None = "continuous"
     discrete_action_tokenizer: str = "allenai/MolmoAct2-FAST-Tokenizer"
     discrete_generation_max_steps: int | None = None
     norm_tag: str | None = None
-    # Optional standalone norm_stats.json.  This lets a generic base model use
-    # the exact embodiment statistics published with a downstream checkpoint
-    # without changing which model weights are loaded.
+    # 可选的独立 norm_stats.json。这可以让通用基础模型使用随下游检查点
+    # 发布的精确本体（embodiment）统计量，而不改变所加载的模型权重。
     norm_stats_path: str | None = None
 
     setup_type: str = ""
@@ -309,14 +301,14 @@ class MolmoAct2Config(PreTrainedConfig):
     add_control_tokens: bool = True
     normalize_gripper: bool = False
     num_state_tokens: int = 256
-    # Leave unset for the default MolmoAct2 sequence budget inferred from the fixed
-    # image/prompt/state/action token layout. Override only for unusual long prompts.
+    # 保持未设置即可使用默认的 MolmoAct2 序列预算，该预算由固定的
+    # 图像/提示/状态/动作 token 布局推断得出。仅在提示异常冗长时才覆盖。
     max_sequence_length: int | None = None
 
-    # Fixed by released MolmoAct2 checkpoints. We validate this at model load.
+    # 由已发布的 MolmoAct2 检查点固定。我们会在模型加载时进行校验。
     expected_max_action_dim: int = 32
 
-    # Flow-matching training knobs copied from the original MolmoAct2 training path.
+    # 从原始 MolmoAct2 训练路径复制过来的 flow-matching 训练参数。
     num_flow_timesteps: int = 8
     flow_matching_cutoff: float = 1.0
     flow_matching_time_offset: float = 0.001
@@ -326,22 +318,21 @@ class MolmoAct2Config(PreTrainedConfig):
     num_inference_steps: int | None = None
     mask_action_dim_padding: bool = True
     enable_inference_cuda_graph: bool = True
-    # MolmoAct2-local eval option. When enabled, stochastic continuous action
-    # generation uses a rollout-local generator derived from eval_seed.
+    # MolmoAct2 内置的评估选项。启用后，随机性的连续动作生成会使用
+    # 由 eval_seed 派生的 rollout 级生成器。
     per_episode_seed: bool = False
     eval_seed: int | None = None
     rtc_config: RTCConfig | None = None
 
-    # Joint frame transform for cross-calibration compatibility.
-    # Some MolmoAct2 checkpoints were trained on data using a different joint
-    # convention than the current LeRobot calibration. Set both to apply a
-    # sign/offset correction at runtime (state before model, action after).
-    # See: https://huggingface.co/docs/lerobot/backwardcomp
-    # Default is None (no transform). Both must be set together.
+    # 用于跨标定兼容性的关节坐标系变换。部分 MolmoAct2 检查点训练所用的
+    # 关节约定与当前 LeRobot 标定不同。同时设置这两项即可在运行时应用
+    # 符号/偏移校正（状态在进模型前校正，动作在出模型后校正）。
+    # 参见：https://huggingface.co/docs/lerobot/backwardcomp
+    # 默认为 None（不变换）。两者必须同时设置。
     joint_signs: list[float] | None = None
     joint_offsets: list[float] | None = None
 
-    # Controls only the VLM side. The action expert is always fully fine-tuned.
+    # 仅控制 VLM 部分。action expert 始终全量微调。
     train_mode_vlm: str = "lora"
     lora_rank: int = 64
     lora_alpha: int = 16
@@ -350,22 +341,21 @@ class MolmoAct2Config(PreTrainedConfig):
     enable_knowledge_insulation: bool = False
     freeze_embedding: bool = True
     gradient_checkpointing: bool = False
-    # Pi0.5-style public switch backed by MolmoAct2's official block-wise
-    # compilation strategy. The policy intentionally keeps the compiler
-    # backend/scope internal so there is only one supported execution plan.
+    # Pi0.5 风格的公开开关，底层采用 MolmoAct2 官方的按块编译策略。
+    # 策略刻意将编译器后端/作用域保持在内部，因此只有一种受支持的
+    # 执行方案。
     compile_model: bool = False
 
-    # Pi0.5-style precision switch controlling parameter storage and autocast.
-    # ``bfloat16`` stores large text and vision matrices in bf16 while the full
-    # action expert, selected norm/head/LoRA parameters, and RoPE state stay
-    # fp32; operator compute follows bf16 autocast plus explicit sensitive fp32
-    # math.
-    # ``float32`` keeps both the full model and compute in fp32.
+    # Pi0.5 风格的精度开关，控制参数存储和 autocast。
+    # ``bfloat16`` 将大型文本和视觉矩阵以 bf16 存储，而完整的 action expert、
+    # 选定的 norm/head/LoRA 参数以及 RoPE 状态保持 fp32；算子计算遵循
+    # bf16 autocast，外加显式的敏感 fp32 运算。
+    # ``float32`` 则让整个模型和计算都保持 fp32。
     dtype: str = "bfloat16"
-    # Official fine-tuning from the released ``allenai/MolmoAct2`` HF base
-    # explicitly applies unmasked residual dropout 0.1 and disables the
-    # response-only variant.  The converted HF decoder therefore matches the
-    # official HF-checkpoint path with this ordinary residual-dropout value.
+    # 基于已发布的 ``allenai/MolmoAct2`` HF 基础模型的官方微调明确应用了
+    # 0.1 的无掩码残差 dropout，并禁用了仅响应（response-only）变体。
+    # 因此转换后的 HF decoder 使用该常规残差 dropout 值，与官方
+    # HF 检查点路径保持一致。
     llm_residual_dropout: float = 0.1
     softmax_auxiliary_loss: bool = True
     softmax_auxiliary_loss_scale: float = 1e-4
@@ -467,7 +457,7 @@ class MolmoAct2Config(PreTrainedConfig):
             raise ValueError(f"max_sequence_length must be >= 1 or None, got {self.max_sequence_length}.")
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Save a portable config without initialization-only norm metadata."""
+        """保存可移植的配置，不含仅用于初始化的归一化元数据。"""
         config_for_save = replace(self, norm_tag=None, norm_stats_path=None)
         PreTrainedConfig._save_pretrained(config_for_save, save_directory)
 
@@ -509,7 +499,7 @@ class MolmoAct2Config(PreTrainedConfig):
                 self.dataset_feature_names[key] = feature["names"]
 
     def validate_features(self) -> None:
-        """Validate and set up MolmoAct2 input and output features."""
+        """校验并设置 MolmoAct2 的输入和输出特征。"""
         image_features = [key for key, feat in self.input_features.items() if feat.type == FeatureType.VISUAL]
         if not image_features:
             raise ValueError(

@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-Public API for lightweight, base-dependency-only utilities.
+仅依赖基础包的轻量级工具模块的公共 API。
 
-Heavy cross-cutting modules (train_utils, control_utils) have been moved
-to ``lerobot.common``. ``visualization_utils`` remains here but is
-intentionally NOT re-exported to avoid pulling in optional dependencies.
+重量级的横切模块（train_utils、control_utils）已移动到
+``lerobot.common``。``visualization_utils`` 仍保留在此处，
+但有意不做重新导出，以避免引入可选依赖。
 """
 
 from .constants import (
@@ -38,7 +38,7 @@ from .errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 from .import_utils import is_package_available, require_package
 
 __all__ = [
-    # Constants
+    # 常量
     "ACTION",
     "DEFAULT_FEATURES",
     "DONE",
@@ -49,17 +49,17 @@ __all__ = [
     "OBS_STATE",
     "OBS_STR",
     "REWARD",
-    # Device utilities
+    # 设备工具
     "auto_select_torch_device",
     "get_safe_torch_device",
     "is_torch_device_available",
-    # Import guards
+    # 导入守卫
     "is_package_available",
     "require_package",
-    # Decorators
+    # 装饰器
     "check_if_already_connected",
     "check_if_not_connected",
-    # Errors
+    # 错误
     "DeviceAlreadyConnectedError",
     "DeviceNotConnectedError",
 ]

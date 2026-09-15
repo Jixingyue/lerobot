@@ -15,9 +15,9 @@
 # limitations under the License.
 
 """
-Real Time Chunking (RTC) and Bidirectional Decoding (BID) configuration classes.
+实时分块（Real Time Chunking，RTC）与双向解码（Bidirectional Decoding，BID）配置类。
 
-Based on:
+基于：
 - Real Time Chunking: https://www.physicalintelligence.company/research/real_time_chunking
 """
 
@@ -28,31 +28,31 @@ from lerobot.configs import RTCAttentionSchedule
 
 @dataclass
 class RTCConfig:
-    """Configuration for Real Time Chunking (RTC) inference.
+    """实时分块（Real Time Chunking，RTC）推理配置。
 
-    RTC improves real-time inference by treating chunk generation as an inpainting problem,
-    strategically handling overlapping timesteps between action chunks using prefix attention.
+    RTC 将动作块生成视为一个图像修复（inpainting）问题，通过前缀注意力（prefix attention）
+    有策略地处理相邻动作块之间重叠的时间步，从而改进实时推理。
     """
 
-    # Infrastructure
+    # 基础设施
     enabled: bool = True
 
-    # ``guided`` is the original inference-time Jacobian guidance. ``trained``
-    # hard-inpaints a prefix and requires a compatible training-time RTC checkpoint.
+    # ``guided`` 是最初的推理时 Jacobian 引导方式；``trained``
+    # 会硬修复（hard-inpaint）一个前缀，需要使用兼容的训练时 RTC 检查点。
     mode: str = "guided"
 
-    # Core RTC settings
-    # Todo change to exp
+    # RTC 核心设置
+    # Todo：改为 exp
     prefix_attention_schedule: RTCAttentionSchedule = RTCAttentionSchedule.LINEAR
     max_guidance_weight: float = 10.0
     execution_horizon: int = 10
 
-    # Debug settings
+    # 调试设置
     debug: bool = False
     debug_maxlen: int = 100
 
     def __post_init__(self):
-        """Validate RTC configuration parameters."""
+        """校验 RTC 配置参数。"""
         if self.mode not in {"guided", "trained"}:
             raise ValueError(f"mode must be 'guided' or 'trained', got {self.mode!r}")
         if self.max_guidance_weight <= 0:

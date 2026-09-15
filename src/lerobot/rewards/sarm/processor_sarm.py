@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SARM Processor for encoding images/text and generating stage+tau targets."""
+"""SARM 处理器，用于编码图像/文本并生成 stage+tau 目标。"""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 
 
 class SARMEncodingProcessorStep(ProcessorStep):
-    """ProcessorStep that encodes images and text with CLIP and generates stage and progress labels for SARM."""
+    """使用 CLIP 编码图像和文本，并为 SARM 生成 stage 和进度标签的 ProcessorStep。"""
 
     def __init__(
         self,
@@ -93,17 +93,17 @@ class SARMEncodingProcessorStep(ProcessorStep):
         self.dataset_stats = dataset_stats
         self.annotation_mode = config.annotation_mode
 
-        # Helper to create temporal proportions dict
+        # 用于创建时间比例字典的辅助函数
         def make_props_dict(names, props):
             return dict(zip(names, props, strict=True)) if names and props else None
 
-        # Sparse annotations (always needed)
+        # 稀疏标注（始终需要）
         self.sparse_temporal_proportions = make_props_dict(
             config.sparse_subtask_names, config.sparse_temporal_proportions
         )
         self.sparse_subtask_names = config.sparse_subtask_names
 
-        # Dense annotations (only for dual mode)
+        # 稠密标注（仅用于双头模式）
         self.dense_subtask_names = config.dense_subtask_names if config.uses_dual_heads else None
         self.dense_temporal_proportions = (
             make_props_dict(config.dense_subtask_names, config.dense_temporal_proportions)
@@ -127,13 +127,13 @@ class SARMEncodingProcessorStep(ProcessorStep):
 
     @staticmethod
     def _resolve_annotation_column(episodes_df: pd.DataFrame, annotation_type: str, suffix: str) -> str:
-        """Resolve a mode-specific annotation column, falling back to the legacy unprefixed name."""
+        """解析特定模式的标注列，找不到时回退到旧版无前缀名称。"""
         prefixed = f"{annotation_type}_{suffix}"
         return prefixed if prefixed in episodes_df.columns else suffix
 
     @staticmethod
     def _annotations_are_usable(names: Any, starts: Any, ends: Any) -> bool:
-        """Return whether an episode has non-empty, aligned annotation arrays."""
+        """返回某个 episode 是否具有非空且对齐的标注数组。"""
         values = (names, starts, ends)
         if not all(isinstance(value, (list, tuple, np.ndarray)) for value in values):
             return False
@@ -142,11 +142,10 @@ class SARMEncodingProcessorStep(ProcessorStep):
         return len(lengths) == 1 and next(iter(lengths)) > 0
 
     def _validate_annotation_columns(self) -> None:
-        """Validate annotation coverage before loading models or generating training targets.
+        """在加载模型或生成训练目标之前验证标注覆盖情况。
 
-        A multi-stage head with no usable episode annotations would otherwise train entirely
-        against all-zero targets. Reject that configuration and warn when only part of the
-        dataset is usable.
+        否则，一个没有任何可用 episode 标注的多 stage 头将完全针对全零目标进行训练。
+        拒绝这种配置，并在只有部分数据集可用时发出警告。
         """
         if self.dataset_meta is None:
             return
@@ -198,7 +197,7 @@ class SARMEncodingProcessorStep(ProcessorStep):
                 )
 
     def _find_episode_for_frame(self, frame_idx: int) -> int:
-        """Find the episode index for a given frame index."""
+        """查找给定帧索引对应的 episode 索引。"""
         for ep_idx in range(len(self.dataset_meta.episodes)):
             ep_start = self.dataset_meta.episodes[ep_idx]["dataset_from_index"]
             ep_end = self.dataset_meta.episodes[ep_idx]["dataset_to_index"]
@@ -207,27 +206,27 @@ class SARMEncodingProcessorStep(ProcessorStep):
         return 0
 
     def _get_episode_indices(self, frame_indices: np.ndarray, episode_index) -> np.ndarray:
-        """Get episode indices for each frame index."""
+        """获取每个帧索引对应的 episode 索引。"""
         if episode_index is None:
             return np.array([self._find_episode_for_frame(int(f)) for f in frame_indices])
 
         episode_indices = np.atleast_1d(np.asarray(from_tensor_to_numpy(episode_index)))
 
-        # If single episode but multiple frames, compute episode for each frame
+        # 如果是单个 episode 但有多帧，则为每一帧计算 episode
         if len(episode_indices) == 1 and len(frame_indices) > 1:
             return np.array([self._find_episode_for_frame(int(f)) for f in frame_indices])
 
         return episode_indices
 
     def _generate_perturbed_task(self) -> str:
-        """Generate a random perturbed task string for language perturbation."""
+        """生成随机扰动的任务字符串，用于语言扰动。"""
         num_words = random.randint(1, 5)
         verb = random.choice(self.verbs)
         phrase = " ".join([verb] + self.fake.words(nb=num_words))
         return phrase
 
     def _get_annotation_config(self, annotation_type: str) -> tuple[list[str], dict[str, float] | None]:
-        """Get global subtask names and temporal proportions for an annotation type."""
+        """获取某种标注类型的全局子任务名称和时间比例。"""
         if annotation_type == "dense":
             return self.dense_subtask_names, self.dense_temporal_proportions
         return self.sparse_subtask_names, self.sparse_temporal_proportions
@@ -239,8 +238,8 @@ class SARMEncodingProcessorStep(ProcessorStep):
         annotation_type: str,
         global_names: list[str],
     ) -> tuple[list | None, list | None, list | None]:
-        """Load subtask annotations for an episode from DataFrame."""
-        # Single-stage mode: (linear progress 0→1)
+        """从 DataFrame 中加载某个 episode 的子任务标注。"""
+        # 单 stage 模式：（线性进度 0→1）
         if episodes_df is None or len(global_names) == 1:
             return None, None, None
 
@@ -259,13 +258,13 @@ class SARMEncodingProcessorStep(ProcessorStep):
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
         """
-        Encode images, text, and normalize states in the transition.
+        对 transition 中的图像、文本进行编码，并对状态进行归一化。
 
-        Implements SARM training data preparation:
-        - Applies language perturbation (20% probability)
-        - Applies rewind augmentation (80% probability)
-        - Generates stage+tau targets for all frames
-        - Outputs lengths tensor for valid sequence masking
+        实现 SARM 训练数据的准备工作：
+        - 应用语言扰动（20% 概率）
+        - 应用回退（rewind）增强（80% 概率）
+        - 为所有帧生成 stage+tau 目标
+        - 输出 lengths 张量，用于有效序列掩码
         """
         new_transition = transition.copy() if hasattr(transition, "copy") else dict(transition)
         observation = new_transition.get(TransitionKey.OBSERVATION)
@@ -286,20 +285,20 @@ class SARMEncodingProcessorStep(ProcessorStep):
         if isinstance(image, torch.Tensor):
             image = image.cpu().numpy()
 
-        # If 4D (T, C, H, W) from delta_timestamps, add batch dim
-        # If 3D (C, H, W) single frame, add batch and time dims
+        # 如果是来自 delta_timestamps 的 4D (T, C, H, W)，添加批次维度
+        # 如果是单帧 3D (C, H, W)，添加批次和时间维度
         if image.ndim == 4:
             image = image[np.newaxis, ...]  # (T, C, H, W) -> (1, T, C, H, W)
         elif image.ndim == 3:
             image = image[np.newaxis, np.newaxis, ...]  # (C, H, W) -> (1, 1, C, H, W)
 
         batch_size = image.shape[0]
-        total_frames = image.shape[1]  # Should be 13: 9 obs + 4 rewind placeholders
+        total_frames = image.shape[1]  # 应为 13：9 个观测帧 + 4 个回退占位帧
         n_obs_steps = self.config.n_obs_steps
         max_rewind_steps = self.config.max_rewind_steps
-        n_obs_frames = 1 + n_obs_steps  # 9 observation frames (including current)
+        n_obs_frames = 1 + n_obs_steps  # 9 个观测帧（包含当前帧）
 
-        # Rewind augmentation
+        # 回退（rewind）增强
         rewind_steps = torch.zeros(batch_size, dtype=torch.int32)
         apply_rewind = self.training and random.random() < self.config.rewind_probability
 
@@ -315,17 +314,17 @@ class SARMEncodingProcessorStep(ProcessorStep):
                 )
                 rewind_steps[b_idx] = rewind_step
 
-        # Compute valid lengths: n_obs_frames + rewind_steps
+        # 计算有效长度：n_obs_frames + rewind_steps
         lengths = n_obs_frames + rewind_steps  # (B,)
 
-        # Apply rewind masking to images
-        # For frames beyond valid length, we mask with zeros (or copy last valid frame)
+        # 对图像应用回退掩码
+        # 对于超出有效长度的帧，用零进行掩码（或复制最后一个有效帧）
         for b_idx in range(batch_size):
             valid_len = lengths[b_idx].item()
             if valid_len < total_frames:
-                image[b_idx, valid_len:] = 0  # Zero out frames beyond valid length
+                image[b_idx, valid_len:] = 0  # 将超出有效长度的帧置零
 
-        # Encode images with CLIP
+        # 使用 CLIP 编码图像
         video_features = self._encode_images_batch(image)
         observation["video_features"] = video_features
 
@@ -342,11 +341,11 @@ class SARMEncodingProcessorStep(ProcessorStep):
         elif state_tensor.ndim == 1:
             state_tensor = state_tensor.unsqueeze(0).unsqueeze(0)  # (D,) -> (1, 1, D)
 
-        # Apply same rewind masking to state
+        # 对状态应用相同的回退掩码
         for b_idx in range(batch_size):
             valid_len = lengths[b_idx].item()
             if valid_len < state_tensor.shape[1]:
-                state_tensor[b_idx, valid_len:] = 0  # Zero out frames beyond valid length
+                state_tensor[b_idx, valid_len:] = 0  # 将超出有效长度的帧置零
 
         observation["state_features"] = pad_state_to_max_dim(state_tensor, self.config.max_state_dim)
 
@@ -354,26 +353,26 @@ class SARMEncodingProcessorStep(ProcessorStep):
         if isinstance(task, list):
             task = task[0] if task else ""
 
-        # Apply language perturbation during training (20% probability)
-        # When perturbed, targets will be zeroed to train model to output low values for irrelevant text
+        # 训练期间应用语言扰动（20% 概率）
+        # 被扰动时，目标将被置零，以训练模型对无关文本输出较低的值
         apply_perturbation = self.training and random.random() < self.config.language_perturbation_probability
         if apply_perturbation:
             task = self._generate_perturbed_task()
 
-        # Encode text with CLIP
+        # 使用 CLIP 编码文本
         observation["text_features"] = self._encode_text_clip(task, batch_size)
 
-        # Store lengths for model
+        # 为模型保存 lengths
         observation["lengths"] = lengths
 
-        # When language is perturbed, targets are zero so perturbed samples don't contribute to progress loss
+        # 当语言被扰动时，目标为零，因此被扰动的样本不会对进度损失产生贡献
         if self.dataset_meta is not None:
             episodes_df = self.dataset_meta.episodes.to_pandas()
 
-            # Generate sparse targets
+            # 生成稀疏目标
             if self.sparse_temporal_proportions is not None:
                 if apply_perturbation:
-                    # Zero targets when language is perturbed
+                    # 语言被扰动时将目标置零
                     sparse_targets = torch.zeros(batch_size, total_frames, dtype=torch.float32)
                 else:
                     sparse_targets = self._compute_batch_targets(
@@ -381,10 +380,10 @@ class SARMEncodingProcessorStep(ProcessorStep):
                     )
                 observation["sparse_targets"] = sparse_targets
 
-            # Generate dense targets (for dual mode)
+            # 生成稠密目标（用于双头模式）
             if self.config.uses_dual_heads and self.dense_temporal_proportions is not None:
                 if apply_perturbation:
-                    # Zero targets when language is perturbed
+                    # 语言被扰动时将目标置零
                     dense_targets = torch.zeros(batch_size, total_frames, dtype=torch.float32)
                 else:
                     dense_targets = self._compute_batch_targets(
@@ -404,7 +403,7 @@ class SARMEncodingProcessorStep(ProcessorStep):
         episodes_df: pd.DataFrame | None,
         annotation_type: str,
     ) -> torch.Tensor:
-        """Compute stage+tau targets for a batch of samples."""
+        """为一批样本计算 stage+tau 目标。"""
         batch_size = len(frame_indices)
         n_obs_steps = self.config.n_obs_steps
         max_rewind_steps = self.config.max_rewind_steps
@@ -426,13 +425,13 @@ class SARMEncodingProcessorStep(ProcessorStep):
                 ep_idx, episodes_df, annotation_type, global_names
             )
 
-            # Compute observation frame indices
+            # 计算观测帧索引
             obs_indices, _ = compute_absolute_indices(
                 frame_idx, ep_start, ep_end, n_obs_steps, frame_gap=frame_gap
             )
             obs_indices = obs_indices.tolist()
 
-            # Compute targets for observation frames
+            # 计算观测帧的目标
             for t_idx, abs_idx in enumerate(obs_indices):
                 rel_frame = abs_idx - ep_start
                 targets[b_idx, t_idx] = find_stage_and_tau(
@@ -446,7 +445,7 @@ class SARMEncodingProcessorStep(ProcessorStep):
                     return_combined=True,
                 )
 
-            # Compute targets for rewind frames (if any)
+            # 计算回退帧的目标（如果有的话）
             rewind_step = rewind_steps[b_idx].item()
             if rewind_step > 0:
                 _, rewind_indices = apply_rewind_augmentation(
@@ -478,23 +477,23 @@ class SARMEncodingProcessorStep(ProcessorStep):
         return getattr(self, "_training_mode", True)
 
     def train(self, mode: bool = True):
-        """Set training mode for augmentation decisions."""
+        """设置训练模式，用于数据增强的决策。"""
         self._training_mode = mode
         return self
 
     def eval(self):
-        """Set evaluation mode (disable augmentations)."""
+        """设置评估模式（禁用数据增强）。"""
         return self.train(False)
 
     @torch.no_grad()
     def _encode_images_batch(self, images: np.ndarray) -> torch.Tensor:
-        """Encode a batch of images using CLIP.
+        """使用 CLIP 编码一批图像。
 
         Args:
-            images: Batched images with shape: (B, T, C, H, W)
+            images: 批量图像，形状为 (B, T, C, H, W)
 
         Returns:
-            Encoded feature vectors with shape (B, T, 512)
+            编码后的特征向量，形状为 (B, T, 512)
         """
 
         batch_size, seq_length = images.shape[0], images.shape[1]
@@ -504,10 +503,10 @@ class SARMEncodingProcessorStep(ProcessorStep):
         images_list = []
         for i in range(num_frames):
             img = images[i]
-            if img.shape[0] in [1, 3]:  # Channel first (C, H, W)
+            if img.shape[0] in [1, 3]:  # 通道在前 (C, H, W)
                 img = img.transpose(1, 2, 0)
 
-            # Handle single channel
+            # 处理单通道情况
             if img.shape[-1] == 1:
                 img = np.repeat(img, 3, axis=-1)
 
@@ -523,8 +522,8 @@ class SARMEncodingProcessorStep(ProcessorStep):
             inputs = self.clip_processor(images=batch_imgs, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-            # Get image embeddings
-            # transformers 5.x returns BaseModelOutputWithPooling instead of a plain tensor
+            # 获取图像嵌入
+            # transformers 5.x 返回 BaseModelOutputWithPooling 而不是普通张量
             output = self.clip_model.get_image_features(**inputs)
             if not isinstance(output, torch.Tensor):
                 output = output.pooler_output
@@ -532,7 +531,7 @@ class SARMEncodingProcessorStep(ProcessorStep):
                     raise ValueError("pooler_output should not be None for CLIP models.")
             embeddings = output.detach().cpu()
 
-            # Handle single frame case
+            # 处理单帧情况
             if embeddings.dim() == 1:
                 embeddings = embeddings.unsqueeze(0)
 
@@ -545,19 +544,19 @@ class SARMEncodingProcessorStep(ProcessorStep):
 
     @torch.no_grad()
     def _encode_text_clip(self, text: str, batch_size: int) -> torch.Tensor:
-        """Encode text using CLIP text encoder (per SARM paper A.4).
+        """使用 CLIP 文本编码器编码文本（依据 SARM 论文 A.4 节）。
 
         Args:
-            text: Task description text to encode
-            batch_size: Batch size to replicate for
+            text: 要编码的任务描述文本
+            batch_size: 要复制到的批次大小
 
         Returns:
-            Encoded text features with shape (B, 512)
+            编码后的文本特征，形状为 (B, 512)
         """
         inputs = self.clip_processor.tokenizer([text], return_tensors="pt", padding=True, truncation=True)
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-        # transformers 5.x returns BaseModelOutputWithPooling instead of a plain tensor
+        # transformers 5.x 返回 BaseModelOutputWithPooling 而不是普通张量
         output = self.clip_model.get_text_features(**inputs)
         if not isinstance(output, torch.Tensor):
             output = output.pooler_output
@@ -571,7 +570,7 @@ class SARMEncodingProcessorStep(ProcessorStep):
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
-        """Add encoded features to the observation features."""
+        """将编码后的特征添加到观测特征中。"""
         features[PipelineFeatureType.OBSERVATION]["video_features"] = PolicyFeature(
             type=FeatureType.VISUAL, shape=(self.config.num_frames, self.config.image_dim)
         )
@@ -592,7 +591,7 @@ def make_sarm_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Create pre-processor and post-processor pipelines for SARM."""
+    """为 SARM 创建预处理器和后处理器流水线。"""
     return (
         PolicyProcessorPipeline[dict[str, Any], dict[str, Any]](
             steps=[

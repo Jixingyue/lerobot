@@ -23,36 +23,36 @@ from ..config import RobotConfig
 
 @dataclass
 class RebotB601FollowerConfig:
-    """Base configuration class for the Seeed Studio reBot B601-DM follower arm.
+    """Seeed Studio reBot B601-DM follower 手臂的基础配置类。
 
-    The B601-DM is a 6-DOF arm plus gripper driven by Damiao CAN motors. Motor
-    communication goes through the ``motorbridge`` package.
+    B601-DM 是一款由 Damiao CAN 电机驱动的 6 自由度手臂加夹爪。电机
+    通信通过 ``motorbridge`` 包进行。
     """
 
-    # Communication port. For ``can_adapter="damiao"`` this is the Damiao serial
-    # bridge device (e.g. "/dev/ttyACM0"); for ``can_adapter="socketcan"`` it is
-    # the CAN channel name (e.g. "can0").
+    # 通信端口。对于 ``can_adapter="damiao"``，这是 Damiao 串口
+    # 桥接设备（例如 "/dev/ttyACM0"）；对于 ``can_adapter="socketcan"``，
+    # 则是 CAN 通道名称（例如 "can0"）。
     port: str
 
-    # CAN adapter type:
-    #   "damiao"    - Damiao dedicated serial bridge (default)
-    #   "socketcan" - SocketCAN based adapters (PCAN, slcan, embedded controllers, ...)
+    # CAN 适配器类型：
+    #   "damiao"    - Damiao 专用串口桥接（默认）
+    #   "socketcan" - 基于 SocketCAN 的适配器（PCAN、slcan、嵌入式控制器等）
     can_adapter: str = "damiao"
 
-    # Baud rate for the Damiao serial bridge (only used when can_adapter="damiao").
+    # Damiao 串口桥接的波特率（仅在 can_adapter="damiao" 时使用）。
     dm_serial_baud: int = 921600
 
     disable_torque_on_disconnect: bool = True
 
-    # `max_relative_target` limits the magnitude of the relative positional target
-    # vector for safety purposes (in degrees). Set to a positive scalar to apply the
-    # same value to all motors, or to a dict mapping motor names to per-motor values.
+    # `max_relative_target` 出于安全目的限制相对位置目标向量的大小
+    # （以度为单位）。设为正标量可对所有电机应用相同的值，
+    # 或设为将电机名称映射到各电机值的字典。
     max_relative_target: float | dict[str, float] | None = None
 
-    # cameras
+    # 相机
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
-    # Maps motor names to their (send_can_id, recv_can_id) pair.
+    # 将电机名称映射到其 (send_can_id, recv_can_id) 对。
     motor_can_ids: dict[str, tuple[int, int]] = field(
         default_factory=lambda: {
             "shoulder_pan": (0x01, 0x11),
@@ -65,29 +65,29 @@ class RebotB601FollowerConfig:
         }
     )
 
-    # Max speed (deg/s) per joint for POS_VEL arms and FORCE_POS gripper (motor order).
+    # POS_VEL 手臂和 FORCE_POS 夹爪各关节的最大速度（度/秒）（按电机顺序）。
     pos_vel_velocity: float | list[float] = field(
         default_factory=lambda: [150.0, 150.0, 150.0, 150.0, 150.0, 150.0, 900.0]
     )
 
-    # Arm control: "mit" or "pos_vel".
+    # 手臂控制模式："mit" 或 "pos_vel"。
     control_mode: str = "mit"
 
-    # MIT kp/kd per arm joint (motor order). Unused when control_mode="pos_vel".
+    # 各手臂关节的 MIT kp/kd（按电机顺序）。当 control_mode="pos_vel" 时不使用。
     mit_kp: float | list[float] = field(default_factory=lambda: [45.0, 45.0, 45.0, 8.0, 9.0, 8.0, 8.0])
     mit_kd: float | list[float] = field(default_factory=lambda: [12.0, 12.0, 12.0, 1.0, 1.0, 1.0, 1.0])
 
-    # Gripper control: "force_pos" or "mit".
+    # 夹爪控制模式："force_pos" 或 "mit"。
     gripper_control_mode: str = "force_pos"
 
-    # FORCE_POS only: max grip force, in [0, 1].
+    # 仅 FORCE_POS：最大夹持力，取值范围 [0, 1]。
     gripper_torque_ratio: float = 0.07
 
-    # MIT only.
+    # 仅 MIT 模式。
     gripper_mit_kp: float = 8.0
     gripper_mit_kd: float = 0.3
 
-    # Soft joint limits (degrees). These are clipped against on every action.
+    # 软关节限位（度）。每次动作都会按此裁剪。
     joint_limits: dict[str, tuple[float, float]] = field(
         default_factory=lambda: {
             "shoulder_pan": (-150.0, 150.0),
@@ -104,6 +104,6 @@ class RebotB601FollowerConfig:
 @RobotConfig.register_subclass("rebot_b601_follower")
 @dataclass
 class RebotB601FollowerRobotConfig(RobotConfig, RebotB601FollowerConfig):
-    """Registered configuration for the reBot B601-DM follower robot."""
+    """reBot B601-DM follower 机器人的注册配置。"""
 
     pass

@@ -13,9 +13,9 @@
 # limitations under the License.
 
 """
-Helper to set motor ids and baudrate.
+设置电机 ID 和波特率的辅助工具。
 
-Example:
+示例：
 
 ```shell
 lerobot-setup-motors \

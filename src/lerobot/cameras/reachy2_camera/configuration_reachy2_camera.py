@@ -22,40 +22,40 @@ __all__ = ["CameraConfig", "ColorMode", "Reachy2CameraConfig"]
 @CameraConfig.register_subclass("reachy2_camera")
 @dataclass
 class Reachy2CameraConfig(CameraConfig):
-    """Configuration class for Reachy 2 camera devices.
+    """Reachy 2 相机设备的配置类。
 
-    This class provides configuration options for Reachy 2 cameras,
-    supporting both the teleop and depth cameras. It includes settings
-    for resolution, frame rate, color mode, and the selection of the cameras.
+    该类为 Reachy 2 相机提供配置选项，
+    支持 teleop 和 depth 两种相机。它包含
+    分辨率、帧率、颜色模式以及相机选择的设置。
 
-    Example configurations:
+    配置示例：
     ```python
-    # Basic configurations
+    # 基本配置
     Reachy2CameraConfig(
         name="teleop",
         image_type="left",
-        ip_address="192.168.0.200",  # IP address of the robot
-        port=50065,  # Port of the camera server
+        ip_address="192.168.0.200",  # 机器人的 IP 地址
+        port=50065,  # 相机服务器的端口
         width=640,
         height=480,
-        fps=30,  # Not configurable for Reachy 2 cameras
+        fps=30,  # Reachy 2 相机不可配置
         color_mode=ColorMode.RGB,
-    )  # Left teleop camera, 640x480 @ 30FPS
+    )  # 左侧 teleop 相机，640x480 @ 30FPS
     ```
 
-    Attributes:
-        name: Name of the camera device. Can be "teleop" or "depth".
-        image_type: Type of image stream. For "teleop" camera, can be "left" or "right".
-                    For "depth" camera, can be "rgb" or "depth". (depth is not supported yet)
-        fps: Requested frames per second for the color stream. Not configurable for Reachy 2 cameras.
-        width: Requested frame width in pixels for the color stream.
-        height: Requested frame height in pixels for the color stream.
-        color_mode: Color mode for image output (RGB or BGR). Defaults to RGB.
-        ip_address: IP address of the robot. Defaults to "localhost".
-        port: Port number for the camera server. Defaults to 50065.
+    属性：
+        name: 相机设备名称。可以是 "teleop" 或 "depth"。
+        image_type: 图像流类型。对于 "teleop" 相机，可以是 "left" 或 "right"。
+                    对于 "depth" 相机，可以是 "rgb" 或 "depth"。（depth 尚不支持）
+        fps: 请求的彩色流每秒帧数。Reachy 2 相机不可配置。
+        width: 请求的彩色流帧宽度（像素）。
+        height: 请求的彩色流帧高度（像素）。
+        color_mode: 图像输出的颜色模式（RGB 或 BGR）。默认为 RGB。
+        ip_address: 机器人的 IP 地址。默认为 "localhost"。
+        port: 相机服务器的端口号。默认为 50065。
 
-    Note:
-        - Only 3-channel color output (RGB/BGR) is currently supported.
+    注意：
+        - 目前仅支持 3 通道彩色输出（RGB/BGR）。
     """
 
     name: str

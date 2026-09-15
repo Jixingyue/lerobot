@@ -99,7 +99,7 @@ class BasicTransformerBlock(nn.Module):
         attention_bias: bool = False,
         upcast_attention: bool = False,
         norm_elementwise_affine: bool = True,
-        norm_type: str = "layer_norm",  # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single', 'ada_norm_continuous', 'layer_norm_i2vgen'
+        norm_type: str = "layer_norm",  # 可选值：'layer_norm'、'ada_norm'、'ada_norm_zero'、'ada_norm_single'、'ada_norm_continuous'、'layer_norm_i2vgen'
         norm_eps: float = 1e-5,
         final_dropout: bool = False,
         attention_type: str = "default",
@@ -133,8 +133,8 @@ class BasicTransformerBlock(nn.Module):
         else:
             self.pos_embed = None
 
-        # Define 3 blocks. Each block has its own normalization layer.
-        # 1. Self-Attn
+        # 定义 3 个块。每个块都有自己的归一化层。
+        # 1. 自注意力
         if norm_type == "ada_norm":
             self.norm1 = AdaLayerNorm(dim)
         else:
@@ -151,7 +151,7 @@ class BasicTransformerBlock(nn.Module):
             out_bias=attention_out_bias,
         )
 
-        # 3. Feed-forward
+        # 3. 前馈
         self.norm3 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
         self.ff = FeedForward(
             dim,
@@ -174,7 +174,7 @@ class BasicTransformerBlock(nn.Module):
         encoder_attention_mask: torch.Tensor | None = None,
         temb: torch.LongTensor | None = None,
     ) -> torch.Tensor:
-        # 0. Self-Attention
+        # 0. 自注意力
         if self.norm_type == "ada_norm":
             norm_hidden_states = self.norm1(hidden_states, temb)
         else:
@@ -195,7 +195,7 @@ class BasicTransformerBlock(nn.Module):
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        # 4. Feed-forward
+        # 4. 前馈
         norm_hidden_states = self.norm3(hidden_states)
         ff_output = self.ff(norm_hidden_states)
 
@@ -236,7 +236,7 @@ class DiT(ModelMixin, ConfigMixin):
         self.inner_dim = self.config.num_attention_heads * self.config.attention_head_dim
         self.gradient_checkpointing = False
 
-        # Timestep encoder
+        # 时间步编码器
         self.timestep_encoder = TimestepEncoder(
             embedding_dim=self.inner_dim, compute_dtype=self.config.compute_dtype
         )
@@ -266,7 +266,7 @@ class DiT(ModelMixin, ConfigMixin):
             ]
         self.transformer_blocks = nn.ModuleList(all_blocks)
 
-        # Output blocks
+        # 输出块
         self.norm_out = nn.LayerNorm(self.inner_dim, elementwise_affine=False, eps=1e-6)
         self.proj_out_1 = nn.Linear(self.inner_dim, 2 * self.inner_dim)
         self.proj_out_2 = nn.Linear(self.inner_dim, self.config.output_dim)
@@ -277,22 +277,22 @@ class DiT(ModelMixin, ConfigMixin):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,  # Shape: (B, T, D)
-        encoder_hidden_states: torch.Tensor,  # Shape: (B, S, D)
+        hidden_states: torch.Tensor,  # 形状：(B, T, D)
+        encoder_hidden_states: torch.Tensor,  # 形状：(B, S, D)
         timestep: torch.LongTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         return_all_hidden_states: bool = False,
     ):
-        # Encode timesteps
+        # 编码时间步
         temb = self.timestep_encoder(timestep)
 
-        # Process through transformer blocks - single pass through the blocks
+        # 通过 transformer 块处理——对所有块做单次遍历
         hidden_states = hidden_states.contiguous()
         encoder_hidden_states = encoder_hidden_states.contiguous()
 
         all_hidden_states = [hidden_states]
 
-        # Process through transformer blocks
+        # 通过 transformer 块处理
         for idx, block in enumerate(self.transformer_blocks):
             if idx % 2 == 1 and self.config.interleave_self_attention:
                 hidden_states = block(
@@ -312,7 +312,7 @@ class DiT(ModelMixin, ConfigMixin):
                 )
             all_hidden_states.append(hidden_states)
 
-        # Output processing
+        # 输出处理
         conditioning = temb
         shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
         hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
@@ -323,7 +323,7 @@ class DiT(ModelMixin, ConfigMixin):
 
 
 class AlternateVLDiT(DiT):
-    """N1.7 DiT variant that alternates cross-attention over image and text tokens."""
+    """N1.7 DiT 变体，交替对图像 token 和文本 token 进行交叉注意力。"""
 
     def __init__(self, *args, attend_text_every_n_blocks: int = 2, **kwargs):
         super().__init__(*args, **kwargs)
@@ -438,14 +438,14 @@ class SelfAttentionTransformer(ModelMixin, ConfigMixin):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,  # Shape: (B, T, D)
+        hidden_states: torch.Tensor,  # 形状：(B, T, D)
         return_all_hidden_states: bool = False,
     ):
-        # Process through transformer blocks - single pass through the blocks
+        # 通过 transformer 块处理——对所有块做单次遍历
         hidden_states = hidden_states.contiguous()
         all_hidden_states = [hidden_states]
 
-        # Process through transformer blocks
+        # 通过 transformer 块处理
         for _idx, block in enumerate(self.transformer_blocks):
             hidden_states = block(hidden_states)
             all_hidden_states.append(hidden_states)

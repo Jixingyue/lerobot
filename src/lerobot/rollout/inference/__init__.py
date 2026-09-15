@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Inference engine package — backend-agnostic action production.
+"""推理引擎包——与后端无关的动作生成。
 
-Concrete backends (``sync``, ``rtc``, ...) expose the same small interface so
-rollout strategies never branch on which backend is in use.
+具体后端（``sync``、``rtc`` 等）暴露相同的小型接口，
+因此 rollout 策略永远不需要根据所使用的后端进行分支处理。
 """
 
 from .base import InferenceEngine, PolicyQuery, QueryAnswer, QueryKind

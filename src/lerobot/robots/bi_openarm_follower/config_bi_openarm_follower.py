@@ -25,14 +25,14 @@ from ..openarm_follower import OpenArmFollowerConfigBase
 @RobotConfig.register_subclass("bi_openarm_follower")
 @dataclass(kw_only=True)
 class BiOpenArmFollowerConfig(RobotConfig):
-    """Configuration class for Bi OpenArm Follower robots."""
+    """双臂 OpenArm Follower 机器人的配置类。"""
 
     id: str | None = "bi_openarm_follower"
 
     left_arm_config: OpenArmFollowerConfigBase
     right_arm_config: OpenArmFollowerConfigBase
 
-    # Top-level cameras not attached to a specific side. Keys are kept as-is in
-    # observations (no `left_`/`right_` prefix). Per-arm cameras (declared on
-    # `{left,right}_arm_config.cameras`) are prefixed.
+    # 不归属于特定一侧的顶层相机。其键在观测中保持原样
+    # （不加 `left_`/`right_` 前缀）。每条手臂上的相机（在
+    # `{left,right}_arm_config.cameras` 中声明）会加前缀。
     cameras: dict[str, CameraConfig] = field(default_factory=dict)

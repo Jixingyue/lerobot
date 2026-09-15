@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-gRPC transport layer for async inference.
+用于异步推理的 gRPC 传输层。
 
-Requires: ``pip install 'lerobot[grpcio-dep]'``
+依赖安装：``pip install 'lerobot[grpcio-dep]'``
 
-Available modules (import directly)::
+可用模块（直接导入）::
 
     from lerobot.transport.utils import ...
 """

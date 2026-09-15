@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 class EO1Policy(PreTrainedPolicy):
-    """EO1 policy wrapper for LeRobot robot-only training/evaluation."""
+    """用于 LeRobot 纯机器人训练/评估的 EO1 策略封装。"""
 
     config_class = EO1Config
     name = "eo1"
@@ -64,7 +64,7 @@ class EO1Policy(PreTrainedPolicy):
         self.config = config
 
         if config.pretrained_path is None:
-            # Initialize from pretrained VLM
+            # 从预训练 VLM 初始化
             vlm_backbone = Qwen2_5_VLForConditionalGeneration.from_pretrained(
                 config.vlm_base,
                 dtype=config.dtype,
@@ -147,7 +147,7 @@ class EO1Policy(PreTrainedPolicy):
 
     @torch.no_grad()
     def generate_text(self, batch: dict[str, Tensor]) -> str:
-        """Decode one response conditioned on images and projected robot state."""
+        """以图像和投影后的机器人状态为条件，解码一条回复。"""
         self.eval()
         processor = self._get_text_processor()
         input_names = ("input_ids", "attention_mask", "pixel_values", "image_grid_thw", "mm_token_type_ids")
@@ -201,7 +201,7 @@ class EO1Policy(PreTrainedPolicy):
 
 
 class EO1VisionActionProjector(torch.nn.Sequential):
-    """This block implements the multi-layer perceptron (MLP) module."""
+    """该块实现了多层感知机（MLP）模块。"""
 
     def __init__(
         self,
@@ -245,7 +245,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
         super().__init__()
 
         self.config = config
-        # Preserve the backbone dtype selected at construction time so Qwen's fp32 rotary buffers stay intact.
+        # 保留构建时选定的主干 dtype，使 Qwen 的 fp32 旋转位置缓冲保持完好。
         self.vlm_backbone = vlm_backbone
         self.hidden_size = self.vlm_backbone.config.text_config.hidden_size
         max_state_dim = config.max_state_dim
@@ -275,7 +275,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
         return contextlib.nullcontext()
 
     def gradient_checkpointing_enable(self):
-        """Enable gradient checkpointing for the Qwen2.5-VL backbone."""
+        """为 Qwen2.5-VL 主干启用梯度检查点。"""
         self.gradient_checkpointing_enabled = True
         self.vlm_backbone.gradient_checkpointing_enable(
             gradient_checkpointing_kwargs={"use_reentrant": False}
@@ -283,13 +283,13 @@ class EO1VisionFlowMatchingModel(nn.Module):
         logger.info("Enabled gradient checkpointing for EO1VisionFlowMatchingModel")
 
     def gradient_checkpointing_disable(self):
-        """Disable gradient checkpointing for the Qwen2.5-VL backbone."""
+        """为 Qwen2.5-VL 主干禁用梯度检查点。"""
         self.gradient_checkpointing_enabled = False
         self.vlm_backbone.gradient_checkpointing_disable()
         logger.info("Disabled gradient checkpointing for EO1VisionFlowMatchingModel")
 
     def _apply_checkpoint(self, func, *args, **kwargs):
-        """Apply manual gradient checkpointing to EO1 flow-head computations when training."""
+        """训练时对 EO1 流匹配头的计算应用手动梯度检查点。"""
         if self.gradient_checkpointing_enabled and self.training and torch.is_grad_enabled():
             return torch.utils.checkpoint.checkpoint(
                 func, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
@@ -319,7 +319,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
         state_token_id: int,
         action_token_id: int,
     ) -> tuple[torch.BoolTensor, torch.BoolTensor]:
-        """Return EO1 state/action placeholder masks, following Qwen's multimodal mask style."""
+        """返回 EO1 的状态/动作占位符掩码，遵循 Qwen 的多模态掩码风格。"""
         if input_ids is None:
             special_state_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.tensor(state_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -363,15 +363,15 @@ class EO1VisionFlowMatchingModel(nn.Module):
         state_token_id: int,
         action_token_id: int,
     ) -> torch.FloatTensor:
-        """Embed the EO1 prefix tokens before native Qwen injects multimodal features."""
+        """在原生 Qwen 注入多模态特征之前，嵌入 EO1 前缀 token。"""
 
-        # Get the input embeddings for the input IDs
+        # 获取输入 ID 对应的输入嵌入
         def input_embed_func(input_ids: torch.LongTensor) -> torch.FloatTensor:
             return self.get_input_embeddings()(input_ids)
 
         inputs_embeds = self._apply_checkpoint(input_embed_func, input_ids)
 
-        # Project the states to the hidden size
+        # 将状态投影到隐藏层大小
         def state_proj_func(states: torch.Tensor) -> torch.FloatTensor:
             with self.flow_head_autocast_context():
                 states = states.to(dtype=self.state_proj.weight.dtype)
@@ -394,7 +394,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
         timestep: torch.Tensor,
         noisy_actions: torch.Tensor,
     ) -> torch.FloatTensor:
-        """Embed the suffix"""
+        """嵌入后缀"""
 
         def action_proj_func(noisy_actions: torch.Tensor) -> torch.FloatTensor:
             with self.flow_head_autocast_context():
@@ -439,9 +439,9 @@ class EO1VisionFlowMatchingModel(nn.Module):
         action_token_id: int,
         **kwargs,
     ) -> EO1Output:
-        """Run EO-1 flow and sparse assistant-token supervision in one sequence."""
+        """在一个序列中运行 EO-1 流匹配和稀疏的助手 token 监督。"""
 
-        # 1. Build the EO1 prefix with state placeholders resolved.
+        # 1. 构建解析了状态占位符的 EO1 前缀。
         inputs_embeds = self.embed_prefix(
             input_ids,
             states=states,
@@ -449,7 +449,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
             action_token_id=action_token_id,
         )
 
-        # 2. Sample the diffusion target only for rows carrying action placeholders.
+        # 2. 仅对携带动作占位符的行采样扩散目标。
         _, action_mask = self.get_placeholder_mask(
             input_ids,
             inputs_embeds,
@@ -475,7 +475,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
                 action_time_embs.to(inputs_embeds.device, inputs_embeds.dtype),
             )
 
-        # 3. Optionally drop padded action tokens from backbone attention.
+        # 3. 可选地从主干注意力中剔除填充的动作 token。
         if attention_mask is not None:
             attention_mask = attention_mask.to(inputs_embeds.device)
 
@@ -491,7 +491,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
             )
             attention_mask = attention_mask.masked_fill(action_padding_mask, 0)
 
-        # 4. Run the Qwen backbone on the fused EO1 sequence.
+        # 4. 在融合后的 EO1 序列上运行 Qwen 主干。
         def vlm_forward_func(
             input_ids: torch.LongTensor,
             attention_mask: torch.Tensor | None,
@@ -568,13 +568,13 @@ class EO1VisionFlowMatchingModel(nn.Module):
         action_token_id: int,
         **kwargs,
     ) -> Tensor:
-        """Sample actions from the model."""
+        """从模型中采样动作。"""
         if states is None:
             raise ValueError("states are required for EO1 action sampling.")
         if mm_token_type_ids is None:
             raise ValueError("mm_token_type_ids are required for EO1 action sampling.")
 
-        # 1. Resolve the left-padded rollout prompt and locate the action span.
+        # 1. 解析左填充的推演提示词并定位动作区间。
         chunk_size = self.config.chunk_size
 
         inputs_embeds = self.embed_prefix(
@@ -605,7 +605,7 @@ class EO1VisionFlowMatchingModel(nn.Module):
             raise ValueError("Action tokens must form a contiguous chunk of length chunk_size.")
         act_slice = slice(act_start, act_end)
 
-        # 2. Encode the fixed prefix once and cache its KV state.
+        # 2. 只对固定前缀编码一次，并缓存其 KV 状态。
         batch_size = input_ids.shape[0]
         device = inputs_embeds.device
         attention_mask = attention_mask.to(device)
@@ -636,12 +636,12 @@ class EO1VisionFlowMatchingModel(nn.Module):
         ).to(dtype=self.action_in_proj.weight.dtype)
         past_key_values = outputs.past_key_values
 
-        # 3. Denoise only the action chunk while keeping the prefix cache invariant.
+        # 3. 只对动作块去噪，同时保持前缀缓存不变。
         def denoise_fn(input_x_t, current_timestep):
             action_time_embs = self.embed_suffix(current_timestep, input_x_t)
             inputs_embeds[:, act_slice] = action_time_embs.to(inputs_embeds.dtype)
 
-            # Keep the prefix KV cache invariant across denoising steps.
+            # 在去噪步骤之间保持前缀 KV 缓存不变。
             past_key_values.crop(act_start)
             outputs = self.vlm_backbone.model(
                 attention_mask=attention_mask[:, :act_end],

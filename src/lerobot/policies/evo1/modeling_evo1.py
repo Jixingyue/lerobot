@@ -62,10 +62,9 @@ class Evo1Policy(PreTrainedPolicy):
         self.reset()
 
     def init_rtc_processor(self):
-        """Create the RTC processor when config.rtc_config is set.
+        """当设置了 config.rtc_config 时创建 RTC 处理器。
 
-        The RTC rollout backend assigns config.rtc_config after loading the policy and re-invokes
-        this method.
+        RTC 推演后端会在加载策略后为 config.rtc_config 赋值，并重新调用该方法。
         """
         self.rtc_processor = None
         if self.config.rtc_config is not None:
@@ -109,8 +108,8 @@ class Evo1Policy(PreTrainedPolicy):
                 **kwargs,
             )
         if vlm_hub_kwargs is None:
-            # Forward the hub download options to the base-VLM download as well; `revision` is not
-            # forwarded because it identifies the policy repo, not the VLM repo.
+            # 将 hub 下载选项同样转发给基础 VLM 的下载；`revision` 不转发，
+            # 因为它标识的是策略仓库，而不是 VLM 仓库。
             vlm_hub_kwargs = {
                 key: value
                 for key, value in (
@@ -153,8 +152,8 @@ class Evo1Policy(PreTrainedPolicy):
 
     @property
     def _device(self) -> torch.device:
-        # The device the policy actually lives on. Derived from the parameters rather than
-        # config.device so the policy keeps working after accelerate (or a plain .to()) moves it.
+        # 策略实际所在的设备。从参数推导而不是使用 config.device，
+        # 这样在 accelerate（或普通的 .to()）移动策略后它仍能正常工作。
         return next(self.model.action_head.parameters()).device
 
     @property
@@ -162,9 +161,9 @@ class Evo1Policy(PreTrainedPolicy):
         return bool(self.config.use_amp) and self._device.type == "cuda"
 
     def _maybe_autocast(self):
-        # EVO1 manages its own mixed precision: an explicit bf16 autocast that also overrides any
-        # outer autocast context (e.g. lerobot-eval's fp16 default), keeping train and eval
-        # numerics identical.
+        # EVO1 自行管理混合精度：显式的 bf16 autocast 还会覆盖任何外层
+        # autocast 上下文（例如 lerobot-eval 的 fp16 默认值），使训练和
+        # 评估的数值行为保持一致。
         if self._amp_enabled:
             return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
         return nullcontext()
@@ -247,8 +246,8 @@ class Evo1Policy(PreTrainedPolicy):
             mask[:, :state_dim] = True
         else:
             mask[:, :state_dim] = explicit_mask.to(device=device, dtype=torch.bool)
-        # Zero out masked state dims so an explicit state_mask actually affects the model input
-        # (the state encoder has no mask argument of its own).
+        # 将被掩蔽的状态维度清零，使显式的 state_mask 真正影响模型输入
+        # （状态编码器本身没有掩码参数）。
         padded = padded * mask.to(dtype=padded.dtype)
         return padded.to(dtype=self._compute_dtype), mask
 
@@ -306,8 +305,8 @@ class Evo1Policy(PreTrainedPolicy):
         else:
             mask[:, :, :action_dim] = explicit_mask.to(device=device, dtype=torch.bool)
 
-        # Timesteps beyond the episode end hold fabricated (repeated) actions; exclude them from
-        # the loss like the other chunked policies do.
+        # 超出回合结束的时间步保存的是伪造的（重复的）动作；与其他分块策略一样，
+        # 将它们从损失中排除。
         action_is_pad = batch.get("action_is_pad")
         if action_is_pad is not None:
             if action_is_pad.shape != (batch_size, horizon):
@@ -372,9 +371,9 @@ class Evo1Policy(PreTrainedPolicy):
             raise ValueError("EVO1 requires at least one visual observation feature.")
         camera_keys = list(camera_keys)[: self.config.max_views]
 
-        # Configured cameras may be absent from the batch up to the empty_cameras budget (e.g. the
-        # placeholder features added by validate_features); they become masked-out views that the
-        # embedder zero-pads. Any other absent camera is an error.
+        # 在不超过 empty_cameras 预算的范围内，批次中可能缺少已配置的相机
+        # （例如 validate_features 添加的占位特征）；它们会成为被掩蔽的视图，
+        # 由嵌入器进行零填充。缺少其他任何相机都是错误。
         present_keys = [key for key in camera_keys if key in batch]
         missing_keys = [key for key in camera_keys if key not in batch]
         if len(missing_keys) > self.config.empty_cameras:
@@ -385,14 +384,14 @@ class Evo1Policy(PreTrainedPolicy):
         if not present_keys:
             raise ValueError("EVO1 requires at least one visual observation in the batch.")
 
-        # Keep each present camera as a batched (B, C, H, W) tensor on its current (GPU) device.
-        # Resizing/normalization and zero-padding of absent views happen batched inside the
-        # embedder, so images never leave the device here.
+        # 将每个存在的相机保持为其当前（GPU）设备上的批量化 (B, C, H, W) 张量。
+        # 缺失视图的缩放/归一化和零填充在嵌入器内部批量完成，
+        # 因此图像在这里从不离开设备。
         camera_images: list[Tensor] = []
         for camera_key in present_keys:
             image = batch[camera_key]
             if image.dim() == 3:
-                # Promote an unbatched (C, H, W) frame so batch_size is read from a real batch dim.
+                # 将未批处理的 (C, H, W) 帧升维，使 batch_size 从真实的批次维读取。
                 image = image.unsqueeze(0)
             elif image.dim() == 5:
                 image = image[:, -1]
@@ -469,13 +468,13 @@ class Evo1Policy(PreTrainedPolicy):
                 context_mask=context_mask,
             )
 
-        # Compute the flow-matching regression loss in fp32, outside the autocast block.
+        # 在 autocast 块之外以 fp32 计算流匹配回归损失。
         pred_velocity = pred_velocity.float()
         noise = noise.float()
         flat_action_mask = action_mask.view(action_mask.shape[0], -1).to(dtype=torch.float32)
-        # Flow-matching velocity target. Padded (masked-out) action dims are already zero on both sides
-        # here (`actions_gt` is zero-padded in `_prepare_actions`, and `noise` is masked inside the head),
-        # and the whole difference is multiplied by `flat_action_mask`, so padded dims contribute nothing.
+        # 流匹配速度目标。填充的（被掩蔽的）动作维度在这里两侧都已经是零
+        # （`actions_gt` 在 `_prepare_actions` 中被零填充，`noise` 在头内部被掩蔽），
+        # 且整个差值会乘以 `flat_action_mask`，因此填充维度不产生任何贡献。
         target_velocity = (actions_gt.float() - noise).view(actions_gt.shape[0], -1) * flat_action_mask
         loss = self._compute_masked_loss(pred_velocity, target_velocity, action_mask, reduction)
         loss_mean = loss.mean().item() if loss.ndim > 0 else loss.item()
@@ -529,7 +528,7 @@ class Evo1Policy(PreTrainedPolicy):
         if len(self._action_queue) == 0:
             action_chunk = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
             self._action_queue.extend(action_chunk.transpose(0, 1))
-        # Returns one step of shape (B, max_action_dim): actions are emitted at the padded max_action_dim
-        # width and cropped to the real action dim downstream by the postprocessor (Evo1ActionProcessorStep).
-        # Callers that bypass the postprocessor receive the padded width.
+        # 返回形状为 (B, max_action_dim) 的单步动作：动作以填充后的 max_action_dim
+        # 宽度发出，并在下游由后处理器（Evo1ActionProcessorStep）裁剪到真实动作维度。
+        # 绕过后处理器的调用方会收到填充后的宽度。
         return self._action_queue.popleft()

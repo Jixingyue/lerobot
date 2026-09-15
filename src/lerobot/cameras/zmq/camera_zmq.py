@@ -15,8 +15,8 @@
 # limitations under the License.
 
 """
-ZMQCamera - Captures frames from remote cameras via ZeroMQ using JSON protocol in the
-following format:
+ZMQCamera - 通过 ZeroMQ 使用 JSON 协议从远程相机捕获帧，
+协议格式如下：
     {
         "timestamps": {"camera_name": float},
         "images": {"camera_name": "<base64-jpeg>"}
@@ -53,13 +53,13 @@ logger = logging.getLogger(__name__)
 
 class ZMQCamera(Camera):
     """
-    Manages camera interactions via ZeroMQ for receiving frames from a remote server.
+    通过 ZeroMQ 管理相机交互，用于从远程服务器接收帧。
 
-    This class connects to a ZMQ Publisher, subscribes to frame topics, and decodes
-    incoming JSON messages containing Base64 encoded images. It supports both
-    synchronous and asynchronous frame reading patterns.
+    该类连接到 ZMQ Publisher，订阅帧主题，并解码
+    传入的包含 Base64 编码图像的 JSON 消息。它支持
+    同步和异步两种帧读取方式。
 
-    Example usage:
+    用法示例：
         ```python
         from lerobot.cameras.zmq import ZMQCamera, ZMQCameraConfig
 
@@ -67,13 +67,13 @@ class ZMQCamera(Camera):
         camera = ZMQCamera(config)
         camera.connect()
 
-        # Read 1 frame synchronously (blocking)
+        # 同步读取 1 帧（阻塞）
         color_image = camera.read()
 
-        # Read 1 frame asynchronously (waits for new frame with a timeout)
+        # 异步读取 1 帧（带超时等待新帧）
         async_image = camera.async_read()
 
-        # Get the latest frame immediately (no wait, returns timestamp)
+        # 立即获取最新帧（不等待，返回时间戳）
         latest_image, timestamp = camera.read_latest()
 
         camera.disconnect()
@@ -91,12 +91,12 @@ class ZMQCamera(Camera):
         self.color_mode = config.color_mode
         self.timeout_ms = config.timeout_ms
 
-        # ZMQ Context and Socket
+        # ZMQ 上下文和套接字
         self.context: zmq.Context | None = None
         self.socket: zmq.Socket | None = None
         self._connected = False
 
-        # Threading resources
+        # 线程资源
         self.thread: Thread | None = None
         self.stop_event: Event | None = None
         self.frame_lock: Lock = Lock()
@@ -109,16 +109,16 @@ class ZMQCamera(Camera):
 
     @property
     def is_connected(self) -> bool:
-        """Checks if the ZMQ socket is initialized and connected."""
+        """检查 ZMQ 套接字是否已初始化并连接。"""
         return self._connected and self.context is not None and self.socket is not None
 
     @check_if_already_connected
     def connect(self, warmup: bool = True) -> None:
-        """Connect to ZMQ camera server.
+        """连接到 ZMQ 相机服务器。
 
-        Args:
-            warmup (bool): If True, waits for the camera to provide at least one
-                           valid frame before returning. Defaults to True.
+        参数：
+            warmup (bool): 如果为 True，在返回前等待相机提供
+                           至少一个有效帧。默认为 True。
         """
 
         logger.info(f"Connecting to {self}...")
@@ -132,9 +132,9 @@ class ZMQCamera(Camera):
             self.socket.connect(f"tcp://{self.server_address}:{self.port}")
             self._connected = True
 
-            # Auto-detect resolution if not provided
+            # 如果未提供分辨率，则自动检测
             if self.width is None or self.height is None:
-                # Read directly from hardware because the thread isn't running yet
+                # 由于线程尚未运行，直接从硬件读取
                 temp_frame = self._read_from_hardware()
                 h, w = temp_frame.shape[:2]
                 self.height = h
@@ -145,9 +145,9 @@ class ZMQCamera(Camera):
             logger.info(f"{self} connected.")
 
             if warmup:
-                # Ensure we have captured at least one frame via the thread
+                # 确保已通过线程至少捕获了一帧
                 start_time = time.time()
-                while time.time() - start_time < (self.config.warmup_s):  # Wait a bit more than timeout
+                while time.time() - start_time < (self.config.warmup_s):  # 等待比超时稍长的时间
                     self.async_read(timeout_ms=self.config.warmup_s * 1000)
                     time.sleep(0.1)
 
@@ -160,7 +160,7 @@ class ZMQCamera(Camera):
             raise RuntimeError(f"Failed to connect to {self}: {e}") from e
 
     def _cleanup(self):
-        """Clean up ZMQ resources."""
+        """清理 ZMQ 资源。"""
         self._connected = False
         if self.socket:
             self.socket.close()
@@ -172,13 +172,13 @@ class ZMQCamera(Camera):
     @staticmethod
     def find_cameras() -> list[dict[str, Any]]:
         """
-        Detection not implemented for ZMQ cameras. These cameras require manual configuration (server address/port).
+        ZMQ 相机未实现检测功能。这些相机需要手动配置（服务器地址/端口）。
         """
         raise NotImplementedError("Camera detection is not implemented for ZMQ cameras.")
 
     def _read_from_hardware(self) -> NDArray[Any]:
         """
-        Reads a single frame directly from the ZMQ socket.
+        直接从 ZMQ 套接字读取单帧。
         """
         if not self.is_connected or self.socket is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -188,7 +188,7 @@ class ZMQCamera(Camera):
         except zmq.Again as e:
             raise TimeoutError(f"{self} timeout after {self.timeout_ms}ms") from e
 
-        # Decode JSON message
+        # 解码 JSON 消息
         data = json.loads(message)
 
         if "images" not in data:
@@ -196,7 +196,7 @@ class ZMQCamera(Camera):
 
         images = data["images"]
 
-        # Get image by camera name or first available
+        # 按相机名称获取图像，或获取第一个可用的图像
         if self.camera_name in images:
             img_b64 = images[self.camera_name]
         elif images:
@@ -204,7 +204,7 @@ class ZMQCamera(Camera):
         else:
             raise RuntimeError(f"{self} no images in message")
 
-        # Decode base64 JPEG
+        # 解码 base64 JPEG
         img_bytes = base64.b64decode(img_b64)
         frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
 
@@ -216,13 +216,13 @@ class ZMQCamera(Camera):
     @check_if_not_connected
     def read(self, color_mode: ColorMode | None = None) -> NDArray[Any]:
         """
-        Reads a single frame synchronously from the camera.
+        以同步方式从相机读取单帧。
 
-        This is a blocking call. It waits for the next available frame from the
-        camera background thread.
+        这是一个阻塞调用。它等待来自相机后台线程的
+        下一个可用帧。
 
-        Returns:
-            np.ndarray: Decoded frame (height, width, 3)
+        返回：
+            np.ndarray: 解码后的帧 (height, width, 3)
         """
         start_time = time.perf_counter()
 
@@ -244,7 +244,7 @@ class ZMQCamera(Camera):
 
     def _read_loop(self) -> None:
         """
-        Internal loop run by the background thread for asynchronous reading.
+        后台线程运行的内部循环，用于异步读取。
         """
         stop_event = self.stop_event
         if stop_event is None:
@@ -307,19 +307,19 @@ class ZMQCamera(Camera):
     @check_if_not_connected
     def async_read(self, timeout_ms: float = 200) -> NDArray[Any]:
         """
-        Reads the latest available frame asynchronously.
+        以异步方式读取最新可用的帧。
 
-        Args:
-            timeout_ms (float): Maximum time in milliseconds to wait for a frame
-                to become available. Defaults to 200ms.
+        参数：
+            timeout_ms (float): 等待帧可用的最长时间（毫秒）。
+                默认为 200ms。
 
-        Returns:
-            np.ndarray: The latest captured frame.
+        返回：
+            np.ndarray: 最新捕获的帧。
 
-        Raises:
-            DeviceNotConnectedError: If the camera is not connected.
-            TimeoutError: If no frame data becomes available within the specified timeout.
-            RuntimeError: If the background thread is not running.
+        异常：
+            DeviceNotConnectedError: 如果相机未连接。
+            TimeoutError: 如果在指定超时内没有帧数据可用。
+            RuntimeError: 如果后台线程未运行。
         """
 
         if self.thread is None or not self.thread.is_alive():
@@ -339,19 +339,19 @@ class ZMQCamera(Camera):
 
     @check_if_not_connected
     def read_latest(self, max_age_ms: int = 1000) -> NDArray[Any]:
-        """Return the most recent frame captured immediately (Peeking).
+        """立即返回最近捕获的帧（窥视模式）。
 
-        This method is non-blocking and returns whatever is currently in the
-        memory buffer. The frame may be stale,
-        meaning it could have been captured a while ago (hanging camera scenario e.g.).
+        此方法是非阻塞的，直接返回当前内存缓冲区中的内容。
+        该帧可能已过期，
+        即它可能是很久之前捕获的（例如相机挂起的场景）。
 
-        Returns:
-            NDArray[Any]: The frame image (numpy array).
+        返回：
+            NDArray[Any]: 帧图像（numpy 数组）。
 
-        Raises:
-            TimeoutError: If the latest frame is older than `max_age_ms`.
-            DeviceNotConnectedError: If the camera is not connected.
-            RuntimeError: If the camera is connected but has not captured any frames yet.
+        异常：
+            TimeoutError: 如果最新帧的年龄超过 `max_age_ms`。
+            DeviceNotConnectedError: 如果相机未连接。
+            RuntimeError: 如果相机已连接但尚未捕获任何帧。
         """
 
         if self.thread is None or not self.thread.is_alive():
@@ -373,7 +373,7 @@ class ZMQCamera(Camera):
         return frame
 
     def disconnect(self) -> None:
-        """Disconnect from ZMQ camera."""
+        """断开与 ZMQ 相机的连接。"""
         if not self.is_connected and self.thread is None:
             raise DeviceNotConnectedError(f"{self} not connected.")
 

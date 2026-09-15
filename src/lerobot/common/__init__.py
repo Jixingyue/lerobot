@@ -13,14 +13,14 @@
 # limitations under the License.
 
 """
-Cross-cutting modules that bridge multiple lerobot packages.
+跨模块工具，连接多个 lerobot 包。
 
-Unlike ``lerobot.utils`` (which must remain dependency-free), modules here
-are allowed to import from ``lerobot.policies``, ``lerobot.processor``,
-``lerobot.configs``, etc.  They are deliberately NOT re-exported from the
-top-level ``lerobot`` package.
+与 ``lerobot.utils``（必须保持无依赖）不同，这里的模块
+允许从 ``lerobot.policies``、``lerobot.processor``、
+``lerobot.configs`` 等导入。它们故意不从顶层
+``lerobot`` 包重新导出。
 
-Available modules (import directly)::
+可用模块（直接导入）::
 
     from lerobot.common.control_utils import predict_action, ...
     from lerobot.common.train_utils import save_checkpoint, ...

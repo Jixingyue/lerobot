@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 
 
 def inside_slurm():
-    """Check whether the python process was launched through slurm"""
-    # TODO(rcadene): return False for interactive mode `--pty bash`
+    """检查该 python 进程是否是通过 slurm 启动的"""
+    # TODO(rcadene)：对于交互模式 `--pty bash` 应返回 False
     return "SLURM_JOB_ID" in os.environ
 
 
@@ -47,17 +47,17 @@ def init_logging(
     file_level: str = "DEBUG",
     accelerator: Accelerator | None = None,
 ):
-    """Initialize logging configuration for LeRobot.
+    """初始化 LeRobot 的日志配置。
 
-    In multi-GPU training, only the main process logs to console to avoid duplicate output.
-    Non-main processes have console logging suppressed but can still log to file.
+    在多 GPU 训练中，只有主进程向控制台记录日志，以避免重复输出。
+    非主进程的控制台日志会被抑制，但仍可记录到文件。
 
-    Args:
-        log_file: Optional file path to write logs to
-        display_pid: Include process ID in log messages (useful for debugging multi-process)
-        console_level: Logging level for console output
-        file_level: Logging level for file output
-        accelerator: Optional Accelerator instance (for multi-GPU detection)
+    参数:
+        log_file: 可选的日志文件写入路径
+        display_pid: 在日志消息中包含进程 ID（有助于调试多进程）
+        console_level: 控制台输出的日志级别
+        file_level: 文件输出的日志级别
+        accelerator: 可选的 Accelerator 实例（用于多 GPU 检测）
     """
 
     class LeRobotFormatter(logging.Formatter):
@@ -74,20 +74,20 @@ def init_logging(
     logger = logging.getLogger()
     logger.setLevel(logging.NOTSET)
 
-    # Clear any existing handlers
+    # 清除所有已有的处理器
     logger.handlers.clear()
 
-    # Determine if this is a non-main process in distributed training
+    # 判断这是否为分布式训练中的非主进程
     is_main_process = accelerator.is_main_process if accelerator is not None else True
 
-    # Console logging (main process only)
+    # 控制台日志（仅主进程）
     if is_main_process:
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
         console_handler.setLevel(console_level.upper())
         logger.addHandler(console_handler)
     else:
-        # Suppress console output for non-main processes
+        # 抑制非主进程的控制台输出
         logger.addHandler(logging.NullHandler())
         logger.setLevel(logging.ERROR)
 
@@ -152,7 +152,7 @@ def log_say(text: str, play_sounds: bool = True, blocking: bool = False):
 
 def get_channel_first_image_shape(image_shape: tuple) -> tuple:
     shape = copy(image_shape)
-    if shape[2] < shape[0] and shape[2] < shape[1]:  # (h, w, c) -> (c, h, w)
+    if shape[2] < shape[0] and shape[2] < shape[1]:  # (h, w, c) -> (c, h, w)，形状记号保持英文
         shape = (shape[2], shape[0], shape[1])
     elif not (shape[0] < shape[1] and shape[0] < shape[2]):
         raise ValueError(image_shape)
@@ -165,14 +165,14 @@ def has_method(cls: object, method_name: str) -> bool:
 
 
 def unwrap_scalar(value: Any) -> Any:
-    """Unwrap a tensor / numpy scalar / single-element list into a Python scalar.
+    """将张量 / numpy 标量 / 单元素列表解包为 Python 标量。
 
-    Tensors and numpy scalars expose ``.item()``; single-element lists are
-    unwrapped recursively. Anything else is returned unchanged. Centralized
-    here so the language renderer and processor steps share one definition.
+    张量和 numpy 标量暴露了 ``.item()``；单元素列表会被
+    递归解包。其他任何内容原样返回。将其集中
+    在此处，以便语言渲染器和处理器步骤共用同一定义。
 
-    Raises:
-        ValueError: If ``value`` is a list with zero or multiple elements.
+    异常:
+        ValueError: 如果 ``value`` 是包含零个或多个元素的列表。
     """
     if hasattr(value, "item"):
         return value.item()
@@ -185,14 +185,14 @@ def unwrap_scalar(value: Any) -> Any:
 
 def is_valid_numpy_dtype_string(dtype_str: str) -> bool:
     """
-    Return True if a given string can be converted to a numpy dtype.
+    当给定字符串可以转换为 numpy dtype 时返回 True。
     """
     try:
-        # Attempt to convert the string to a numpy dtype
+        # 尝试将字符串转换为 numpy dtype
         np.dtype(dtype_str)
         return True
     except TypeError:
-        # If a TypeError is raised, the string is not a valid dtype
+        # 如果抛出 TypeError，则该字符串不是合法的 dtype
         return False
 
 
@@ -202,14 +202,14 @@ def enter_pressed() -> bool:
 
         if msvcrt.kbhit():
             key = msvcrt.getch()
-            return key in (b"\r", b"\n")  # enter key
+            return key in (b"\r", b"\n")  # 回车键
         return False
     else:
         return select.select([sys.stdin], [], [], 0)[0] and sys.stdin.readline().strip() == ""
 
 
 def move_cursor_up(lines):
-    """Move the cursor up by a specified number of lines."""
+    """将光标向上移动指定的行数。"""
     print(f"\033[{lines}A", end="")
 
 
@@ -224,20 +224,20 @@ def get_elapsed_time_in_days_hours_minutes_seconds(elapsed_time_s: float):
 
 
 def flatten_dict(d: dict, parent_key: str = "", sep: str = "/") -> dict:
-    """Flatten a nested dictionary by joining keys with a separator.
+    """通过用分隔符连接键来展平一个嵌套字典。
 
-    Example:
+    示例：
         >>> dct = {"a": {"b": 1, "c": {"d": 2}}, "e": 3}
         >>> print(flatten_dict(dct))
         {'a/b': 1, 'a/c/d': 2, 'e': 3}
 
-    Args:
-        d (dict): The dictionary to flatten.
-        parent_key (str): The base key to prepend to the keys in this level.
-        sep (str): The separator to use between keys.
+    参数:
+        d (dict): 要展平的字典。
+        parent_key (str): 要预置到该层各键之前的基础键。
+        sep (str): 键之间使用的分隔符。
 
-    Returns:
-        dict: A flattened dictionary.
+    返回:
+        dict: 展平后的字典。
     """
     items = []
     for k, v in d.items():
@@ -250,19 +250,19 @@ def flatten_dict(d: dict, parent_key: str = "", sep: str = "/") -> dict:
 
 
 def unflatten_dict(d: dict, sep: str = "/") -> dict:
-    """Unflatten a dictionary with delimited keys into a nested dictionary.
+    """将带分隔键的字典还原为嵌套字典。
 
-    Example:
+    示例：
         >>> flat_dct = {"a/b": 1, "a/c/d": 2, "e": 3}
         >>> print(unflatten_dict(flat_dct))
         {'a': {'b': 1, 'c': {'d': 2}}, 'e': 3}
 
-    Args:
-        d (dict): A dictionary with flattened keys.
-        sep (str): The separator used in the keys.
+    参数:
+        d (dict): 带有展平键的字典。
+        sep (str): 键中使用的分隔符。
 
-    Returns:
-        dict: A nested dictionary.
+    返回:
+        dict: 嵌套字典。
     """
     outdict = {}
     for key, value in d.items():
@@ -277,17 +277,17 @@ def unflatten_dict(d: dict, sep: str = "/") -> dict:
 
 
 def cycle(iterable: Any) -> Iterator[Any]:
-    """Create a dataloader-safe cyclical iterator.
+    """创建一个对 dataloader 安全的循环迭代器。
 
-    This is an equivalent of `itertools.cycle` but is safe for use with
-    PyTorch DataLoaders with multiple workers.
-    See https://github.com/pytorch/pytorch/issues/23900 for details.
+    这等价于 `itertools.cycle`，但可以安全地用于
+    具有多个工作进程的 PyTorch DataLoader。
+    详情参见 https://github.com/pytorch/pytorch/issues/23900。
 
-    Args:
-        iterable: The iterable to cycle over.
+    参数:
+        iterable: 要循环遍历的可迭代对象。
 
-    Yields:
-        Items from the iterable, restarting from the beginning when exhausted.
+    生成:
+        来自该可迭代对象的条目；耗尽时从头重新开始。
     """
     iterator = iter(iterable)
     while True:
@@ -299,13 +299,13 @@ def cycle(iterable: Any) -> Iterator[Any]:
 
 class SuppressProgressBars:
     """
-    Context manager to suppress progress bars.
+    用于抑制进度条的上下文管理器。
 
-    Example
+    示例
     --------
     ```python
     with SuppressProgressBars():
-        # Code that would normally show progress bars
+        # 通常会显示进度条的代码
     ```
     """
 
@@ -330,26 +330,26 @@ class SuppressProgressBars:
 
 class TimerManager:
     """
-    Lightweight utility to measure elapsed time.
+    用于测量耗时的轻量工具。
 
-    Examples
+    示例
     --------
     ```python
-    # Example 1: Using context manager
+    # 示例 1：使用上下文管理器
     timer = TimerManager("Policy", log=False)
     for _ in range(3):
         with timer:
             time.sleep(0.01)
-    print(timer.last, timer.fps_avg, timer.percentile(90))  # Prints: 0.01 100.0 0.01
+    print(timer.last, timer.fps_avg, timer.percentile(90))  # 输出：0.01 100.0 0.01
     ```
 
     ```python
-    # Example 2: Using start/stop methods
+    # 示例 2：使用 start/stop 方法
     timer = TimerManager("Policy", log=False)
     timer.start()
     time.sleep(0.01)
     timer.stop()
-    print(timer.last, timer.fps_avg, timer.percentile(90))  # Prints: 0.01 100.0 0.01
+    print(timer.last, timer.fps_avg, timer.percentile(90))  # 输出：0.01 100.0 0.01
     ```
     """
 
@@ -421,7 +421,7 @@ class TimerManager:
 
     def percentile(self, p: float) -> float:
         """
-        Return the p-th percentile of recorded times.
+        返回所记录时间的第 p 个百分位数。
         """
         if not self._history:
             return 0.0
@@ -429,7 +429,7 @@ class TimerManager:
 
     def fps_percentile(self, p: float) -> float:
         """
-        FPS corresponding to the p-th percentile time.
+        与第 p 个百分位时间相对应的 FPS。
         """
         val = self.percentile(p)
         return 0.0 if val == 0 else 1.0 / val

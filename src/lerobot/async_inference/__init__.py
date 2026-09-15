@@ -13,11 +13,11 @@
 # limitations under the License.
 
 """
-Async inference server/client.
+异步推理服务端/客户端。
 
-Requires: ``pip install 'lerobot[async]'``
+需要安装：``pip install 'lerobot[async]'``
 
-Available modules (import directly)::
+可用模块（直接导入）::
 
     from lerobot.async_inference.policy_server import ...
     from lerobot.async_inference.robot_client import ...

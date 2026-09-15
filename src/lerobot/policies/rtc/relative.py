@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Relative-action helpers for Real-Time Chunking (RTC)."""
+"""实时分块（Real-Time Chunking，RTC）的相对动作辅助函数。"""
 
 from __future__ import annotations
 
@@ -36,12 +36,11 @@ def reanchor_relative_rtc_prefix(
     normalizer_step: NormalizerProcessorStep | None,
     policy_device: torch.device | str,
 ) -> torch.Tensor:
-    """Convert absolute leftover actions into model-space for relative-action RTC policies.
+    """将上一块遗留的绝对动作转换为相对动作 RTC 策略所需的模型空间表示。
 
-    When using relative actions, the RTC prefix (previous chunk's unexecuted tail)
-    is stored in absolute coordinates. Before feeding it back to the policy, this
-    helper re-expresses those actions relative to the robot's current joint state
-    and optionally normalizes them so the policy receives correctly scaled inputs.
+    使用相对动作时，RTC 前缀（上一动作块中尚未执行的尾部）是以绝对坐标存储的。
+    在将其回传给策略之前，该辅助函数会以机器人当前关节状态为基准重新表达这些动作，
+    并可选地对其进行归一化，以确保策略接收到尺度正确的输入。
     """
     state = current_state.detach().cpu()
     if state.dim() == 1:

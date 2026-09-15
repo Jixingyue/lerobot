@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-"""Video processor class for MolmoAct2"""
+"""MolmoAct2 的视频处理器类"""
 
 import os
 import warnings
@@ -141,7 +141,7 @@ def build_resized_image(
 
 
 def batch_pixels_to_patches(array: np.ndarray, patch_size: int) -> np.ndarray:
-    """Reshape images of [n_images, h, w, 3] -> [n_images, n_patches, pixels_per_patch]"""
+    """将 [n_images, h, w, 3] 的图像重塑为 [n_images, n_patches, pixels_per_patch]"""
     if len(array.shape) == 3:
         n_crops, h, w = array.shape
         h_patches = h // patch_size
@@ -187,10 +187,10 @@ def image_to_patches_and_grids(
     image_pooling_h: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    :return image_grids, the shape of each image after pooling
-    :return crops, the image crops to processes with the ViT
-    :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
-                                patches in `crops` to pool for that token, masked with -1
+    :return image_grids，每张图像池化后的形状
+    :return crops，要用 ViT 处理的图像裁剪块
+    :return pooled_patch_idx，对于 `image_tokens` 中的每个 patch_id token，
+                                为该 token 做池化时所用 `crops` 中块的索引，用 -1 屏蔽
     """
     if isinstance(base_image_input_size, int):
         base_image_input_size = (base_image_input_size, base_image_input_size)
@@ -223,9 +223,9 @@ def get_candidate_target_fps(
     max_fps: int | float = MAX_VIDEO_FPS,
 ) -> list[float]:
     """
-    Return the subset of `video_fps` factors that remain multiples of `sampling_fps`.
+    返回 `video_fps` 的因子中仍为 `sampling_fps` 倍数的那部分子集。
 
-    Examples:
+    示例：
         >>> get_candidate_target_fps(video_fps=6, sampling_fps=2)
         [2, 6]
         >>> get_candidate_target_fps(video_fps=5, sampling_fps=1)
@@ -264,25 +264,25 @@ def read_video_decord(
     **kwargs,
 ) -> np.ndarray:
     """
-    Decode a video using the Decord backend.
+    使用 Decord 后端解码视频。
 
-    Args:
-        video_path (`str`):
-            Path to the video file.
-        sample_timestamps_fn (`Callable`):
-            A callable function that will return timestamps at which the video should be sampled.
+    参数：
+        video_path (`str`)：
+            视频文件的路径。
+        sample_timestamps_fn (`Callable`)：
+            一个可调用函数，返回应对视频进行采样的时间戳。
 
-    Returns:
-        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
-            - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-            - `VideoMetadata` object.
+    返回：
+        tuple[`np.array`, `VideoMetadata`]：包含以下内容的元组：
+            - RGB 格式的帧的 Numpy 数组（形状：[num_frames, height, width, 3]）。
+            - `VideoMetadata` 对象。
     """
-    # Lazy import from decord
+    # 延迟导入 decord
     import importlib
 
     decord = importlib.import_module("decord")
 
-    vr = decord.VideoReader(uri=video_path, ctx=decord.cpu(0))  # decord has problems with gpu
+    vr = decord.VideoReader(uri=video_path, ctx=decord.cpu(0))  # decord 在 gpu 上有问题
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
     time_stamps = vr.get_frame_timestamp(list(range(len(vr))))
@@ -319,35 +319,35 @@ def read_video_torchcodec(
     **kwargs,
 ) -> np.ndarray:
     """
-    Decode a video using torchcodec decoder.
+    使用 torchcodec 解码器解码视频。
 
-    Args:
-        video_path (`str`):
-            Path to the video file.
-        sample_timestamps_fn (`Callable`):
-            A callable function that will return timestamps at which the video should be sampled.
+    参数：
+        video_path (`str`)：
+            视频文件的路径。
+        sample_timestamps_fn (`Callable`)：
+            一个可调用函数，返回应对视频进行采样的时间戳。
 
-    Returns:
-        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
-            - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-            - `VideoMetadata` object.
+    返回：
+        tuple[`np.array`, `VideoMetadata`]：包含以下内容的元组：
+            - RGB 格式的帧的 Numpy 数组（形状：[num_frames, height, width, 3]）。
+            - `VideoMetadata` 对象。
     """
-    # Lazy import torchcodec
+    # 延迟导入 torchcodec
     import importlib
 
     torchcodec = importlib.import_module("torchcodec")
 
     decoder = torchcodec.decoders.VideoDecoder(
         video_path,
-        # Interestingly `exact` mode takes less than approximate when we load the whole video
+        # 有趣的是，当我们加载整个视频时，`exact` 模式比近似模式耗时更少
         seek_mode="exact",
-        # Allow FFmpeg decide on the number of threads for efficiency
+        # 允许 FFmpeg 自行决定线程数以提高效率
         num_ffmpeg_threads=0,
     )
-    # If the first frame starts at > 0, we effectively clip the video starting at that time
-    # since (most) video players would also skip to that time
+    # 如果第一帧的起始时间 > 0，我们实际上会从该时间点开始截取视频，
+    # 因为（大多数）视频播放器也会跳到该时间点
     time_offset = decoder.metadata.begin_stream_seconds_from_content
-    # Note this duration does assume we started playing at `time_offset`
+    # 注意，这个时长确实假设了我们从 `time_offset` 开始播放
     duration = decoder.metadata.duration_seconds
 
     metadata = VideoMetadata(
@@ -361,21 +361,21 @@ def read_video_torchcodec(
 
     target_timestamps = sample_timestamps_fn(metadata=metadata, **kwargs)
 
-    # Floating point/rounding issues might cause `target_timestamps` to be very slightly
-    # out-of-bounds, to handle this we sanity check then clip them
+    # 浮点数/舍入问题可能导致 `target_timestamps` 非常轻微地
+    # 越界，为了处理这种情况，我们先做合理性检查再对其进行裁剪
     assert all(x >= 0 for x in target_timestamps)
     assert all(x < duration + 1e-6 for x in target_timestamps)
-    # 1e-6 padding since torchcodec can throw out-of-bounds errors even if you ask for the
-    # exact boundary value, we should still get the first/last frame anyway
+    # 加上 1e-6 的余量，因为即使请求的是精确的边界值，
+    # torchcodec 也可能抛出越界错误，不过我们仍然应该能拿到首帧/末帧
     max_timestamp = decoder.metadata.end_stream_seconds_from_content - 1e-6
     min_timestamp = decoder.metadata.begin_stream_seconds_from_content + 1e-6
-    # Note we avoid using numpy ops here to reduce floating precision issues
+    # 注意，这里避免使用 numpy 运算，以减少浮点精度问题
     timestamps = [x + time_offset for x in target_timestamps]
     timestamps = [max(min_timestamp, min(max_timestamp, x)) for x in timestamps]
 
     video = (
         decoder.get_frames_played_at(timestamps).data.numpy().transpose(0, 2, 3, 1)
-    )  # Convert to THWC format
+    )  # 转换为 THWC 格式
     target_timestamps = np.array(target_timestamps)
     metadata.frames_indices = target_timestamps * metadata.fps
 
@@ -388,20 +388,20 @@ def read_video_pyav(
     **kwargs,
 ) -> np.ndarray:
     """
-    Decode a video using the PyAV backend.
+    使用 PyAV 后端解码视频。
 
-    Args:
-        video_path (`str`):
-            Path to the video file.
-        sample_timestamps_fn (`Callable`):
-            A callable function that will return timestamps at which the video should be sampled.
+    参数：
+        video_path (`str`)：
+            视频文件的路径。
+        sample_timestamps_fn (`Callable`)：
+            一个可调用函数，返回应对视频进行采样的时间戳。
 
-    Returns:
-        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
-            - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-            - `VideoMetadata` object.
+    返回：
+        tuple[`np.array`, `VideoMetadata`]：包含以下内容的元组：
+            - RGB 格式的帧的 Numpy 数组（形状：[num_frames, height, width, 3]）。
+            - `VideoMetadata` 对象。
     """
-    # Lazy import torchcodec
+    # 延迟导入 av
     import importlib
 
     av = importlib.import_module("av")
@@ -418,8 +418,8 @@ def read_video_pyav(
         if container_end is not None:
             container_end *= stream.time_base
         if container_end is None or container_end < frames[-1].pts:
-            # Some problem with stream duration, so use the frame PTS directly
-            # and guess the duration of the last frame
+            # 流时长有问题，因此直接使用帧的 PTS，
+            # 并猜测最后一帧的时长
             end = frames[-1].pts * stream.time_base + 1 / fps
         else:
             end = container_end
@@ -466,18 +466,18 @@ def load_video(
     **kwargs,
 ):
     """
-    Loads `video` to a numpy array.
+    将 `video` 加载为 numpy 数组。
 
-    Args:
-        video (`VideoInput`):
-            The video to convert to the numpy array format. Can be a link to video or local path.
-        backend (`str`, *optional*, defaults to `"decord"`):
-            The backend to use when loading the video. Can be any of ["decord", "pyav", ""torchcodec"]. Defaults to "decord".
-        sample_timestamps_fn (`Callable`):
-            A callable function that will return timestamps at which the video should be sampled.
+    参数：
+        video (`VideoInput`)：
+            要转换为 numpy 数组格式的视频。可以是视频链接或本地路径。
+        backend (`str`，*可选*，默认为 `"decord"`)：
+            加载视频时使用的后端。可以是 ["decord", "pyav", ""torchcodec"] 中的任意一个。默认为 "decord"。
+        sample_timestamps_fn (`Callable`)：
+            一个可调用函数，返回应对视频进行采样的时间戳。
     """
 
-    # Early exit if provided an array or `PIL` frames
+    # 如果提供的是数组或 `PIL` 帧，则提前返回
     if not isinstance(video, str):
         metadata = [None] * len(video)
         return video, metadata
@@ -485,7 +485,7 @@ def load_video(
     if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
-        # Lazy import from yt_dlp
+        # 延迟导入 yt_dlp
         import importlib
 
         yt_dlp = importlib.import_module("yt_dlp")
@@ -504,8 +504,8 @@ def load_video(
             "Incorrect format used for video. Should be an url linking to an video or a local path."
         )
 
-    # can also load with decord, but not cv2/torchvision
-    # both will fail in case of url links
+    # 也可以用 decord 加载，但不能用 cv2/torchvision
+    # 在 url 链接的情况下两者都会失败
     video_is_url = video.startswith("http://") or video.startswith("https://")
     if video_is_url and backend == "opencv":
         raise ValueError("If you are trying to load a video from URL, you cannot use 'opencv' as backend")
@@ -533,7 +533,7 @@ def get_target_fps(
     candidate_target_fps: tuple[float],
 ) -> float:
     """
-    Get the target fps that best spans the video and has the most frames sampled
+    获取能最好地覆盖整个视频且采样帧数最多的目标 fps
     """
     num_frames_sampled = 0
     selected_target_fps = None
@@ -547,14 +547,14 @@ def get_target_fps(
             num_frames_sampled = num_frames_sampled_at_fps
 
         else:
-            # the candidate sampling fps increases so frame count can't decrease
+            # 候选采样 fps 递增，因此帧数不会减少
             assert num_frames_sampled <= num_frames_sampled_at_fps
             if num_frames_sampled_at_fps > max_frames:
-                # choose the sampling fps that spans the video
+                # 选择能覆盖整个视频的采样 fps
                 continue
 
             elif num_frames_sampled_at_fps > num_frames_sampled:
-                # both are less than max_frames, choose the one with higher density of frames sampled
+                # 两者都小于 max_frames，选择采样帧密度更高的那个
                 selected_target_fps = target_fps
                 num_frames_sampled = num_frames_sampled_at_fps
     return selected_target_fps
@@ -610,8 +610,8 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> dict:
         """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
+        更新那些在校验前需要进一步处理的 kwargs。
+        子类可以重写此方法以自定义 kwargs 的处理。
         """
         if size is not None and ("height" not in size or "width" not in size):
             raise ValueError("size must contain 'height' and 'width' keys.")
@@ -628,19 +628,19 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Time-based sampling if an array video is passed
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            frame_sample_mode (`str`, *optional*):
-                Mode to sample frames. Defaults to `self.frame_sample_mode`.
-            num_frames (`int`, *optional*):
-                Maximum number of frames to sample. Defaults to `self.num_frames`.
-            man_fps (`int`, *optional*):
-                Maximum frames per second to sample.
-            sampling_fps (`int`, *optional*):
-                Sampling frames per second. Defaults to `self.sampling_fps`.
-                Used when `frame_sample_mode` is `"fps"`.
+        当传入数组形式的视频时，进行基于时间的采样
+        参数：
+            metadata (`VideoMetadata`)：
+                视频的元数据，包含总时长、fps 和总帧数等信息。
+            frame_sample_mode (`str`，*可选*)：
+                帧采样模式。默认为 `self.frame_sample_mode`。
+            num_frames (`int`，*可选*)：
+                最多采样的帧数。默认为 `self.num_frames`。
+            man_fps (`int`，*可选*)：
+                采样的最大每秒帧数。
+            sampling_fps (`int`，*可选*)：
+                每秒采样帧数。默认为 `self.sampling_fps`。
+                当 `frame_sample_mode` 为 `"fps"` 时使用。
         """
         frame_sample_mode = frame_sample_mode or self.frame_sample_mode
         num_frames = num_frames or self.num_frames
@@ -649,7 +649,7 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         duration = metadata.duration or metadata.total_num_frames / metadata.fps
         if frame_sample_mode == "fps":
             candidate_target_fps = get_candidate_target_fps(metadata.fps, sampling_fps)
-            # Try larger and larger FPSs until we hit one that can't span the video
+            # 尝试越来越大的 FPS，直到遇到无法覆盖整个视频的取值
             target_fps = candidate_target_fps[0]
             for candidate_fps in candidate_target_fps[1:]:
                 if num_frames / candidate_fps < duration:
@@ -660,7 +660,7 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
             return times
         elif frame_sample_mode == "uniform_last_frame":
             if max_fps is not None:
-                max_duration = (num_frames - 1) / max_fps  # -1 to include the last frame
+                max_duration = (num_frames - 1) / max_fps  # -1 是为了包含最后一帧
                 if max_duration < duration:
                     times = np.linspace(0, duration, num=num_frames, endpoint=True, dtype=np.float64)
                 else:
@@ -683,19 +683,19 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Frame-based sampling if an array video is passed
-        Args:
-            metadata (`VideoMetadata`):
-                Metadata of the video containing information about total duration, fps and total number of frames.
-            frame_sample_mode (`str`, *optional*):
-                Mode to sample frames. Defaults to `self.frame_sample_mode`.
-            num_frames (`int`, *optional*):
-                Maximum number of frames to sample. Defaults to `self.num_frames`.
-            max_fps (`int`, *optional*):
-                Maximum frames per second to sample.
-            sampling_fps (`int`, *optional*):
-                Sampling frames per second. Defaults to `self.sampling_fps`.
-                Used when `frame_sample_mode` is `"fps"`.
+        当传入数组形式的视频时，进行基于帧的采样
+        参数：
+            metadata (`VideoMetadata`)：
+                视频的元数据，包含总时长、fps 和总帧数等信息。
+            frame_sample_mode (`str`，*可选*)：
+                帧采样模式。默认为 `self.frame_sample_mode`。
+            num_frames (`int`，*可选*)：
+                最多采样的帧数。默认为 `self.num_frames`。
+            max_fps (`int`，*可选*)：
+                采样的最大每秒帧数。
+            sampling_fps (`int`，*可选*)：
+                每秒采样帧数。默认为 `self.sampling_fps`。
+                当 `frame_sample_mode` 为 `"fps"` 时使用。
         """
         frame_sample_mode = frame_sample_mode or self.frame_sample_mode
         num_frames = num_frames or self.num_frames
@@ -706,8 +706,8 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
             duration = total_num_frames / metadata.fps
             if total_num_frames <= 2:
                 return np.arange(total_num_frames).astype(int)
-            if duration > (num_frames - 1) / max_fps:  # -1 to include the last frame
-                # uniform fallback
+            if duration > (num_frames - 1) / max_fps:  # -1 是为了包含最后一帧
+                # 均匀采样回退方案
                 indices = np.linspace(
                     0,
                     total_num_frames - 1,
@@ -756,10 +756,9 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
 
     def fetch_videos(self, video_url_or_urls: str | list[str] | list[list[str]], sample_timestamps_fn=None):
         """
-        Convert a single or a list of urls into the corresponding `np.array` objects.
+        将单个或一组 url 转换为对应的 `np.array` 对象。
 
-        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
-        returned.
+        如果传入单个 url，返回值将是单个对象。如果传入列表，则返回对象列表。
         """
         if (not is_decord_available()) and (not is_torchcodec_available()) and (not is_av_available()):
             raise ImportError(
@@ -805,13 +804,13 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         sample_timestamps_fn: Callable | None = None,
     ):
         """
-        Decode input videos and sample frames if needed.
+        解码输入视频，并在需要时对帧进行采样。
         """
         videos = make_batched_videos(videos)
         video_metadata = make_batched_metadata(videos, video_metadata=video_metadata)
 
-        # Framed-based sampling if an array video is passed
-        # Otherwise, time-based sampling with decoding
+        # 如果传入的是数组形式的视频，则进行基于帧的采样
+        # 否则，进行带解码的基于时间的采样
         if is_valid_video(videos[0]) and do_sample_frames:
             assert video_metadata[0].fps is not None, "FPS must be provided for video input"
             sampled_videos = []
@@ -854,8 +853,8 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
             valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
         )
 
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
+        # 从 self 设置默认 kwargs。这确保了当用户未提供某个 kwarg 时，
+        # 它会从实例获取默认值，或被设为 None。
         for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
@@ -895,39 +894,39 @@ class MolmoAct2VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocess a video for the model.
-        Args:
-            videos (`VideoInput`):
-                Video to preprocess.
-            size (`SizeDict`, *optional*, defaults to `self.size`):
-                Size of the image after resizing.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use when resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            pooling_size (`list[int]`, *optional*, defaults to `self.pooling_size`):
-                The pooling size of the vision adapter.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        为模型预处理视频。
+        参数：
+            videos (`VideoInput`)：
+                要预处理的视频。
+            size (`SizeDict`，*可选*，默认为 `self.size`)：
+                图像缩放后的尺寸。
+            resample (`PILImageResampling`，*可选*，默认为 `self.resample`)：
+                缩放图像时使用的重采样滤波器。可以是 `PILImageResampling` 枚举之一。
+                仅在 `do_resize` 设为 `True` 时生效。
+            image_mean (`float` 或 `list[float]`，*可选*，默认为 `self.image_mean`)：
+                归一化使用的图像均值。仅在 `do_normalize` 设为 `True` 时生效。
+            image_std (`float` 或 `list[float]`，*可选*，默认为 `self.image_std`)：
+                归一化使用的图像标准差。仅在 `do_normalize` 设为
+                `True` 时生效。
+            do_convert_rgb (`bool`，*可选*，默认为 `self.do_convert_rgb`)：
+                是否将图像转换为 RGB。
+            patch_size (`int`，*可选*，默认为 `self.patch_size`)：
+                视觉编码器的空间块尺寸。
+            pooling_size (`list[int]`，*可选*，默认为 `self.pooling_size`)：
+                视觉适配器的池化尺寸。
+            return_tensors (`str` 或 `TensorType`，*可选*)：
+                要返回的张量类型。可以是以下之一：
+                - 未设置：返回 `np.ndarray` 列表。
+                - `TensorType.TENSORFLOW` 或 `'tf'`：返回 `tf.Tensor` 类型的批次。
+                - `TensorType.PYTORCH` 或 `'pt'`：返回 `torch.Tensor` 类型的批次。
+                - `TensorType.NUMPY` 或 `'np'`：返回 `np.ndarray` 类型的批次。
+                - `TensorType.JAX` 或 `'jax'`：返回 `jax.numpy.ndarray` 类型的批次。
 
-        Returns:
-            A `BatchFeature` containing the following keys:
-                - `pixel_values_videos`: The preprocessed videos.
-                - `video_token_pooling`: The indices of the patches in `crops` to pool for each token in `video_tokens`.
-                - `video_grids`: The video grids.
+        返回：
+            包含以下键的 `BatchFeature`：
+                - `pixel_values_videos`：预处理后的视频。
+                - `video_token_pooling`：`video_tokens` 中每个 token 做池化时所用 `crops` 中块的索引。
+                - `video_grids`：视频网格。
         """
         if size.height is None or size.width is None:
             raise ValueError("size must contain 'height' and 'width' keys.")

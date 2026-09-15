@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Recipe definitions, validation, loading and shared message rendering."""
+"""配方（recipe）的定义、校验、加载以及共享的消息渲染逻辑。"""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ DEFAULT_BINDINGS = {
 }
 
 PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-"""``${name}`` placeholder pattern used by both recipe binding-reference
-discovery (here) and rendered-message substitution (in ``language_render``)."""
+"""``${name}`` 占位符模式，同时用于配方绑定引用的
+发现（此处）和渲染消息的替换（在 ``language_render`` 中）。"""
 
 _VALID_ROLES = frozenset(get_args(MessageRole))
 _VALID_STREAMS = frozenset(get_args(MessageStream))
@@ -52,13 +52,13 @@ _VALID_ROUTES = frozenset(get_args(RecipeRoute))
 
 @dataclass
 class MessageTurn:
-    """A single chat-style turn in a recipe template.
+    """配方模板中的单个聊天风格轮次。
 
-    ``content`` may be a plain string, a list of HF-style multimodal blocks, or
-    ``None`` when ``tool_calls_from`` supplies tool-call payloads instead.
-    ``stream`` tags the turn for downstream filtering, ``target`` flags it as a
-    training target, and ``if_present`` skips the turn when the named binding
-    resolves to ``None``.
+    ``content`` 可以是普通字符串、HF 风格多模态块的列表；当由
+    ``tool_calls_from`` 提供工具调用载荷时也可以为 ``None``。
+    ``stream`` 为该轮次打上供下游过滤的标签，``target`` 将其标记为
+    训练目标，``if_present`` 则在所命名绑定解析为 ``None`` 时
+    跳过该轮次。
     """
 
     role: MessageRole
@@ -69,14 +69,14 @@ class MessageTurn:
     tool_calls_from: str | None = None
 
     def __post_init__(self) -> None:
-        """Validate role, stream, and content after dataclass construction."""
+        """在 dataclass 构造完成后校验 role、stream 和 content。"""
         if self.role not in _VALID_ROLES:
             raise ValueError(f"Unsupported message role: {self.role!r}")
-        # ``stream`` is typed Optional only so the dataclass can keep its
-        # field ordering, but recipes must always tag every turn with a
-        # stream — the renderer's ``_validate_rendered`` would reject
-        # ``None`` later on. Fail at construction so the bad recipe is
-        # caught at YAML load time rather than at the first sample.
+        # ``stream`` 的类型标注为 Optional，只是为了让 dataclass 能够保持
+        # 字段顺序，但配方必须始终为每个轮次标注一个
+        # stream——渲染器的 ``_validate_rendered`` 在之后也会拒绝
+        # ``None``。在构造时就失败，可以让有问题的配方
+        # 在 YAML 加载时（而非处理第一个样本时）就被发现。
         if self.stream is None:
             raise ValueError(
                 f"MessageTurn(role={self.role!r}) is missing a stream — "
@@ -97,19 +97,19 @@ class MessageTurn:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MessageTurn:
-        """Construct a :class:`MessageTurn` from a plain dictionary."""
+        """从普通字典构造一个 :class:`MessageTurn`。"""
         return cls(**data)
 
 
 @dataclass
 class TrainingRecipe:
-    """A recipe describing how to render training samples from language rows.
+    """描述如何从语言行渲染训练样本的配方。
 
-    A recipe is either a *message recipe* (``messages`` plus optional
-    ``bindings``) or a *blend recipe* (``blend`` mapping names to weighted
-    sub-recipes). ``weight`` and ``route`` are only meaningful inside a blend;
-    ``route: vqa`` gives sparse VQA annotations priority over normal weighted
-    selection.
+    配方要么是*消息配方*（``messages`` 加上可选的
+    ``bindings``），要么是*混合配方*（``blend`` 将名称映射到带权重的
+    子配方）。``weight`` 和 ``route`` 仅在混合配方中有意义；
+    ``route: vqa`` 使稀疏的 VQA 标注优先于普通的加权
+    选择。
     """
 
     messages: list[MessageTurn] | None = None
@@ -119,7 +119,7 @@ class TrainingRecipe:
     route: RecipeRoute | None = None
 
     def __post_init__(self) -> None:
-        """Validate that exactly one of ``messages`` or ``blend`` is set."""
+        """校验 ``messages`` 和 ``blend`` 中恰好设置了一个。"""
         if self.messages is not None and self.blend is not None:
             raise ValueError("TrainingRecipe must set only one of messages or blend.")
         if self.messages is None and self.blend is None:
@@ -136,7 +136,7 @@ class TrainingRecipe:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TrainingRecipe:
-        """Construct a :class:`TrainingRecipe` from a nested dictionary."""
+        """从嵌套字典构造一个 :class:`TrainingRecipe`。"""
         data = dict(data)
         if data.get("messages") is not None:
             data["messages"] = [
@@ -152,7 +152,7 @@ class TrainingRecipe:
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> TrainingRecipe:
-        """Load a :class:`TrainingRecipe` from a YAML file at ``path``."""
+        """从 ``path`` 处的 YAML 文件加载 :class:`TrainingRecipe`。"""
         import yaml  # type: ignore[import-untyped]
 
         with open(path) as f:
@@ -162,7 +162,7 @@ class TrainingRecipe:
         return cls.from_dict(data)
 
     def _validate_message_recipe(self) -> None:
-        """Validate bindings and require text or low-level action supervision."""
+        """校验绑定，并要求存在文本或底层动作监督。"""
         if self.messages is None:
             raise ValueError("Cannot validate a message recipe without messages.")
         known_bindings = set(DEFAULT_BINDINGS) | set(self.bindings or {}) | {"task"}
@@ -182,7 +182,7 @@ class TrainingRecipe:
             )
 
     def _validate_blend_recipe(self) -> None:
-        """Ensure each blend component is a non-empty, weighted message recipe."""
+        """确保每个混合组件都是非空的、带权重的消息配方。"""
         if self.blend is None:
             raise ValueError("Cannot validate a blend recipe without blend components.")
         if not self.blend:
@@ -199,7 +199,7 @@ class TrainingRecipe:
                 raise ValueError(f"Blend component {name!r} must have a positive weight.")
 
     def referenced_binding_names(self) -> set[str]:
-        """Names of every binding referenced by this recipe's message turns."""
+        """本配方的各消息轮次所引用的全部绑定的名称。"""
         names: set[str] = set()
         components = [self] if self.messages is not None else list((self.blend or {}).values())
         for component in components:
@@ -208,10 +208,10 @@ class TrainingRecipe:
         return names
 
     def prompt_turns(self, binding: str) -> list[MessageTurn]:
-        """Return the turns before the assistant target supervising ``binding``.
+        """返回监督 ``binding`` 的 assistant 目标轮次之前的所有轮次。
 
-        Message recipes are inspected directly. Blend components are inspected
-        in declaration order, matching their deterministic recipe definition.
+        消息配方会被直接检查。混合组件按声明顺序检查，
+        与其确定性的配方定义顺序一致。
         """
         components = [self] if self.messages is not None else list((self.blend or {}).values())
         for component in components:
@@ -239,7 +239,7 @@ class TrainingRecipe:
         )
 
     def _referenced_bindings(self, turn: MessageTurn) -> set[str]:
-        """Return the binding names that ``turn`` references via placeholders or attributes."""
+        """返回 ``turn`` 通过占位符或属性所引用的绑定名称。"""
         names: set[str] = set()
         if turn.if_present is not None:
             names.add(turn.if_present)
@@ -250,7 +250,7 @@ class TrainingRecipe:
 
 
 def _placeholders_in_content(content: str | list[dict[str, Any]] | None) -> set[str]:
-    """Return the set of ``${name}`` placeholders found anywhere in ``content``."""
+    """返回在 ``content`` 中任意位置找到的 ``${name}`` 占位符集合。"""
     if content is None:
         return set()
     if isinstance(content, str):
@@ -268,7 +268,7 @@ def render_message_turns(
     turns: Sequence[MessageTurn],
     bindings: dict[str, Any],
 ) -> dict[str, list[Any]]:
-    """Render recipe turns using the substitution shared by training and inference."""
+    """使用训练和推理共享的替换逻辑渲染配方轮次。"""
     messages: list[dict[str, Any]] = []
     streams: list[str | None] = []
     target_indices: list[int] = []
@@ -301,7 +301,7 @@ def render_message_turns(
 
 
 def _render_content(content: str | list[dict[str, Any]], bindings: dict[str, Any]) -> Any:
-    """Substitute bindings in text and multimodal message blocks."""
+    """在文本和多模态消息块中替换绑定。"""
     if isinstance(content, str):
         return _substitute(content, bindings)
 
@@ -316,7 +316,7 @@ def _render_content(content: str | list[dict[str, Any]], bindings: dict[str, Any
 
 
 def _substitute(template: str, bindings: dict[str, Any]) -> str:
-    """Replace ``${name}`` placeholders with their bound values."""
+    """将 ``${name}`` 占位符替换为其绑定的值。"""
 
     def replace(match: re.Match[str]) -> str:
         name = match.group(1)
@@ -334,7 +334,7 @@ def _substitute(template: str, bindings: dict[str, Any]) -> str:
 
 
 def load_recipe(path: str | Path) -> TrainingRecipe:
-    """Load a :class:`TrainingRecipe` from a YAML file at ``path``."""
+    """从 ``path`` 处的 YAML 文件加载 :class:`TrainingRecipe`。"""
     return TrainingRecipe.from_yaml(path)
 
 
@@ -342,11 +342,11 @@ def resolve_recipe_override(
     recipe: TrainingRecipe | dict[str, Any] | None,
     recipe_path: str | Path | None,
 ) -> TrainingRecipe | None:
-    """Normalize an inline recipe and apply a portable YAML override.
+    """规范化内联配方，并应用可移植的 YAML 覆盖。
 
-    A checkpoint may retain the original training-machine path alongside its
-    serialized recipe. In that case the inline recipe remains usable when the
-    path does not exist on the inference machine.
+    检查点可能会在保存序列化配方的同时保留原始训练机器上的
+    路径。在这种情况下，当推理机器上不存在该路径时，
+    内联配方仍然可用。
     """
     if isinstance(recipe, dict):
         recipe = TrainingRecipe.from_dict(recipe)

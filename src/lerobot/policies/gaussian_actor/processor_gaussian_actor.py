@@ -36,23 +36,23 @@ def make_gaussian_actor_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the Gaussian actor policy.
+    为高斯 actor 策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares input data for the model by:
-    1. Renaming features to match pretrained configurations.
-    2. Normalizing input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Moving all data to the specified device.
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征以匹配预训练配置。
+    2. 基于数据集统计量对输入和输出特征进行归一化。
+    3. 添加批维度。
+    4. 将所有数据移动到指定设备。
 
-    The post-processing pipeline handles the model's output by:
-    1. Moving data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    后处理流水线通过以下步骤处理模型的输出：
+    1. 将数据移动到 CPU。
+    2. 将输出特征反归一化回原始尺度。
 
     Args:
-        config: The configuration object for the tanh-Gaussian policy.
-        dataset_stats: A dictionary of statistics for normalization.
+        config: tanh-高斯策略的配置对象。
+        dataset_stats: 用于归一化的统计量字典。
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+        包含配置好的预处理器和后处理器流水线的元组。
     """
     return make_default_pre_post_processors(config, dataset_stats)

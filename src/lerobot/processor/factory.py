@@ -83,10 +83,10 @@ def make_default_processors():
 
 @dataclass
 class DefaultPolicyProcessorSteps:
-    """The canonical processor steps shared by most policies' pre/post pipelines.
+    """大多数策略的前/后处理流水线共享的规范处理步骤。
 
-    Policies compose these in their own order (step ORDER is a Hub-serialized contract
-    and intentionally stays explicit per policy) and interleave their custom steps.
+    各策略按自己的顺序组合这些步骤（步骤顺序是 Hub 序列化的约定，
+    并且有意在每个策略中保持显式），并穿插其自定义步骤。
     """
 
     rename_observations: RenameObservationsProcessorStep
@@ -103,14 +103,14 @@ def make_default_policy_processor_steps(
     *,
     normalizer_device: torch.device | str | None = None,
 ) -> DefaultPolicyProcessorSteps:
-    """Construct the canonical policy processor steps from a policy config.
+    """根据策略配置构建规范的策略处理步骤。
 
     Args:
-        config: A `PreTrainedConfig` providing `device`, `input_features`,
-            `output_features` and `normalization_mapping`.
-        dataset_stats: Dataset statistics used for (un)normalization.
-        normalizer_device: Device passed to `NormalizerProcessorStep` (some policies pin
-            their normalization stats to the policy device; most leave it unset).
+        config: 提供 `device`、`input_features`、`output_features`
+            和 `normalization_mapping` 的 `PreTrainedConfig`。
+        dataset_stats: 用于（反）归一化的数据集统计量。
+        normalizer_device: 传递给 `NormalizerProcessorStep` 的设备（某些策略会将其
+            归一化统计量固定到策略设备上；大多数策略不设置该项）。
     """
     return DefaultPolicyProcessorSteps(
         rename_observations=RenameObservationsProcessorStep(rename_map={}),
@@ -136,10 +136,10 @@ def make_policy_processor_pipelines(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Wrap pre/post step lists into the canonical policy pipeline pair.
+    """将前/后处理步骤列表包装为规范的策略流水线对。
 
-    Uses the standard pipeline names (which determine the serialized JSON filenames on
-    the Hub) and the standard policy-action converters on the postprocessor.
+    使用标准的流水线名称（决定 Hub 上序列化后的 JSON 文件名），
+    并在后处理器上使用标准的策略动作转换器。
     """
     return (
         PolicyProcessorPipeline[dict[str, Any], dict[str, Any]](
@@ -164,9 +164,9 @@ def make_default_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """The pure-scaffold policy pipeline pair: Rename -> Batch -> Device -> Normalize,
-    and Unnormalize -> Device(cpu). Policies with custom steps or a different step order
-    compose `make_default_policy_processor_steps` themselves instead.
+    """纯脚手架式的策略流水线对：Rename -> Batch -> Device -> Normalize，
+    以及 Unnormalize -> Device(cpu)。具有自定义步骤或不同步骤顺序的策略
+    会自行组合 `make_default_policy_processor_steps`。
     """
     s = make_default_policy_processor_steps(config, dataset_stats, normalizer_device=normalizer_device)
     return make_policy_processor_pipelines(

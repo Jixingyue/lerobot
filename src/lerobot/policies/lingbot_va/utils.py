@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Vendored Wan2.2 model code and plumbing for the LingBot-VA policy.
+"""随附的 Wan2.2 模型代码及 LingBot-VA 策略所需的配套设施。
 
-Everything the policy builds on lives here: grid/patch reshaping, attention backends,
-VAE (de)normalization + frozen-component loaders, the flow-matching scheduler, and the
-dual-stream Wan transformer (``WanTransformer3DModel`` and its sub-modules). Only the
-LeRobot-facing ``LingBotVAPolicy`` orchestrator stays in ``modeling_lingbot_va.py``; this
-module imports nothing from it (one-directional dependency).
+策略所依赖的一切都在这里：网格/patch 重排、注意力后端、VAE（反）归一化
+以及冻结组件加载器、flow-matching 调度器，还有双流 Wan transformer
+（``WanTransformer3DModel`` 及其子模块）。只有面向 LeRobot 的
+``LingBotVAPolicy`` 编排器保留在 ``modeling_lingbot_va.py`` 中；本模块
+不从该文件导入任何内容（单向依赖）。
 """
 
 import html
@@ -63,9 +63,9 @@ else:
     T5TokenizerFast = UMT5EncoderModel = None
 
 
-# Grid-id / patch utilities
+# 网格 id / patch 工具
 def data_seq_to_patch(patch_size, data_seq, latent_num_frames, latent_height, latent_width, batch_size=1):
-    """Reshape a flattened patch sequence back into a ``(B, C, F, H, W)`` latent grid."""
+    """将展平的 patch 序列重塑回 ``(B, C, F, H, W)`` 潜变量网格。"""
     p_t, p_h, p_w = patch_size
     post_patch_num_frames = latent_num_frames // p_t
     post_patch_height = latent_height // p_h
@@ -80,7 +80,7 @@ def data_seq_to_patch(patch_size, data_seq, latent_num_frames, latent_height, la
 
 
 def get_mesh_id(f, h, w, t, f_w=1, f_shift=0, action=False):
-    """Build the (frame, height, width, stream) grid ids used to index the rotary embedding."""
+    """构建用于索引旋转位置编码的（帧、高、宽、流）网格 id。"""
     f_idx = torch.arange(f_shift, f + f_shift) * f_w
     h_idx = torch.arange(h)
     w_idx = torch.arange(w)
@@ -96,9 +96,9 @@ def get_mesh_id(f, h, w, t, f_w=1, f_shift=0, action=False):
     return grid_id
 
 
-# Attention backends
+# 注意力后端
 def custom_sdpa(q, k, v):
-    """Scaled-dot-product attention operating on ``(B, S, H, D)`` tensors."""
+    """作用于 ``(B, S, H, D)`` 张量的缩放点积注意力。"""
     out = F.scaled_dot_product_attention(q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2))
     return out.transpose(1, 2)
 
@@ -117,7 +117,7 @@ def _load_flash_attn_func():
     return flash_attn_func
 
 
-# Wan2.2 VAE helpers (stock diffusers ``AutoencoderKLWan``)
+# Wan2.2 VAE 辅助函数（diffusers 原版 ``AutoencoderKLWan``）
 def _vae_patchify(x, patch_size):
     if patch_size is None or patch_size == 1:
         return x
@@ -133,7 +133,7 @@ def _vae_patchify(x, patch_size):
 
 
 def denormalize_latents(latents: torch.Tensor, latents_mean, latents_std, z_dim) -> torch.Tensor:
-    """Inverse of the encode-time latent normalization, for VAE-decoding predicted latents."""
+    """编码时潜变量归一化的逆变换，用于 VAE 解码预测出的潜变量。"""
     mean = torch.tensor(latents_mean).view(1, z_dim, 1, 1, 1).to(latents.device, latents.dtype)
     inv_std = 1.0 / torch.tensor(latents_std).view(1, z_dim, 1, 1, 1).to(latents.device, latents.dtype)
     return latents / inv_std + mean
@@ -155,12 +155,12 @@ def load_tokenizer(tokenizer_path, subfolder=None):
     return T5TokenizerFast.from_pretrained(tokenizer_path, subfolder=subfolder)
 
 
-# Misc
+# 杂项
 def clean_prompt(text: str) -> str:
-    """Normalize a task prompt (HTML-unescape + whitespace collapse).
+    """规范化任务 prompt（HTML 反转义 + 折叠空白字符）。
 
-    Mirrors diffusers' Wan ``prompt_clean`` minus ``ftfy.fix_text``,
-    which is a no-op for the ASCII task strings used here, so we avoid the extra ``ftfy`` dep.
+    对应 diffusers 中 Wan 的 ``prompt_clean``，但去掉了 ``ftfy.fix_text``——
+    对这里使用的 ASCII 任务字符串而言它是空操作，因此可以避免额外的 ``ftfy`` 依赖。
     """
     text = html.unescape(html.unescape(text)).strip()
     return re.sub(r"\s+", " ", text).strip()
@@ -176,14 +176,14 @@ def _sample_timestep_id(
     max_timestep_bd: float = 1.0,
     num_train_timesteps: int = 1000,
 ) -> torch.Tensor:
-    """Sample per-frame flow-matching timestep ids (upstream ``utils.sample_timestep_id``)."""
+    """逐帧采样 flow-matching 时间步 id（上游 ``utils.sample_timestep_id``）。"""
     u = torch.rand(size=[batch_size]) * (max_timestep_bd - min_timestep_bd) + min_timestep_bd
     return (u * num_train_timesteps).clamp(min=0, max=num_train_timesteps - 1).to(torch.int64)
 
 
-# Flow-matching scheduler
-# LingBot-VA uses two independent instances at inference (one for the video-latent stream,
-# one for the action stream), each with its own ``shift`` and number of denoising steps.
+# Flow-matching 调度器
+# LingBot-VA 在推理时使用两个相互独立的实例（一个用于视频潜变量流，
+# 一个用于动作流），各自拥有独立的 ``shift`` 和去噪步数。
 class FlowMatchScheduler:
     def __init__(
         self,
@@ -303,12 +303,12 @@ class FlowMatchScheduler:
 
 
 class FlexAttnFunc(nn.Module):
-    """Flex-attention backend (training only; ``attn_mode='flex'``).
+    """Flex-attention 后端（仅训练使用；``attn_mode='flex'``）。
 
-    Builds the block-causal / window / noise-vs-clean masks used by the dual-stream
-    flow-matching training. Inference uses the ``torch`` SDPA backend. The flex-attention
-    APIs and their ``torch.compile`` wrappers are imported/initialised lazily so importing
-    this module never requires a flex-attention-capable PyTorch build.
+    构建双流 flow-matching 训练所使用的块因果 / 窗口 / 噪声对干净掩码。
+    推理使用 ``torch`` SDPA 后端。flex-attention API 及其 ``torch.compile``
+    包装器采用惰性导入/初始化，因此导入本模块从不要求具备支持
+    flex-attention 的 PyTorch 构建。
     """
 
     flex_attn = None
@@ -473,7 +473,7 @@ class FlexAttnFunc(nn.Module):
 
 
 class WanRotaryPosEmbed(nn.Module):
-    """Rotary position embedding with separate frequency bases for frame / height / width."""
+    """旋转位置编码，帧 / 高 / 宽三个维度使用各自独立的频率基。"""
 
     def __init__(self, attention_head_dim: int, patch_size, max_seq_len: int, theta: float = 10000.0):
         super().__init__()
@@ -516,9 +516,9 @@ class WanRotaryPosEmbed(nn.Module):
 
 
 class WanAttention(nn.Module):
-    """Self/cross attention with KV-caching for autoregressive streaming inference.
+    """带 KV 缓存的自注意力/交叉注意力，用于自回归流式推理。
 
-    Backends: ``torch`` (default SDPA), ``flashattn`` (optional), ``flex`` (training masks).
+    后端：``torch``（默认 SDPA）、``flashattn``（可选）、``flex``（训练掩码）。
     """
 
     def __init__(
@@ -556,7 +556,7 @@ class WanAttention(nn.Module):
         self.to_out = nn.ModuleList([nn.Linear(self.inner_dim, dim, bias=True), nn.Dropout(dropout)])
         self.norm_q = nn.RMSNorm(dim_head * heads, eps=eps, elementwise_affine=True)
         self.norm_k = nn.RMSNorm(dim_head * heads, eps=eps, elementwise_affine=True)
-        # KV cache only lives on self-attention modules (cross_attention_dim_head is None).
+        # KV cache 只存在于自注意力模块上（cross_attention_dim_head 为 None）。
         self.attn_caches = {} if cross_attention_dim_head is None else None
 
     def clear_pred_cache(self, cache_name):
@@ -677,7 +677,7 @@ class WanAttention(nn.Module):
         return hidden_states
 
 
-# Dual-stream Wan2.2 transformer
+# 双流 Wan2.2 transformer
 class WanTimeTextImageEmbedding(nn.Module):
     def __init__(self, dim, time_freq_dim, time_proj_dim, text_embed_dim, pos_embed_seq_len):
         super().__init__()
@@ -707,7 +707,7 @@ class WanTransformerBlock(nn.Module):
         super().__init__()
         self.attn_mode = attn_mode
 
-        # 1. Self-attention
+        # 1. 自注意力
         self.norm1 = FP32LayerNorm(dim, eps, elementwise_affine=False)
         self.attn1 = WanAttention(
             dim=dim,
@@ -718,7 +718,7 @@ class WanTransformerBlock(nn.Module):
             attn_mode=attn_mode,
         )
 
-        # 2. Cross-attention
+        # 2. 交叉注意力
         self.attn2 = WanAttention(
             dim=dim,
             heads=num_heads,
@@ -729,7 +729,7 @@ class WanTransformerBlock(nn.Module):
         )
         self.norm2 = FP32LayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
 
-        # 3. Feed-forward
+        # 3. 前馈网络
         self.ffn = FeedForward(dim, inner_dim=ffn_dim, activation_fn="gelu-approximate")
         self.norm3 = FP32LayerNorm(dim, eps, elementwise_affine=False)
 
@@ -748,7 +748,7 @@ class WanTransformerBlock(nn.Module):
         c_shift_msa = c_shift_msa.squeeze(1)
         c_scale_msa = c_scale_msa.squeeze(1)
         c_gate_msa = c_gate_msa.squeeze(1)
-        # 1. Self-attention
+        # 1. 自注意力
         norm_hidden_states = (self.norm1(hidden_states.float()) * (1.0 + scale_msa) + shift_msa).type_as(
             hidden_states
         )
@@ -762,7 +762,7 @@ class WanTransformerBlock(nn.Module):
         )
         hidden_states = (hidden_states.float() + attn_output * gate_msa).type_as(hidden_states)
 
-        # 2. Cross-attention
+        # 2. 交叉注意力
         norm_hidden_states = self.norm2(hidden_states.float()).type_as(hidden_states)
         attn_output = self.attn2(
             norm_hidden_states,
@@ -774,7 +774,7 @@ class WanTransformerBlock(nn.Module):
         )
         hidden_states = hidden_states + attn_output
 
-        # 3. Feed-forward
+        # 3. 前馈网络
         norm_hidden_states = (self.norm3(hidden_states.float()) * (1.0 + c_scale_msa) + c_shift_msa).type_as(
             hidden_states
         )
@@ -786,7 +786,7 @@ class WanTransformerBlock(nn.Module):
 
 
 class WanTransformer3DModel(ModelMixin, ConfigMixin):
-    """Dual-stream (video + action) Wan2.2 DiT backbone with autoregressive KV caching."""
+    """双流（视频 + 动作）Wan2.2 DiT 主干，带自回归 KV 缓存。"""
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = [
@@ -865,7 +865,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
         self.action_proj_out = nn.Linear(inner_dim, action_dim)
         self.scale_shift_table = nn.Parameter(torch.randn(1, 2, inner_dim) / inner_dim**0.5)
 
-    # KV-cache management for autoregressive streaming inference
+    # 自回归流式推理的 KV-cache 管理
     def clear_cache(self, cache_name):
         for block in self.blocks:
             block.attn1.clear_cache(cache_name)
@@ -898,7 +898,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
                 batch_size,
             )
 
-    # Embedding helpers (shared by train + inference paths)
+    # 嵌入辅助函数（训练和推理路径共用）
     def _input_embed(self, latents, input_type="latent"):
         if input_type == "latent":
             hidden_states = rearrange(
@@ -930,7 +930,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
         timestep_proj = timestep_proj.unflatten(2, (6, -1))  # B L 6 C
         return temb, timestep_proj
 
-    # Dual-stream training forward (flow matching). Requires attn_mode='flex'.
+    # 双流训练前向（flow matching）。需要 attn_mode='flex'。
     def forward_train(self, input_dict):
         input_dict["latent_dict"]["noisy_latents"] = input_dict["latent_dict"]["noisy_latents"].to(
             torch.bfloat16
@@ -1045,14 +1045,14 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
 
         return latent_hidden_states, action_hidden_states
 
-    # Single-stream inference forward (one denoising step for one stream)
+    # 单流推理前向（对单个流执行一个去噪步）
     def forward(self, input_dict, update_cache=0, cache_name="pos", action_mode=False, train_mode=False):
         if train_mode:
             return self.forward_train(input_dict)
-        if action_mode:  # action input emb
+        if action_mode:  # 动作输入嵌入
             latent_hidden_states = rearrange(input_dict["noisy_latents"], "b c f h w -> b (f h w) c")
             latent_hidden_states = self.action_embedder(latent_hidden_states)  # B L1 C
-        else:  # latent input emb
+        else:  # 潜变量输入嵌入
             latent_hidden_states = rearrange(
                 input_dict["noisy_latents"],
                 "b c (f p1) (h p2) (w p3) -> b (f h w) (c p1 p2 p3)",
@@ -1108,7 +1108,7 @@ class WanTransformer3DModel(ModelMixin, ConfigMixin):
 
 
 class WanVAEStreamingWrapper:
-    """Wraps an ``AutoencoderKLWan`` encoder to support causal streaming encoding across chunks."""
+    """封装 ``AutoencoderKLWan`` 编码器，以支持跨分块的因果流式编码。"""
 
     def __init__(self, vae_model):
         self.vae = vae_model

@@ -43,14 +43,14 @@ from .configuration_pi05 import PI05Config
 @dataclass
 class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
     """
-    Processor step to prepare the state and tokenize the language input.
+    用于准备状态并对语言输入进行分词的处理步骤。
     """
 
     max_state_dim: int = 32
     task_key: str = "task"
-    # MEM section III-D represents proprioception with a linear projection into the
-    # backbone instead of discretized prompt tokens, so the state is carried once.
-    # Set from `PI05Config.use_proprioceptive_memory`; stock PI0.5 keeps it in the prompt.
+    # MEM 第 III-D 节使用线性投影将本体感知表示到主干中，而不是使用离散化的
+    # 提示词 token，因此状态只被携带一次。
+    # 该值由 `PI05Config.use_proprioceptive_memory` 设置；原版 PI0.5 将其保留在提示词中。
     include_state_in_prompt: bool = True
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
@@ -63,13 +63,13 @@ class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
         if tasks is None:
             raise ValueError("No task found in complementary data")
 
-        # TODO: check if this necessary
+        # TODO: 检查这是否必要
         state = deepcopy(state)
 
         discretized_states = None
         if self.include_state_in_prompt:
-            # State should already be normalized to [-1, 1] by the NormalizerProcessorStep that runs before this step
-            # Discretize into 256 bins (see openpi `PaligemmaTokenizer.tokenize()`)
+            # 状态在此步骤之前运行的 NormalizerProcessorStep 中应已被归一化到 [-1, 1]
+            # 离散化为 256 个区间（参见 openpi `PaligemmaTokenizer.tokenize()`）
             prompt_state = state[:, -1] if state.ndim == 3 else state
             state_np = prompt_state.cpu().numpy()
             discretized_states = np.digitize(state_np, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
@@ -85,15 +85,15 @@ class Pi05PrepareStateTokenizerProcessorStep(ProcessorStep):
             full_prompts.append(full_prompt)
 
         transition[TransitionKey.COMPLEMENTARY_DATA][self.task_key] = full_prompts
-        # Normalize state to [-1, 1] range if needed (assuming it's already normalized by normalizer processor step!!)
-        # Discretize into 256 bins (see openpi `PaligemmaTokenizer.tokenize()`)
+        # 如有需要，将状态归一化到 [-1, 1] 范围（假设它已被 normalizer 处理步骤归一化！！）
+        # 离散化为 256 个区间（参见 openpi `PaligemmaTokenizer.tokenize()`）
         return transition
 
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        This step does not alter the feature definitions.
+        此步骤不会改变特征定义。
         """
         return features
 
@@ -106,28 +106,28 @@ def make_pi05_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the PI0 policy.
+    为 PI0 策略构建前处理和后处理流水线。
 
-    The pre-processing pipeline prepares input data for the model by:
-    1. Renaming features to match pretrained configurations.
-    2. Normalizing input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Appending a newline character to the task description for tokenizer compatibility.
-    5. Tokenizing the text prompt using the PaliGemma tokenizer.
-    6. Moving all data to the specified device.
+    前处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征以匹配预训练配置。
+    2. 根据数据集统计量对输入和输出特征进行归一化。
+    3. 添加批次维度。
+    4. 在任务描述末尾追加换行符以兼容分词器。
+    5. 使用 PaliGemma 分词器对文本提示进行分词。
+    6. 将所有数据移动到指定设备。
 
-    The post-processing pipeline handles the model's output by:
-    1. Moving data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    后处理流水线通过以下步骤处理模型的输出：
+    1. 将数据移动到 CPU。
+    2. 将输出特征反归一化到原始尺度。
 
     Args:
-        config: The configuration object for the PI0 policy.
-        dataset_stats: A dictionary of statistics for normalization.
-        preprocessor_kwargs: Additional arguments for the pre-processor pipeline.
-        postprocessor_kwargs: Additional arguments for the post-processor pipeline.
+        config: PI0 策略的配置对象。
+        dataset_stats: 用于归一化的统计量字典。
+        preprocessor_kwargs: 前处理流水线的附加参数。
+        postprocessor_kwargs: 后处理流水线的附加参数。
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+        包含配置好的前处理和后处理流水线的元组。
     """
 
     relative_step = RelativeActionsProcessorStep(
@@ -138,13 +138,13 @@ def make_pi05_pre_post_processors(
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
-    # OpenPI order: raw → relative → normalize → model → unnormalize → absolute
+    # OpenPI 顺序：raw → relative → normalize → model → unnormalize → absolute
     input_steps: list[ProcessorStep] = [
-        steps.rename_observations,  # To mimic the same processor as pretrained one
+        steps.rename_observations,  # 为了模拟与预训练模型相同的处理器
         steps.add_batch_dim,
         relative_step,
-        # NOTE: NormalizerProcessorStep MUST come before Pi05PrepareStateTokenizerProcessorStep
-        # because the tokenizer step expects normalized state in [-1, 1] range for discretization
+        # 注意：NormalizerProcessorStep 必须位于 Pi05PrepareStateTokenizerProcessorStep 之前，
+        # 因为分词器步骤期望状态已被归一化到 [-1, 1] 范围以便离散化
         steps.normalize,
         Pi05PrepareStateTokenizerProcessorStep(
             max_state_dim=config.max_state_dim,

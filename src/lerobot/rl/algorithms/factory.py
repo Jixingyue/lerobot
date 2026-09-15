@@ -21,17 +21,17 @@ from .configs import RLAlgorithmConfig
 
 
 def make_algorithm_config(algorithm_type: str, **kwargs) -> RLAlgorithmConfig:
-    """Instantiate an `RLAlgorithmConfig` from its registered type name.
+    """根据注册的算法类型名称实例化 `RLAlgorithmConfig`。
 
     Args:
-        algorithm_type: Registry key of the algorithm (e.g. ``"sac"``).
-        **kwargs: Keyword arguments forwarded to the config class constructor.
+        algorithm_type: 算法的注册表键（例如 ``"sac"``）。
+        **kwargs: 转发给配置类构造函数的关键字参数。
 
     Returns:
-        An instance of the matching ``RLAlgorithmConfig`` subclass.
+        匹配的 ``RLAlgorithmConfig`` 子类的实例。
 
     Raises:
-        ValueError: If ``algorithm_type`` is not registered.
+        ValueError: 如果 ``algorithm_type`` 未注册。
     """
     try:
         cls = RLAlgorithmConfig.get_choice_class(algorithm_type)
@@ -45,19 +45,19 @@ def make_algorithm_config(algorithm_type: str, **kwargs) -> RLAlgorithmConfig:
 
 def get_algorithm_class(name: str) -> type[RLAlgorithm]:
     """
-    Retrieves an RL algorithm class by its registered name.
+    根据注册的名称获取 RL 算法类。
 
-    This function uses dynamic imports to avoid loading all algorithm classes into
-    memory at once, improving startup time and reducing dependencies.
+    该函数使用动态导入，以避免一次性将所有算法类加载到
+    内存中，从而缩短启动时间并减少依赖。
 
     Args:
-        name: The name of the algorithm. Supported names are "sac".
+        name: 算法名称。支持的名称为 "sac"。
 
     Returns:
-        The algorithm class corresponding to the given name.
+        与给定名称对应的算法类。
 
     Raises:
-        ValueError: If the algorithm name is not recognized.
+        ValueError: 如果算法名称无法识别。
     """
     if name == "sac":
         from .sac.sac_algorithm import SACAlgorithm
@@ -71,23 +71,23 @@ def get_algorithm_class(name: str) -> type[RLAlgorithm]:
 
 def make_algorithm(cfg: RLAlgorithmConfig, policy: torch.nn.Module) -> RLAlgorithm:
     """
-    Instantiate an RL algorithm.
+    实例化一个 RL 算法。
 
-    This factory function looks up the :class:`RLAlgorithm` subclass that matches
-    ``cfg.type`` and instantiates it with the provided policy. It also enforces
-    that ``cfg.policy_config`` has been populated before construction (this is
-    normally handled by :meth:`TrainRLServerPipelineConfig.validate`).
+    该工厂函数查找与 ``cfg.type`` 匹配的 :class:`RLAlgorithm` 子类，
+    并使用提供的策略实例化它。它还强制要求在构造之前
+    ``cfg.policy_config`` 已被填充（这通常由
+    :meth:`TrainRLServerPipelineConfig.validate` 处理）。
 
     Args:
-        cfg: The algorithm configuration. Must have ``policy_config`` set.
-        policy: The policy module the algorithm will train.
+        cfg: 算法配置。必须已设置 ``policy_config``。
+        policy: 算法将要训练的策略模块。
 
     Returns:
-        An instantiated :class:`RLAlgorithm`.
+        实例化后的 :class:`RLAlgorithm`。
 
     Raises:
-        ValueError: If ``cfg.policy_config`` is ``None`` or ``cfg.type`` is not
-            registered.
+        ValueError: 如果 ``cfg.policy_config`` 为 ``None``，或 ``cfg.type``
+            未注册。
     """
     if getattr(cfg, "policy_config", None) is None:
         raise ValueError(

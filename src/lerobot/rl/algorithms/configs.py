@@ -37,14 +37,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TrainingStats:
-    """Returned by ``algorithm.update()`` for logging and checkpointing."""
+    """由 ``algorithm.update()`` 返回，用于日志记录和检查点保存。"""
 
     losses: dict[str, float] = field(default_factory=dict)
     grad_norms: dict[str, float] = field(default_factory=dict)
     extra: dict[str, float] = field(default_factory=dict)
 
     def to_log_dict(self) -> dict[str, float]:
-        """Flatten all stats into a single dict for logging."""
+        """将所有统计信息扁平化为单个字典，用于日志记录。"""
 
         d: dict[str, float] = {}
         for name, val in self.losses.items():
@@ -58,11 +58,11 @@ class TrainingStats:
 
 @dataclass
 class RLAlgorithmConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
-    """Registry for algorithm configs."""
+    """算法配置的注册表。"""
 
     @property
     def type(self) -> str:
-        """Registered name of this algorithm config (e.g. ``"sac"``)."""
+        """此算法配置的注册名称（例如 ``"sac"``）。"""
         choice_name = self.get_choice_name(self.__class__)
         if not isinstance(choice_name, str):
             raise TypeError(f"Expected string from get_choice_name, got {type(choice_name)}")
@@ -71,16 +71,16 @@ class RLAlgorithmConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
     @classmethod
     @abc.abstractmethod
     def from_policy_config(cls, policy_cfg: Any) -> RLAlgorithmConfig:
-        """Build an algorithm config from a policy config.
+        """从策略配置构建算法配置。
 
-        Must be overridden by every registered config subclass.
+        每个注册的配置子类都必须重写此方法。
         """
         raise NotImplementedError(f"{cls.__name__} must implement from_policy_config()")
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Serialize this config as ``config.json`` inside ``save_directory``."""
-        # Encode against the base class so draccus includes the choice "type" key,
-        # which `from_pretrained` needs to resolve the concrete subclass.
+        """将此配置序列化为 ``save_directory`` 内的 ``config.json``。"""
+        # 按基类进行编码，以便 draccus 包含 choice "type" 键，
+        # `from_pretrained` 需要该键来解析具体的子类。
         with open(save_directory / CONFIG_NAME, "w") as f:
             json.dump(draccus.encode(self, RLAlgorithmConfig), f, indent=4)
 

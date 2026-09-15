@@ -25,7 +25,7 @@ from lerobot.utils.constants import ACTION, OBS_STATE
 
 
 def _wall_x_default_recipe() -> dict:
-    """Serialized recipe; keep policy config discovery independent of dataset extras."""
+    """序列化的 recipe；使策略配置的发现不依赖于数据集的 extras。"""
     return {
         "messages": [
             {
@@ -48,22 +48,22 @@ def _wall_x_default_recipe() -> dict:
 @dataclass
 class WallXConfig(PreTrainedConfig):
     """
-    Configuration class for Wall-X policy.
+    Wall-X 策略的配置类。
 
-    Wall-X is based on Qwen2.5-VL with action prediction capabilities using flow matching.
-    It supports cross-embodiment robotic control through unified action representations.
+    Wall-X 基于 Qwen2.5-VL，具备使用 flow matching 进行动作预测的能力。
+    它通过统一的动作表示支持跨本体（cross-embodiment）机器人控制。
 
-    This config supports multi-modal learning with vision, language, and action data.
+    该配置支持结合视觉、语言和动作数据的多模态学习。
     """
 
-    # ==================== Input / Output Structure ====================
+    # ==================== 输入 / 输出结构 ====================
     n_obs_steps: int = 1
-    chunk_size: int = 32  # action_horizon in wall-x
+    chunk_size: int = 32  # wall-x 中的 action_horizon
     n_action_steps: int = 32
 
-    # Action dimension - wall-x uses 20
+    # 动作维度 - wall-x 使用 20
     max_action_dim: int = 20
-    max_state_dim: int = 20  # For proprioception
+    max_state_dim: int = 20  # 用于本体感知（proprioception）
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -73,29 +73,27 @@ class WallXConfig(PreTrainedConfig):
         }
     )
 
-    # ==================== Action Prediction ====================
-    # Pretrained model paths
+    # ==================== 动作预测 ====================
+    # 预训练模型路径
     pretrained_name_or_path: str = "x-square-robot/wall-oss-flow"
 
-    # Tokenizer settings
+    # 分词器设置
     action_tokenizer_path: str | None = "lerobot/fast-action-tokenizer"
 
-    # Action prediction mode: "diffusion" or "fast"
+    # 动作预测模式："diffusion" 或 "fast"
     prediction_mode: str = "diffusion"
 
-    # Wall-X's bidirectional action-token islands currently require eager attention.
+    # Wall-X 的双向动作 token 岛（island）目前需要使用 eager attention。
     attn_implementation: str = "eager"
 
-    # Vision attention is independent from the text action-token mask. ``auto`` uses
-    # PyTorch's packed variable-length attention when the runtime supports it and
-    # otherwise falls back to the native per-chunk SDPA implementation.
+    # 视觉注意力独立于文本动作 token 掩码。``auto`` 会在运行时支持时使用 PyTorch 的
+    # packed 变长注意力，否则回退到原生的逐块 SDPA 实现。
     vision_attn_implementation: str = "auto"
 
-    # Optional explicit external language-recipe override.
+    # 可选的、显式的外部语言 recipe 覆盖。
     recipe_path: str | None = None
-    # WALL-X's language contract: defaults to the WALL-OSS trained subtask wording;
-    # a fine-tune with `recipe_path` replaces it, and the checkpoint then prompts
-    # itself with the recipe it was trained on.
+    # WALL-X 的语言契约：默认为 WALL-OSS 训练时使用的子任务措辞；使用 `recipe_path`
+    # 微调会替换它，之后 checkpoint 会用自己训练时所用的 recipe 来提示自身。
     recipe: dict | None = field(default_factory=_wall_x_default_recipe)
     tokenizer_max_length: int = 768
     text_temperature: float = 0.0
@@ -103,7 +101,7 @@ class WallXConfig(PreTrainedConfig):
     flow_loss_weight: float = 1.0
     text_loss_weight: float = 0.01
 
-    # ==================== Optimizer Presets ====================
+    # ==================== 优化器预设 ====================
     optimizer_lr: float = 2e-5
     optimizer_betas: tuple[float, float] = (0.9, 0.95)
     optimizer_eps: float = 1e-8
@@ -122,7 +120,7 @@ class WallXConfig(PreTrainedConfig):
 
             self.recipe = asdict(resolve_recipe_override(self.recipe, self.recipe_path))
 
-        # Input validation
+        # 输入校验
         if self.n_action_steps > self.chunk_size:
             raise ValueError(
                 f"The chunk size is the upper bound for the number of action steps per model invocation. Got "
@@ -150,17 +148,17 @@ class WallXConfig(PreTrainedConfig):
         if self.flow_loss_weight == 0 and self.text_loss_weight == 0:
             raise ValueError("At least one WALL-OSS training loss must be enabled.")
 
-        # Assign use_fast_tokenizer based on prediction_mode
+        # 根据 prediction_mode 设置 use_fast_tokenizer
         if self.prediction_mode == "fast":
             self.use_fast_tokenizer = True
         elif self.prediction_mode == "diffusion":
             self.use_fast_tokenizer = False
-            self.action_tokenizer_path = None  # disable action tokenizer for diffusion mode
+            self.action_tokenizer_path = None  # diffusion 模式下禁用动作分词器
         else:
             raise ValueError(f"prediction_mode must be 'diffusion' or 'fast', got {self.prediction_mode}")
 
     def validate_features(self) -> None:
-        """Validate and set up input/output features."""
+        """校验并设置输入/输出特征。"""
         image_features = [key for key, feat in self.input_features.items() if feat.type == FeatureType.VISUAL]
         if not image_features:
             raise ValueError(
@@ -171,7 +169,7 @@ class WallXConfig(PreTrainedConfig):
         if OBS_STATE not in self.input_features:
             state_feature = PolicyFeature(
                 type=FeatureType.STATE,
-                shape=(self.max_state_dim,),  # Padded to max_state_dim
+                shape=(self.max_state_dim,),  # 填充到 max_state_dim
             )
             self.input_features[OBS_STATE] = state_feature
         else:
@@ -186,7 +184,7 @@ class WallXConfig(PreTrainedConfig):
         if ACTION not in self.output_features:
             action_feature = PolicyFeature(
                 type=FeatureType.ACTION,
-                shape=(self.max_action_dim,),  # Padded to max_action_dim
+                shape=(self.max_action_dim,),  # 填充到 max_action_dim
             )
             self.output_features[ACTION] = action_feature
         else:

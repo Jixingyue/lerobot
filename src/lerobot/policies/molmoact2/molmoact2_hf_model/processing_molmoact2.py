@@ -14,7 +14,7 @@
 
 
 """
-Processor class for MolmoAct2.
+MolmoAct2 的处理器类。
 """
 
 import numpy as np
@@ -36,9 +36,9 @@ from .video_processing_molmoact2 import MolmoAct2VideoProcessor, MolmoAct2VideoP
 logger = logging.get_logger(__name__)
 
 
-# Special tokens, these should be present in any tokenizer we use since the preprocessor uses them
-IMAGE_PATCH_TOKEN = "<im_patch>"  # nosec B105  # Where to insert high-res tokens
-IMAGE_LOW_RES_TOKEN = "<im_low>"  # nosec B105  # Where to insert low-res tokens
+# 特殊 token，由于预处理器会使用它们，我们使用的任何分词器中都必须包含这些 token
+IMAGE_PATCH_TOKEN = "<im_patch>"  # nosec B105  # 插入高分辨率 token 的位置
+IMAGE_LOW_RES_TOKEN = "<im_low>"  # nosec B105  # 插入低分辨率 token 的位置
 IM_START_TOKEN = "<im_start>"  # nosec B105
 LOW_RES_IMAGE_START_TOKEN = "<low_res_im_start>"  # nosec B105
 FRAME_START_TOKEN = "<frame_start>"  # nosec B105
@@ -61,7 +61,7 @@ IMAGE_TOKENS = [
 
 
 class MolmoAct2ProcessorKwargs(ProcessingKwargs, total=False):
-    """MolmoAct2 processor kwargs"""
+    """MolmoAct2 处理器的 kwargs"""
 
     images_kwargs: MolmoAct2ImagesKwargs
     videos_kwargs: MolmoAct2VideoProcessorKwargs
@@ -175,9 +175,9 @@ class MolmoAct2Processor(ProcessorMixin):
         num_frames, h, w = video_grid
         video_string: str = ""
         for frame_idx, frame_time in enumerate(timestamps):
-            # `per-frame-compact` time mode
+            # `per-frame-compact` 时间模式
             prev_space = " " if frame_idx > 0 else ""
-            frame_prefix = prev_space + f"{frame_time:.1f} "  # explicit whitespace before/after image tokens
+            frame_prefix = prev_space + f"{frame_time:.1f} "  # 在图像 token 前后显式添加空白
 
             video_string += frame_prefix
             per_row = np.full(w, IMAGE_PATCH_TOKEN)
@@ -201,14 +201,14 @@ class MolmoAct2Processor(ProcessorMixin):
         pad_token_id: int,
     ):
         """
-        Args:
-            input_ids: [B, S] array with left padding
-            attention_mask: [B, S] array (0 for pad, 1 for valid)
+        参数：
+            input_ids: 左填充的 [B, S] 数组
+            attention_mask: [B, S] 数组（0 表示填充，1 表示有效）
             bos_token_id: int
             pad_token_id: int
-        Returns:
-            input_ids_out: [B, S] or [B, S+1] array with bos inserted if needed
-            attention_mask_out: same shape as input_ids_out
+        返回：
+            input_ids_out: [B, S] 或 [B, S+1] 数组，必要时插入 bos
+            attention_mask_out: 与 input_ids_out 形状相同
         """
 
         need_to_expand = len(input_ids.shape) == 1
@@ -218,7 +218,7 @@ class MolmoAct2Processor(ProcessorMixin):
 
         B, S = input_ids.shape  # noqa: N806
 
-        # Handle zero-length sequence
+        # 处理零长度序列
         if S == 0:
             new_input_ids = np.full((B, 1), bos_token_id, dtype=input_ids.dtype)
             new_attention_mask = np.ones((B, 1), dtype=attention_mask.dtype)
@@ -241,10 +241,10 @@ class MolmoAct2Processor(ProcessorMixin):
 
             src_idx = np.tile(np.arange(S), (B, 1))  # [B, S]
             valid_mask = src_idx >= first_valid_index[:, None]  # [B, S]
-            tgt_idx = src_idx + 1  # shit right
+            tgt_idx = src_idx + 1  # 右移
             batch_idx = np.tile(np.arange(B)[:, None], (1, S))  # [B, S]
 
-            # flatten valid_positions
+            # 展平有效位置
             flat_vals = input_ids[valid_mask]
             flat_batch = batch_idx[valid_mask]
             flat_tgt = tgt_idx[valid_mask]
@@ -271,41 +271,41 @@ class MolmoAct2Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
 
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            videos (`dict[str, Any]` or `list[dict[str, Any]]`):
-                The video or batch of videos to be prepared. Each video can be a dictionary with the following keys:
-                - `"frames"`: `np.ndarray` of shape (T, H, W, 3)
-                - `"timestamps"`: `np.ndarray` of shape (T,)
-                - `"sampled_fps"`: `float` (optional)
-                - `"sampling_augmentation"`: `str` (optional)
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+        参数：
+            text (`str`, `list[str]`, `list[list[str]]`)：
+                要编码的序列或序列批次。每个序列可以是字符串或字符串列表
+                （预分词的字符串）。如果序列以字符串列表（预分词）的形式提供，必须设置
+                `is_split_into_words=True`（以消除与序列批次的歧义）。
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`)：
+                要准备的图像或图像批次。每张图像可以是 PIL 图像、NumPy 数组或 PyTorch
+                张量。支持通道优先和通道最后两种格式。
+            videos (`dict[str, Any]` 或 `list[dict[str, Any]]`)：
+                要准备的视频或视频批次。每个视频可以是包含以下键的字典：
+                - `"frames"`：形状为 (T, H, W, 3) 的 `np.ndarray`
+                - `"timestamps"`：形状为 (T,) 的 `np.ndarray`
+                - `"sampled_fps"`：`float`（可选）
+                - `"sampling_augmentation"`：`str`（可选）
+            return_tensors (`str` 或 [`~utils.TensorType`]，*可选*)：
+                如果设置，将返回特定框架的张量。可接受的值为：
+                - `'tf'`：返回 TensorFlow `tf.constant` 对象。
+                - `'pt'`：返回 PyTorch `torch.Tensor` 对象。
+                - `'np'`：返回 NumPy `np.ndarray` 对象。
+                - `'jax'`：返回 JAX `jnp.ndarray` 对象。
 
-        Returns:
-            `BatchFeature`: A [`BatchFeature`] with the following fields:
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_token_pooling** -- Indices of the patches in `image_grids` to pool for each token in `image_tokens`.
-              Returned when `images` is not `None`.
-            - **image_grids** -- Grids of images. Returned when `images` is not `None`.
-            - **image_num_crops** -- Number of crops for each image. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **video_token_pooling** -- Indices of the patches in `video_grids` to pool for each token in `video_tokens`.
-              Returned when `videos` is not `None`.
-            - **video_grids** -- Grids of videos. Returned when `videos` is not `None`.
+        返回：
+            `BatchFeature`：包含以下字段的 [`BatchFeature`]：
+            - **input_ids** -- 要输入模型的 token id 列表。当 `text` 不为 `None` 时返回。
+            - **attention_mask** -- 指定模型应关注哪些 token 的索引列表（当
+              `return_attention_mask=True`，或 *"attention_mask"* 在 `self.model_input_names` 中且 `text` 不为 `None` 时返回）。
+            - **pixel_values** -- 要输入模型的像素值。当 `images` 不为 `None` 时返回。
+            - **image_token_pooling** -- `image_tokens` 中每个 token 做池化时所用 `image_grids` 中块的索引。
+              当 `images` 不为 `None` 时返回。
+            - **image_grids** -- 图像网格。当 `images` 不为 `None` 时返回。
+            - **image_num_crops** -- 每张图像的裁剪块数量。当 `images` 不为 `None` 时返回。
+            - **pixel_values_videos** -- 要输入模型的视频像素值。当 `videos` 不为 `None` 时返回。
+            - **video_token_pooling** -- `video_tokens` 中每个 token 做池化时所用 `video_grids` 中块的索引。
+              当 `videos` 不为 `None` 时返回。
+            - **video_grids** -- 视频网格。当 `videos` 不为 `None` 时返回。
         """
 
         output_kwargs = self._merge_kwargs(
@@ -324,7 +324,7 @@ class MolmoAct2Processor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grids = videos_inputs["video_grids"]
-            # If user has not requested video metadata, pop it
+            # 如果用户没有请求视频元数据，则将其弹出
             if "return_metadata" not in kwargs:
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
@@ -336,7 +336,7 @@ class MolmoAct2Processor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        text = text.copy()  # below lines change text in-place
+        text = text.copy()  # 下面的代码会就地修改 text
 
         if image_grids is not None:
             index = 0
@@ -396,21 +396,21 @@ class MolmoAct2Processor(ProcessorMixin):
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
     ):
         """
-        Post-process the output of the model to decode the text.
+        对模型输出进行后处理以解码文本。
 
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+        参数：
+            generated_outputs (`torch.Tensor` 或 `np.ndarray`)：
+                模型 `generate` 函数的输出。期望输出为形状 `(batch_size, sequence_length)`
+                或 `(sequence_length,)` 的张量。
+            skip_special_tokens (`bool`，*可选*，默认为 `True`)：
+                是否移除输出中的特殊 token。该参数会传递给分词器的 `batch_decode` 方法。
+            clean_up_tokenization_spaces (`bool`，*可选*，默认为 `False`)：
+                是否清理分词产生的空格。该参数会传递给分词器的 `batch_decode` 方法。
+            **kwargs：
+                要传递给分词器 `batch_decode` 方法的额外参数。
 
-        Returns:
-            `list[str]`: The decoded text.
+        返回：
+            `list[str]`：解码后的文本。
         """
         return self.tokenizer.batch_decode(
             generated_outputs,

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class TeleopEvents(Enum):
-    """Shared constants for teleoperator events across teleoperators."""
+    """各遥操作设备共享的遥操作事件常量。"""
 
     SUCCESS = "success"
     FAILURE = "failure"
@@ -34,7 +34,7 @@ class TeleopEvents(Enum):
 
 
 def make_teleoperator_from_config(config: TeleoperatorConfig) -> "Teleoperator":
-    # TODO(Steven): Consider just using the make_device_from_device_class for all types
+    # TODO(Steven): 考虑对所有类型都使用 make_device_from_device_class
     if config.type == "keyboard":
         from .keyboard import KeyboardTeleop
 

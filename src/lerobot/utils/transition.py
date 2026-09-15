@@ -35,15 +35,15 @@ def move_transition_to_device(transition: Transition, device: str = "cpu") -> Tr
     device = torch.device(device)
     non_blocking = device.type == "cuda"
 
-    # Move state tensors to device
+    # 将状态张量移动到设备
     transition["state"] = {
         key: val.to(device, non_blocking=non_blocking) for key, val in transition["state"].items()
     }
 
-    # Move action to device
+    # 将动作移动到设备
     transition[ACTION] = transition[ACTION].to(device, non_blocking=non_blocking)
 
-    # Move reward and done if they are tensors
+    # 如果 reward 和 done 是张量，则移动到设备
     if isinstance(transition["reward"], torch.Tensor):
         transition["reward"] = transition["reward"].to(device, non_blocking=non_blocking)
 
@@ -53,12 +53,12 @@ def move_transition_to_device(transition: Transition, device: str = "cpu") -> Tr
     if isinstance(transition["truncated"], torch.Tensor):
         transition["truncated"] = transition["truncated"].to(device, non_blocking=non_blocking)
 
-    # Move next_state tensors to device
+    # 将 next_state 张量移动到设备
     transition["next_state"] = {
         key: val.to(device, non_blocking=non_blocking) for key, val in transition["next_state"].items()
     }
 
-    # Move complementary_info tensors if present
+    # 如果存在 complementary_info，移动其中的张量
     if transition.get("complementary_info") is not None:
         for key, val in transition["complementary_info"].items():
             if isinstance(val, torch.Tensor):
@@ -72,8 +72,8 @@ def move_transition_to_device(transition: Transition, device: str = "cpu") -> Tr
 
 def move_state_dict_to_device(state_dict, device="cpu"):
     """
-    Recursively move all tensors in a (potentially) nested
-    dict/list/tuple structure to the CPU.
+    递归地将（可能）嵌套的 dict/list/tuple 结构中的
+    所有张量移动到 CPU。
     """
     if isinstance(state_dict, torch.Tensor):
         return state_dict.to(device)

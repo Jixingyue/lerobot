@@ -40,29 +40,29 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RewardModelConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
-    """Base configuration for reward models.
+    """奖励模型的基础配置。
 
     Args:
-    input_features: A dictionary defining the PolicyFeature of the input data for the reward. The key represents
-        the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-    output_features: A dictionary defining the PolicyFeature of the output data for the reward. The key represents
-        the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
+    input_features: 定义奖励输入数据的 PolicyFeature 的字典。键表示
+        输入数据的名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
+    output_features: 定义奖励输出数据的 PolicyFeature 的字典。键表示
+        输出数据的名称，值是 PolicyFeature，由 FeatureType 和 shape 属性组成。
     """
 
-    # Reuses PolicyFeature
+    # 复用 PolicyFeature
     input_features: dict[str, PolicyFeature] = field(default_factory=dict)
     output_features: dict[str, PolicyFeature] = field(default_factory=dict)
 
     device: str | None = None
 
     pretrained_path: str | None = None
-    # Optional Hub revision (commit hash, branch, or tag) to pin the pretrained reward model version.
+    # 可选的 Hub revision（commit hash、分支或标签），用于固定预训练奖励模型的版本。
     pretrained_revision: str | None = None
 
     push_to_hub: bool = False
     repo_id: str | None = None
 
-    # Hub metadata
+    # Hub 元数据
     license: str | None = None
     tags: list[str] | None = None
     private: bool | None = None
@@ -93,7 +93,7 @@ class RewardModelConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         return None
 
     def get_optimizer_preset(self) -> OptimizerConfig | None:
-        """Default optimizer for this reward model, or ``None`` for zero-shot models."""
+        """此奖励模型的默认优化器，零样本模型返回 ``None``。"""
         return None
 
     def get_scheduler_preset(self) -> LRSchedulerConfig | None:
@@ -103,8 +103,8 @@ class RewardModelConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         pass
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        # Encode against the base class so draccus includes the choice "type" key,
-        # which `from_pretrained` needs to resolve the concrete subclass.
+        # 针对基类进行编码，这样 draccus 会包含 choice 的 "type" 键，
+        # `from_pretrained` 需要它来解析具体的子类。
         with open(save_directory / CONFIG_NAME, "w") as f:
             json.dump(draccus.encode(self, RewardModelConfig), f, indent=4)
 
@@ -150,8 +150,7 @@ class RewardModelConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):
         if config_file is None:
             raise FileNotFoundError(f"{CONFIG_NAME} not found in {model_id}")
 
-        # HACK: Parse the original config to get the config subclass, so that we can
-        # apply cli overrides.
+        # HACK: 解析原始配置以获取配置子类，这样就可以应用 CLI 覆盖项。
         with draccus.config_type("json"):
             orig_config = draccus.parse(cls, config_file, args=[])
 

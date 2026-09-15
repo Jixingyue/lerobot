@@ -42,7 +42,7 @@ T = TypeVar("T", bound="RLAlgorithm")
 
 
 class RLAlgorithm(HubMixin, abc.ABC):
-    """Base for all RL algorithms."""
+    """所有 RL 算法的基类。"""
 
     config_class: type[RLAlgorithmConfig]
     name: str
@@ -50,12 +50,12 @@ class RLAlgorithm(HubMixin, abc.ABC):
 
     @abc.abstractmethod
     def update(self, batch_iterator: Iterator[BatchType]) -> TrainingStats:
-        """One complete training step.
+        """一次完整的训练步骤。
 
-        The algorithm calls ``next(batch_iterator)`` as many times as it
-        needs (e.g. ``utd_ratio`` times for SAC) to obtain fresh batches.
-        The iterator is owned by the trainer; the algorithm just consumes
-        from it.
+        算法按需多次调用 ``next(batch_iterator)``
+        （例如 SAC 调用 ``utd_ratio`` 次）以获取新的批次。
+        该迭代器由训练器（trainer）持有；算法只是从中
+        消费数据。
         """
         raise NotImplementedError
 
@@ -67,10 +67,10 @@ class RLAlgorithm(HubMixin, abc.ABC):
         async_prefetch: bool = True,
         queue_size: int = 2,
     ) -> Iterator[BatchType]:
-        """Create the data iterator this algorithm needs.
+        """创建该算法所需的数据迭代器。
 
-        The default implementation uses the standard ``data_mixer.get_iterator()``.
-        Algorithms that need specialised sampling should override this method.
+        默认实现使用标准的 ``data_mixer.get_iterator()``。
+        需要特殊采样的算法应重写此方法。
         """
         return data_mixer.get_iterator(
             batch_size=batch_size,
@@ -80,22 +80,22 @@ class RLAlgorithm(HubMixin, abc.ABC):
 
     @abc.abstractmethod
     def make_optimizers_and_scheduler(self) -> dict[str, Optimizer]:
-        """Build and return the optimizers used during training.
+        """构建并返回训练期间使用的优化器。
 
-        Called once on the learner side after construction.
+        在构造完成后于 learner 端调用一次。
         """
         raise NotImplementedError
 
     def get_optimizers(self) -> dict[str, Optimizer]:
-        """Return optimizers for checkpointing / external scheduling."""
+        """返回优化器，用于检查点保存/外部调度。"""
         return {}
 
     @property
     def optimization_step(self) -> int:
-        """Current learner optimization step.
+        """当前 learner 的优化步数。
 
-        Part of the stable contract for checkpoint/resume. Algorithms can
-        either use this default storage or override for custom behavior.
+        这是检查点保存/恢复稳定契约的一部分。算法可以
+        使用此默认存储，也可以重写以实现自定义行为。
         """
         return getattr(self, "_optimization_step", 0)
 
@@ -104,22 +104,21 @@ class RLAlgorithm(HubMixin, abc.ABC):
         self._optimization_step = int(value)
 
     def get_weights(self) -> dict[str, Any]:
-        """Policy state-dict to push to actors."""
+        """要推送给 actor 的策略 state-dict。"""
         return {}
 
     @abc.abstractmethod
     def load_weights(self, weights: dict[str, Any], device: str | torch.device = "cpu") -> None:
-        """Load policy state-dict received from the learner."""
+        """加载从 learner 接收到的策略 state-dict。"""
         raise NotImplementedError
 
     @abc.abstractmethod
     def state_dict(self) -> dict[str, torch.Tensor]:
-        """Algorithm-owned trainable tensors.
+        """算法持有的可训练张量。
 
-        Must return a flat tensor mapping for everything the algorithm owns
-        that is not part of the policy (e.g. critic ensembles, target networks,
-        temperature parameters). Algorithms with no training-only tensors
-        should explicitly return an empty dict.
+        必须为算法持有的、不属于策略的所有内容返回一个扁平的
+        张量映射（例如 critic 集成、目标网络、温度参数）。
+        没有仅训练用张量的算法应显式返回空字典。
         """
         raise NotImplementedError
 
@@ -129,19 +128,19 @@ class RLAlgorithm(HubMixin, abc.ABC):
         state_dict: dict[str, torch.Tensor],
         device: str | torch.device = "cpu",
     ) -> None:
-        """In-place load of algorithm-owned tensors.
+        """原地加载算法持有的张量。
 
-        Implementations MUST keep the identity of any ``nn.Parameter`` that an
-        optimizer references (e.g. SAC's ``log_alpha``) by using ``.copy_()``
-        rather than rebinding the attribute.
+        实现必须保持优化器所引用的任何 ``nn.Parameter`` 的身份不变
+        （例如 SAC 的 ``log_alpha``），即使用 ``.copy_()``
+        而不是重新绑定属性。
         """
         raise NotImplementedError
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Persist the algorithm's tensors and config to ``save_directory``.
+        """将算法的张量和配置持久化到 ``save_directory``。
 
-        Writes ``model.safetensors`` (algorithm tensors via :meth:`state_dict`)
-        and ``config.json`` (via :meth:`RLAlgorithmConfig.save_pretrained`).
+        写入 ``model.safetensors``（通过 :meth:`state_dict` 得到的算法张量）
+        和 ``config.json``（通过 :meth:`RLAlgorithmConfig.save_pretrained`）。
         """
         tensors = {k: v.detach().cpu().contiguous() for k, v in self.state_dict().items()}
         save_safetensors(tensors, str(save_directory / SAFETENSORS_SINGLE_FILE))
@@ -164,7 +163,7 @@ class RLAlgorithm(HubMixin, abc.ABC):
         device: str | torch.device = "cpu",
         **algo_kwargs: Any,
     ) -> T:
-        """Build an algorithm and load its weights from ``pretrained_name_or_path``."""
+        """构建算法并从 ``pretrained_name_or_path`` 加载其权重。"""
         if config is None:
             config = cls.config_class.from_pretrained(
                 pretrained_name_or_path,

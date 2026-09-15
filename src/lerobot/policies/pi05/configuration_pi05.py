@@ -30,32 +30,32 @@ DEFAULT_IMAGE_SIZE = 224
 class PI05Config(PreTrainedConfig):
     paligemma_variant: str = "gemma_2b"
     action_expert_variant: str = "gemma_300m"
-    dtype: str = "float32"  # Options: "bfloat16", "float32"
+    dtype: str = "float32"  # 可选项："bfloat16"、"float32"
 
     n_obs_steps: int = 1
-    chunk_size: int = 50  # Number of action steps to predict, in openpi called "action_horizon"
-    n_action_steps: int = 50  # Number of action steps to execute
+    chunk_size: int = 50  # 要预测的动作步数，在 openpi 中称为 "action_horizon"
+    n_action_steps: int = 50  # 要执行的动作步数
 
-    # MEM short-horizon observation memory (https://arxiv.org/abs/2603.03596).
-    # Historical image tokens are fused inside SigLIP and dropped before the
-    # language backbone. Historical proprioceptive states become one continuous
-    # backbone token per frame. Both paths are opt-in and independent.
+    # MEM 短时域观测记忆（https://arxiv.org/abs/2603.03596）。
+    # 历史图像 token 在 SigLIP 内部融合，并在进入语言主干之前被丢弃。
+    # 历史本体感知状态变为每帧一个连续的骨干 token。
+    # 这两条路径都是可选启用的，且相互独立。
     #
-    # MEM pre-trains on six observations spaced one second apart. `memory_stride` is
-    # counted in dataset frames, so the default matches that spacing only at 30 fps,
-    # the usual LeRobot recording rate. Scale it with the dataset: a 10 fps dataset
-    # such as `lerobot/robomme` needs `memory_stride=10` for the same one second.
+    # MEM 在六个间隔一秒的观测上进行预训练。`memory_stride` 以数据集帧数
+    # 计数，因此默认值只有在 30 fps（LeRobot 的常用录制帧率）下才与该间隔匹配。
+    # 请根据数据集进行缩放：像 `lerobot/robomme` 这样的 10 fps 数据集
+    # 需要 `memory_stride=10` 才能同样表示一秒。
     use_visual_memory: bool = False
     use_proprioceptive_memory: bool = False
     memory_frames: int = 6
     memory_stride: int = 30
     memory_temporal_attention_every: int = 4
 
-    # Shorter state and action vectors will be padded to these dimensions
+    # 较短的状态向量和动作向量将被填充到这些维度
     max_state_dim: int = 32
     max_action_dim: int = 32
 
-    # Flow matching parameters: see openpi `PI0Pytorch`
+    # Flow matching 参数：参见 openpi `PI0Pytorch`
     num_inference_steps: int = 10
     time_sampling_beta_alpha: float = 1.5
     time_sampling_beta_beta: float = 1.0
@@ -64,57 +64,57 @@ class PI05Config(PreTrainedConfig):
     min_period: float = 4e-3
     max_period: float = 4.0
 
-    # Relative actions: converts absolute actions to relative (relative to state).
+    # 相对动作：将绝对动作转换为相对（相对于状态）动作。
     use_relative_actions: bool = False
-    # Joint names to exclude from relative (kept absolute). Empty list = all dims relative.
+    # 要从相对动作中排除（保持绝对）的关节名称。空列表 = 所有维度均为相对。
     relative_exclude_joints: list[str] = field(default_factory=lambda: ["gripper"])
-    # Populated at runtime from dataset metadata by make_policy.
+    # 在运行时由 make_policy 根据数据集元数据填充。
     action_feature_names: list[str] | None = None
 
-    # Real-Time Chunking (RTC) configuration
+    # Real-Time Chunking (RTC) 配置
     rtc_config: RTCConfig | None = None
-    # Maximum clean action-prefix length sampled during training. Zero disables trained RTC.
+    # 训练期间采样的最大干净动作前缀长度。为零则禁用训练时 RTC。
     rtc_training_max_delay: int = 0
 
     image_resolution: tuple[int, int] = (
         DEFAULT_IMAGE_SIZE,
         DEFAULT_IMAGE_SIZE,
-    )  # see openpi `preprocessing_pytorch.py`
+    )  # 参见 openpi `preprocessing_pytorch.py`
 
-    # Add empty images. Used to add empty cameras when no image features are present.
+    # 添加空图像。用于在不存在图像特征时添加空相机。
     empty_cameras: int = 0
 
-    tokenizer_max_length: int = 200  # see openpi `__post_init__`
+    tokenizer_max_length: int = 200  # 参见 openpi `__post_init__`
     text_tokenizer_name: str = "google/paligemma-3b-pt-224"
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.IDENTITY,
-            "STATE": NormalizationMode.QUANTILES,  # Pi0.5 uses quantiles for state
-            "ACTION": NormalizationMode.QUANTILES,  # Pi0.5 uses quantiles for action
+            "STATE": NormalizationMode.QUANTILES,  # Pi0.5 对状态使用分位数归一化
+            "ACTION": NormalizationMode.QUANTILES,  # Pi0.5 对动作使用分位数归一化
         }
     )
 
-    # Training settings
-    gradient_checkpointing: bool = False  # Enable gradient checkpointing for memory optimization
-    compile_model: bool = False  # Whether to use torch.compile for model optimization
-    compile_mode: str = "max-autotune"  # Torch compile mode
-    device: str | None = None  # Device to use for the model (None = auto-detect)
+    # 训练设置
+    gradient_checkpointing: bool = False  # 启用梯度检查点以优化显存
+    compile_model: bool = False  # 是否使用 torch.compile 优化模型
+    compile_mode: str = "max-autotune"  # Torch compile 模式
+    device: str | None = None  # 模型使用的设备（None = 自动检测）
 
-    # Finetuning settings
-    freeze_vision_encoder: bool = False  # Freeze only the vision encoder
-    train_expert_only: bool = False  # Freeze entire VLM, train only action expert and projections
+    # 微调设置
+    freeze_vision_encoder: bool = False  # 仅冻结视觉编码器
+    train_expert_only: bool = False  # 冻结整个 VLM，仅训练动作专家和投影层
 
-    # Optimizer settings: see openpi `AdamW`
-    optimizer_lr: float = 2.5e-5  # see openpi `CosineDecaySchedule: peak_lr`
+    # 优化器设置：参见 openpi `AdamW`
+    optimizer_lr: float = 2.5e-5  # 参见 openpi `CosineDecaySchedule: peak_lr`
     optimizer_betas: tuple[float, float] = (0.9, 0.95)
     optimizer_eps: float = 1e-8
     optimizer_weight_decay: float = 0.01
     optimizer_grad_clip_norm: float = 1.0
 
-    # Scheduler settings: see openpi `CosineDecaySchedule`
-    # Note: These will auto-scale if --steps < scheduler_decay_steps
-    # For example, --steps=3000 will scale warmup to 100 and decay to 3000
+    # 调度器设置：参见 openpi `CosineDecaySchedule`
+    # 注意：如果 --steps < scheduler_decay_steps，这些值会自动缩放
+    # 例如，--steps=3000 会将 warmup 缩放到 100，将 decay 缩放到 3000
     scheduler_warmup_steps: int = 1_000
     scheduler_decay_steps: int = 30_000
     scheduler_decay_lr: float = 2.5e-6
@@ -122,7 +122,7 @@ class PI05Config(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        # Validate configuration
+        # 校验配置
         if self.n_action_steps > self.chunk_size:
             raise ValueError(
                 f"n_action_steps ({self.n_action_steps}) cannot be greater than chunk_size ({self.chunk_size})"
@@ -150,26 +150,26 @@ class PI05Config(PreTrainedConfig):
             raise ValueError("memory_temporal_attention_every must be at least 1")
 
     def validate_features(self) -> None:
-        """Validate and set up input/output features."""
+        """校验并设置输入/输出特征。"""
         for i in range(self.empty_cameras):
             key = OBS_IMAGES + f".empty_camera_{i}"
             empty_camera = PolicyFeature(
                 type=FeatureType.VISUAL,
-                shape=(3, *self.image_resolution),  # Use configured image resolution
+                shape=(3, *self.image_resolution),  # 使用配置的图像分辨率
             )
             self.input_features[key] = empty_camera
 
         if OBS_STATE not in self.input_features:
             state_feature = PolicyFeature(
                 type=FeatureType.STATE,
-                shape=(self.max_state_dim,),  # Padded to max_state_dim
+                shape=(self.max_state_dim,),  # 填充到 max_state_dim
             )
             self.input_features[OBS_STATE] = state_feature
 
         if ACTION not in self.output_features:
             action_feature = PolicyFeature(
                 type=FeatureType.ACTION,
-                shape=(self.max_action_dim,),  # Padded to max_action_dim
+                shape=(self.max_action_dim,),  # 填充到 max_action_dim
             )
             self.output_features[ACTION] = action_feature
 

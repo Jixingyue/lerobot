@@ -13,16 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Per-episode staging.
+"""按回合暂存。
 
-Each module writes its raw output as a JSONL file under
-``<staging_dir>/episode_{ep:06d}/<module>.jsonl``. The writer reads back this
-staging tree and partitions rows into the two language columns.
+每个模块将其原始输出作为 JSONL 文件写入
+``<staging_dir>/episode_{ep:06d}/<module>.jsonl``。写入器读回此暂存树
+并将行分区到两个语言列中。
 
-JSONL is preferred over parquet here because the staging artifact is meant to
-be human-inspectable, easy to diff between prompt iterations, and trivially
-appended to. The final dataset format is parquet; staging is just an
-intermediate.
+这里首选 JSONL 而不是 parquet，因为暂存产物旨在
+可供人类检查、易于在提示词迭代之间进行差异比较，并且可以简单地追加。
+最终数据集格式是 parquet；暂存只是一个中间产物。
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ _MODULES: tuple[ModuleName, ...] = (
 
 @dataclass
 class EpisodeStaging:
-    """Filesystem layout for a single episode's staged module outputs."""
+    """单个回合的暂存模块输出的文件系统布局。"""
 
     root: Path
     episode_index: int
@@ -61,10 +60,9 @@ class EpisodeStaging:
     def write(self, module: ModuleName, rows: Iterable[dict[str, Any]]) -> Path:
         path = self.path_for(module)
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Atomic replace: a crash mid-write would otherwise leave a
-        # half-written JSONL file that ``read()`` would then fail to
-        # parse. Write to a sibling .tmp and rename so the target path
-        # only ever points at a complete file.
+        # 原子替换：写入中途崩溃否则会留下一个半写的 JSONL 文件，
+        # ``read()`` 随后无法解析它。写入兄弟 .tmp 并重命名，
+        # 以便目标路径始终只指向完整的文件。
         tmp_path = path.with_suffix(path.suffix + ".tmp")
         with tmp_path.open("w", encoding="utf-8") as f:
             for row in rows:

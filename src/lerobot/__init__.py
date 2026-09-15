@@ -15,25 +15,23 @@
 # limitations under the License.
 
 """
-LeRobot -- PyTorch library for real-world robotics.
+LeRobot -- 用于真实世界机器人的 PyTorch 库。
 
-Provides datasets, pretrained policies, and tools for training, evaluation,
-data collection, and robot control. Integrates with Hugging Face Hub for
-model and dataset sharing.
+提供数据集、预训练策略，以及用于训练、评估、数据收集和机器人控制的工具。
+与 Hugging Face Hub 集成，用于模型和数据集共享。
 
-The base install is intentionally lightweight. Feature-specific dependencies
-are gated behind optional extras::
+基础安装刻意保持轻量。特定功能的依赖通过可选扩展来控制：
 
-    pip install 'lerobot[dataset]'       # dataset loading & creation
-    pip install 'lerobot[training]'      # training loop + wandb
-    pip install 'lerobot[hardware]'      # real robot control
-    pip install 'lerobot[core_scripts]'  # dataset + hardware + viz (record, replay, calibrate, etc.)
-    pip install 'lerobot[all]'           # everything
+    pip install 'lerobot[dataset]'       # 数据集加载与创建
+    pip install 'lerobot[training]'      # 训练循环 + wandb
+    pip install 'lerobot[hardware]'      # 真实机器人控制
+    pip install 'lerobot[core_scripts]'  # 数据集 + 硬件 + 可视化（录制、回放、标定等）
+    pip install 'lerobot[all]'           # 全部功能
 """
 
 from lerobot.__version__ import __version__
 
-# Maps optional extras to the CLI entry-points they unlock.
+# 将可选扩展映射到它们解锁的 CLI 入口点。
 available_extras: dict[str, list[str]] = {
     "dataset": ["lerobot-dataset-viz", "lerobot-imgtransform-viz", "lerobot-edit-dataset"],
     "training": ["lerobot-train"],

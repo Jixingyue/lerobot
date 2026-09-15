@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Rerun visualization backend.
+"""Rerun 可视化后端。
 
-Live control-loop streaming to the Rerun viewer (:func:`log_rerun_data`). Callers usually select a
-backend at runtime through the dispatch in :mod:`lerobot.utils.visualization_utils` rather than
-importing from here directly. Requires the ``viz`` extra (``pip install 'lerobot[viz]'``).
+将控制循环实时流式传输到 Rerun 查看器（:func:`log_rerun_data`）。调用方通常通过
+:mod:`lerobot.utils.visualization_utils` 中的分发在运行时选择后端，
+而不是直接从本模块导入。需要 ``viz`` extra（``pip install 'lerobot[viz]'``）。
 """
 
 import numbers
@@ -41,18 +41,18 @@ def init_rerun(
     session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
 ) -> None:
     """
-    Initializes the Rerun SDK for visualizing the control loop.
+    初始化 Rerun SDK，用于可视化控制循环。
 
-    Args:
-        session_name: Name of the Rerun session.
-        ip: Optional IP for connecting to a Rerun server.
-        port: Optional port for connecting to a Rerun server.
+    参数：
+        session_name：Rerun 会话名称。
+        ip：连接 Rerun 服务器的可选 IP。
+        port：连接 Rerun 服务器的可选端口。
     """
 
     require_package("rerun-sdk", extra="viz", import_name="rerun")
     import rerun as rr
 
-    log_rerun_data.blueprint = None  # Reset blueprint cache for new session
+    log_rerun_data.blueprint = None  # 为新会话重置 blueprint 缓存
 
     batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "8000")
     os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
@@ -65,7 +65,7 @@ def init_rerun(
 
 
 def shutdown_rerun() -> None:
-    """Shuts down the Rerun SDK gracefully."""
+    """优雅地关闭 Rerun SDK。"""
 
     require_package("rerun-sdk", extra="viz", import_name="rerun")
     import rerun as rr
@@ -74,12 +74,12 @@ def shutdown_rerun() -> None:
 
 
 def _build_blueprint(observation_paths: set[str], action_paths: set[str], image_paths: set[str]):
-    """Build a Rerun blueprint laying out camera images, observation and action scalars in separate views.
+    """构建 Rerun blueprint，将相机图像、观测和动作标量分别布局到不同的视图中。
 
-    Camera images, observation and action scalars are arranged in a grid.
+    相机图像、观测和动作标量以网格形式排列。
     """
 
-    # Safe + zero-overhead: `log_rerun_data` already ran the `require_package` guard and imported rerun.
+    # 安全且零开销：`log_rerun_data` 已经执行过 `require_package` 守卫并导入了 rerun。
     import rerun.blueprint as rrb
 
     views = [rrb.Spatial2DView(origin=path, name=path) for path in sorted(image_paths)]
@@ -93,14 +93,14 @@ def _build_blueprint(observation_paths: set[str], action_paths: set[str], image_
 
 
 def _ensure_blueprint(observation_paths: set[str], action_paths: set[str], image_paths: set[str]) -> None:
-    """Build and send the blueprint once, from the first observation and action data."""
+    """在首次收到观测和动作数据时构建并发送 blueprint（只执行一次）。"""
     if getattr(log_rerun_data, "blueprint", None) is not None:
         return
 
     if not (observation_paths or action_paths or image_paths):
         return
 
-    # Safe + zero-overhead: `log_rerun_data` already ran the `require_package` guard and imported rerun.
+    # 安全且零开销：`log_rerun_data` 已经执行过 `require_package` 守卫并导入了 rerun。
     import rerun as rr
 
     blueprint = _build_blueprint(observation_paths, action_paths, image_paths)
@@ -114,26 +114,26 @@ def log_rerun_data(
     compress_images: bool = False,
 ) -> None:
     """
-    Logs observation and action data to Rerun for real-time visualization.
+    将观测和动作数据记录到 Rerun，用于实时可视化。
 
-    This function iterates through the provided observation and action dictionaries and sends their contents
-    to the Rerun viewer. It handles different data types appropriately:
-    - Scalars values (floats, ints) are logged as `rr.Scalars`.
-    - 3D NumPy arrays that resemble images (e.g., with 1, 3, or 4 channels first) are transposed
-      from CHW to HWC format, (optionally) compressed to JPEG and logged as `rr.Image` or `rr.EncodedImage`.
-    - 1D NumPy arrays are logged as a single `rr.Scalars` batch under one entity path, so that every
-      dimension shares the same view instead of being split across one view per element.
-    - Multi-dimensional **action** arrays are flattened and logged as a single `rr.Scalars` batch.
+    该函数遍历提供的观测和动作字典，并将其内容发送到 Rerun 查看器。
+    它会针对不同的数据类型做相应处理：
+    - 标量值（浮点数、整数）记录为 `rr.Scalars`。
+    - 形似图像的 3D NumPy 数组（例如通道数为 1、3 或 4 且位于第一维）会从
+      CHW 转置为 HWC 格式，（可选）压缩为 JPEG，并记录为 `rr.Image` 或 `rr.EncodedImage`。
+    - 1D NumPy 数组在同一个实体路径下作为单个 `rr.Scalars` 批次记录，
+      使所有维度共享同一个视图，而不是每个元素拆分到一个视图。
+    - 多维**动作**数组会被展平，并作为单个 `rr.Scalars` 批次记录。
 
-    Keys are automatically namespaced with "observation." or "action." if not already present.
+    若键名尚未包含 "observation." 或 "action." 前缀，会自动加上相应命名空间。
 
-    On the first call, a blueprint is built and sent so observation and action scalars get separate
-    time-series views and each image gets its own spatial view.
+    首次调用时会构建并发送 blueprint，使观测和动作标量获得各自独立的
+    时间序列视图，每张图像获得自己的空间视图。
 
-    Args:
-        observation: An optional dictionary containing observation data to log.
-        action: An optional dictionary containing action data to log.
-        compress_images: Whether to compress images before logging to save bandwidth & memory in exchange for cpu and quality.
+    参数：
+        observation：包含待记录观测数据的可选字典。
+        action：包含待记录动作数据的可选字典。
+        compress_images：是否在记录前压缩图像，以 CPU 和画质为代价节省带宽和内存。
     """
 
     require_package("rerun-sdk", extra="viz", import_name="rerun")
@@ -154,7 +154,7 @@ def log_rerun_data(
                 observation_paths.add(key)
             elif isinstance(v, np.ndarray):
                 arr = v
-                # Convert CHW -> HWC when needed
+                # 需要时将 CHW -> HWC 转换
                 if arr.ndim == 3 and arr.shape[0] in (1, 3, 4) and arr.shape[-1] not in (1, 3, 4):
                     arr = np.transpose(arr, (1, 2, 0))
                 if arr.ndim == 1:
@@ -162,7 +162,7 @@ def log_rerun_data(
                     observation_paths.add(key)
                 else:
                     if arr.shape[-1] == 1:
-                        # At record time, the depth unit is inferred from the frame type.
+                        # 在录制时，深度单位从帧类型推断。
                         depth_unit = infer_depth_unit(arr.dtype)
                         img_entity = rr.DepthImage(
                             arr,
@@ -184,7 +184,7 @@ def log_rerun_data(
                 rr.log(key, rr.Scalars(float(v)))
                 action_paths.add(key)
             elif isinstance(v, np.ndarray):
-                # Flatten any (incl. higher-dimensional) array into a single batched Scalars
+                # 将任意（包括高维）数组展平为单个批处理的 Scalars
                 rr.log(key, rr.Scalars(v.reshape(-1).astype(float)))
                 action_paths.add(key)
 

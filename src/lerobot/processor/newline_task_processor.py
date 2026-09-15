@@ -19,16 +19,16 @@ from lerobot.configs import PipelineFeatureType, PolicyFeature
 from .pipeline import ComplementaryDataProcessorStep, ProcessorStepRegistry
 
 
-# NOTE: The registry name "smolvla_new_line_processor" is kept for backward compatibility
-# with serialized processor configs that reference this name.
+# 注意：注册表名称 "smolvla_new_line_processor" 予以保留，以向后兼容
+# 引用该名称的已序列化处理器配置。
 @ProcessorStepRegistry.register(name="smolvla_new_line_processor")
 class NewLineTaskProcessorStep(ComplementaryDataProcessorStep):
     """
-    A processor step that ensures the 'task' description ends with a newline character.
+    确保 'task' 描述以换行符结尾的处理器步骤。
 
-    This step is necessary for certain tokenizers (e.g., PaliGemma) that expect a
-    newline at the end of the prompt. It handles both single string tasks and lists
-    of string tasks.
+    某些分词器（例如 PaliGemma）要求提示末尾有一个
+    换行符，因此需要本步骤。它同时处理单个字符串任务和
+    字符串任务列表。
     """
 
     def complementary_data(self, complementary_data):
@@ -41,15 +41,15 @@ class NewLineTaskProcessorStep(ComplementaryDataProcessorStep):
 
         new_complementary_data = dict(complementary_data)
 
-        # Handle both string and list of strings
+        # 同时处理字符串和字符串列表
         if isinstance(task, str):
-            # Single string: add newline if not present
+            # 单个字符串：若无换行则添加
             if not task.endswith("\n"):
                 new_complementary_data["task"] = f"{task}\n"
         elif isinstance(task, list) and all(isinstance(t, str) for t in task):
-            # List of strings: add newline to each if not present
+            # 字符串列表：为每个缺少换行的字符串添加换行
             new_complementary_data["task"] = [t if t.endswith("\n") else f"{t}\n" for t in task]
-        # If task is neither string nor list of strings, leave unchanged
+        # 如果 task 既不是字符串也不是字符串列表，则保持不变
 
         return new_complementary_data
 

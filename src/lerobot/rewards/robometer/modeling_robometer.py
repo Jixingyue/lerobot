@@ -20,32 +20,30 @@ Project:       https://robometer.github.io
 Original code: https://github.com/aliang8/robometer
 Model:         https://huggingface.co/robometer/Robometer-4B
 
-Robometer is a general-purpose, video-language-input reward model built on
-``Qwen/Qwen3-VL-4B-Instruct``. It is trained with a dual reward-prediction
-objective:
+Robometer 是一个通用的、以视频-语言为输入的奖励模型，构建在
+``Qwen/Qwen3-VL-4B-Instruct`` 之上。它采用双重奖励预测目标进行训练：
 
-- A frame-level progress loss anchoring reward magnitude on expert data.
-- A trajectory-comparison preference loss imposing global ordering constraints
-  across trajectories sharing the same instruction.
+- 帧级 progress 损失，在专家数据上锚定奖励幅度。
+- 轨迹比较偏好损失，对共享同一指令的各轨迹施加全局排序约束。
 
-To support downstream RL it also predicts a frame-level binary success. The
-training prompt inserts three learnable tokens:
+为支持下游强化学习，它还会预测帧级的二元 success。训练提示词中
+插入了三个可学习的 token：
 
-- ``<|prog_token|>`` after each frame to read per-frame progress and success.
-- ``<|pref_token|>`` at the end to read pairwise preference (training-only).
-- ``<|split_token|>`` between two trajectories in preference samples
-  (training-only).
+- ``<|prog_token|>``：位于每帧之后，用于读取逐帧的 progress 和 success。
+- ``<|pref_token|>``：位于末尾，用于读取成对偏好（仅训练时使用）。
+- ``<|split_token|>``：位于偏好样本中两条轨迹之间（仅训练时使用）。
 
-Progress is modeled as a categorical distribution over ``progress_discrete_bins``
-uniformly-spaced centers in ``[0, 1]`` (C51-style), and the continuous estimate
-is recovered as the softmax-weighted mean of those centers — see
-:func:`convert_bins_to_continuous`.
+Progress 被建模为在 ``[0, 1]`` 区间内 ``progress_discrete_bins`` 个
+均匀分布中心点上的分类分布（C51 风格），连续估计值则恢复为
+这些中心点经 softmax 加权的均值 —— 参见
+:func:`convert_bins_to_continuous`。
 
-This LeRobot port is **inference-only**: the preference head is preserved in
-the state dict for byte-equivalence with the published ``Robometer-4B``
-checkpoint but is not queried by :meth:`RobometerRewardModel.compute_reward`,
-which returns the last-frame progress (clamped to ``[0, 1]``) or sigmoid'd
-success probability depending on :attr:`RobometerConfig.reward_output`.
+本 LeRobot 移植版**仅支持推理**：偏好头保留在 state dict 中，
+以便与已发布的 ``Robometer-4B`` 检查点保持字节级一致，
+但 :meth:`RobometerRewardModel.compute_reward` 不会查询它；
+该方法根据 :attr:`RobometerConfig.reward_output` 的设置，
+返回最后一帧的 progress（截断到 ``[0, 1]``）或经 sigmoid 处理的
+success 概率。
 """
 
 from __future__ import annotations
@@ -68,7 +66,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-# Namespace for Robometer's pre-encoded Qwen-VL observation tensors.
+# Robometer 预编码 Qwen-VL 观测张量的命名空间。
 ROBOMETER_FEATURE_PREFIX = f"{OBS_PREFIX}robometer."
 ROBOMETER_QWEN_INPUT_KEYS = (
     "input_ids",
@@ -90,11 +88,11 @@ ROBOMETER_INPUT_KEYS = ROBOMETER_QWEN_INPUT_KEYS + ROBOMETER_METADATA_KEYS
 
 
 def convert_bins_to_continuous(bin_logits: Tensor) -> Tensor:
-    """Collapse per-bin logits into a single value in ``[0, 1]``.
+    """将各分箱的 logits 折叠为 ``[0, 1]`` 内的单个值。
 
-    The discrete progress head outputs ``num_bins`` logits per frame. Bins are
-    evenly spaced centers in ``[0, 1]``; the continuous prediction is the
-    softmax-weighted mean of those centers.
+    离散 progress 头为每帧输出 ``num_bins`` 个 logits。各分箱是
+    ``[0, 1]`` 内均匀分布的中心点；连续预测值是这些中心点
+    经 softmax 加权的均值。
     """
     bin_probs = torch.softmax(bin_logits, dim=-1)
     num_bins = bin_logits.shape[-1]
@@ -103,7 +101,7 @@ def convert_bins_to_continuous(bin_logits: Tensor) -> Tensor:
 
 
 def _squeeze_last_safe(x: Tensor) -> Tensor:
-    """Drop a trailing singleton dim only when present."""
+    """仅当末尾存在单元素维度时才将其去除。"""
     return x.squeeze(-1) if x.ndim > 1 and x.shape[-1] == 1 else x
 
 
@@ -115,7 +113,7 @@ def _torch_dtype(name: str) -> torch.dtype:
 
 
 class RobometerPredictionHead(nn.Sequential):
-    """Small MLP head used for Robometer's progress / success / preference outputs."""
+    """用于 Robometer 的 progress / success / preference 输出的小型 MLP 头。"""
 
     def __init__(self, hidden_dim: int, output_size: int, *, dropout: float, with_sigmoid: bool) -> None:
         layers: list[nn.Module] = [
@@ -136,17 +134,17 @@ def decode_progress_outputs(
     *,
     is_discrete_mode: bool,
 ) -> dict[str, list[list[float]]]:
-    """Decode RBM head outputs into per-frame floats.
+    """将 RBM 头的输出解码为逐帧浮点数。
 
     Args:
-        progress_logits: ``(B, T)`` (continuous) or ``(B, T, num_bins)`` (discrete).
-        success_logits: ``(B, T)`` raw logits, ``sigmoid``-ed to probabilities.
-        is_discrete_mode: if True the progress logits get a softmax over bins
-            and are projected onto bin centers via :func:`convert_bins_to_continuous`.
+        progress_logits: ``(B, T)``（连续）或 ``(B, T, num_bins)``（离散）。
+        success_logits: ``(B, T)`` 原始 logits，经 ``sigmoid`` 转为概率。
+        is_discrete_mode: 若为 True，则对 progress logits 在分箱上执行
+            softmax，并通过 :func:`convert_bins_to_continuous` 投影到分箱中心。
 
     Returns:
-        Dict with ``progress_pred`` and ``success_probs``, each a list of
-        length ``B`` of per-frame float lists.
+        包含 ``progress_pred`` 和 ``success_probs`` 的字典，二者均为
+        长度为 ``B`` 的列表，元素是逐帧浮点数列表。
     """
     progress_pred: list[list[float]] = []
     success_probs: list[list[float]] = []
@@ -167,13 +165,12 @@ def decode_progress_outputs(
 
 
 class RobometerRewardModel(PreTrainedRewardModel):
-    """Robometer (RBM) reward model — inference-only LeRobot port.
+    """Robometer (RBM) 奖励模型 —— 仅支持推理的 LeRobot 移植版。
 
-    Wraps a Qwen-VL backbone (default: ``Qwen/Qwen3-VL-4B-Instruct``) with three
-    prediction heads from the paper (progress, success, preference). At
-    inference time only the progress and success heads are queried; the
-    preference head is kept on the module so the published ``Robometer-4B``
-    safetensors load unchanged.
+    包装了一个 Qwen-VL 骨干（默认：``Qwen/Qwen3-VL-4B-Instruct``），
+    并带有论文中的三个预测头（progress、success、preference）。推理时
+    只查询 progress 和 success 头；preference 头保留在模块上，
+    以便已发布的 ``Robometer-4B`` safetensors 可以原样加载。
     """
 
     name = "robometer"
@@ -184,19 +181,18 @@ class RobometerRewardModel(PreTrainedRewardModel):
         super().__init__(config)
         self.config = config
 
-        # Two backbone-build paths (EO-1 style, branched on ``pretrained_path``):
+        # 两种骨干构建路径（EO-1 风格，根据 ``pretrained_path`` 分支）：
         #
-        #   - Fresh training (``pretrained_path is None``): download the base
-        #     Qwen weights and resize the embed table to match
-        #     ``vlm_config.text_config.vocab_size`` — populated deterministically
-        #     in ``RobometerConfig.__post_init__`` as
+        #   - 全新训练（``pretrained_path is None``）：下载基础 Qwen 权重，
+        #     并调整嵌入表大小以匹配
+        #     ``vlm_config.text_config.vocab_size`` —— 该值在
+        #     ``RobometerConfig.__post_init__`` 中确定性地填充为
         #     ``len(tokenizer) + len(ROBOMETER_SPECIAL_TOKENS)``
         #
-        #   - Loading a saved checkpoint (``pretrained_path`` is set): rebuild
-        #     the empty architecture from ``vlm_config`` via
-        #     ``AutoModelForImageTextToText.from_config`` so the subsequent
-        #     ``model.safetensors`` load is a direct fill of the right shape —
-        #     no redundant Qwen weight download.
+        #   - 加载已保存的检查点（设置了 ``pretrained_path``）：通过
+        #     ``AutoModelForImageTextToText.from_config`` 根据 ``vlm_config``
+        #     重建空架构，使后续加载 ``model.safetensors`` 时能直接以
+        #     正确的形状填充 —— 无需重复下载 Qwen 权重。
         torch_dtype = _torch_dtype(config.torch_dtype)
         if config.pretrained_path is None:
             self.model = AutoModelForImageTextToText.from_pretrained(
@@ -213,9 +209,8 @@ class RobometerRewardModel(PreTrainedRewardModel):
                 trust_remote_code=True,
             )
 
-        # All Qwen-VL backbones Robometer supports expose `text_config.hidden_size`.
-        # Falls back to the top-level `hidden_size` so future non-multimodal
-        # variants would still resolve.
+        # Robometer 支持的所有 Qwen-VL 骨干都暴露 `text_config.hidden_size`。
+        # 回退到顶层的 `hidden_size`，这样未来的非多模态变体也能正常解析。
         backbone_config = self.model.config
         text_config = getattr(backbone_config, "text_config", None)
         hidden_size = getattr(text_config, "hidden_size", None) if text_config is not None else None
@@ -227,7 +222,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
             )
         hidden_dim = int(hidden_size)
 
-        # Robometer's three prediction heads + frame-pool attention.
+        # Robometer 的三个预测头 + 帧池化注意力。
         progress_output = config.progress_discrete_bins if config.use_discrete_progress else 1
         self.progress_head = RobometerPredictionHead(
             hidden_dim,
@@ -239,7 +234,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
         self.success_head = RobometerPredictionHead(hidden_dim, 1, dropout=dropout, with_sigmoid=False)
         self.frame_pool_attn = nn.Linear(hidden_dim, 1, bias=False)
 
-        # Match the dtype of the loaded base model so weight loading is a no-op cast.
+        # 匹配已加载基础模型的 dtype，使权重加载成为一次无操作式的类型转换。
         model_dtype = next(self.model.parameters()).dtype
         self.progress_head.to(dtype=model_dtype)
         self.preference_head.to(dtype=model_dtype)
@@ -279,8 +274,8 @@ class RobometerRewardModel(PreTrainedRewardModel):
         if self.config.reward_output == "success":
             rewards = (rewards > self.config.success_threshold).float()
         else:
-            # Match upstream Robometer's ``extract_rewards_from_output``: per-frame
-            # progress predictions are clamped to ``[0, 1]`` before being returned.
+            # 与上游 Robometer 的 ``extract_rewards_from_output`` 保持一致：
+            # 逐帧 progress 预测在返回前会被截断到 ``[0, 1]``。
             rewards = rewards.clamp(0.0, 1.0)
         return rewards.to(self.config.device or "cpu")
 
@@ -288,28 +283,27 @@ class RobometerRewardModel(PreTrainedRewardModel):
         self,
         inputs: dict[str, Any],
     ) -> tuple[Tensor, Tensor]:
-        """Run the Qwen3-VL backbone and apply Robometer's heads.
+        """运行 Qwen3-VL 骨干并应用 Robometer 的各预测头。
 
-        ``inputs`` is the encoded batch produced by
-        :class:`RobometerEncoderProcessorStep`. It carries Qwen tensors as well
-        as Robometer-specific metadata (``prog_token_id``,
-        ``vision_start_token_id``, ``vision_end_token_id``, ``video_merge_size``)
-        — the metadata is popped here so the rest can be forwarded straight to
-        the Qwen model.
+        ``inputs`` 是 :class:`RobometerEncoderProcessorStep` 生成的编码后批次。
+        它既携带 Qwen 张量，也携带 Robometer 特有的元数据
+        （``prog_token_id``、``vision_start_token_id``、``vision_end_token_id``、
+        ``video_merge_size``）—— 元数据会在此处被弹出，其余部分可以
+        直接转发给 Qwen 模型。
 
-        Returns ``(progress_logits, success_logits)``. Shapes:
+        返回 ``(progress_logits, success_logits)``。形状：
 
-        - ``progress_logits``: ``(B, T)`` (continuous) or ``(B, T, num_bins)`` (discrete).
-        - ``success_logits``: ``(B, T)`` raw logits (sigmoid happens at decode time).
+        - ``progress_logits``：``(B, T)``（连续）或 ``(B, T, num_bins)``（离散）。
+        - ``success_logits``：``(B, T)`` 原始 logits（解码时才执行 sigmoid）。
         """
         prog_token_id = inputs.pop("prog_token_id", None)
         vision_start_token_id = inputs.pop("vision_start_token_id", None)
         vision_end_token_id = inputs.pop("vision_end_token_id", None)
         video_merge_size = inputs.pop("video_merge_size", 14)
 
-        # Qwen3-VL doesn't reliably populate `last_hidden_state`; ask for the
-        # full hidden-state tuple and take the last layer. This matches the
-        # `is_qwen3` path in upstream Robometer's `RBM.forward_qwen` (main).
+        # Qwen3-VL 不能可靠地填充 `last_hidden_state`；因此请求完整的
+        # hidden-state 元组并取最后一层。这与上游 Robometer 的
+        # `RBM.forward_qwen`（main 分支）中的 `is_qwen3` 路径一致。
         outputs = self.model(**inputs, output_hidden_states=True, return_dict=True)
         hidden_state = (
             outputs.hidden_states[-1]
@@ -348,7 +342,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
         )
 
     def _apply_heads_to_hidden_states(self, frame_embeddings: Tensor) -> tuple[Tensor, Tensor]:
-        """Apply progress + success heads to a tensor of frame embeddings."""
+        """将 progress + success 头应用于帧嵌入张量。"""
         progress_out = self.progress_head(frame_embeddings)
         progress = progress_out if self.config.use_discrete_progress else _squeeze_last_safe(progress_out)
         success = _squeeze_last_safe(self.success_head(frame_embeddings))
@@ -361,7 +355,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
         *,
         prog_token_id: int,
     ) -> tuple[Tensor, Tensor]:
-        """Per-frame progress/success from ``<|prog_token|>`` positions."""
+        """从 ``<|prog_token|>`` 位置提取逐帧的 progress/success。"""
         token_mask = input_ids == prog_token_id
         batch_indices, positions = token_mask.nonzero(as_tuple=True)
         if positions.numel() == 0:
@@ -388,7 +382,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
         start_id: int,
         end_id: int,
     ) -> tuple[Tensor, Tensor]:
-        """Per-frame progress/success in multi-image mode (Qwen-VL)."""
+        """多图模式（Qwen-VL）下的逐帧 progress/success。"""
         progress_list, success_list = [], []
         for batch_idx in range(input_ids.shape[0]):
             seq_ids = input_ids[batch_idx]
@@ -452,7 +446,7 @@ class RobometerRewardModel(PreTrainedRewardModel):
         start_id: int,
         merge_size: int,
     ) -> tuple[Tensor, Tensor]:
-        """Per-frame progress/success in video mode (Qwen-VL)."""
+        """视频模式（Qwen-VL）下的逐帧 progress/success。"""
         progress_list, success_list = [], []
         for batch_idx in range(input_ids.shape[0]):
             seq_ids = input_ids[batch_idx]

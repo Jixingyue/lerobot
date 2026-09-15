@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Generic foot pedal listener using evdev.
+"""基于 evdev 的通用脚踏板监听器。
 
-Callers supply a callback receiving the pressed key code (e.g. ``"KEY_A"``)
-and an optional device path.  The listener runs in a daemon thread and
-silently no-ops when :mod:`evdev` is not installed or the device is
-unavailable.  Strategy-specific key mapping logic lives in the caller.
+调用方提供一个回调，接收按下的键码（例如 ``"KEY_A"``）
+以及可选的设备路径。监听器在守护线程中运行，
+当 :mod:`evdev` 未安装或设备不可用时静默不做任何操作。
+策略相关的按键映射逻辑由调用方负责。
 """
 
 from __future__ import annotations
@@ -35,21 +35,20 @@ def start_pedal_listener(
     on_press: Callable[[str], None],
     device_path: str = DEFAULT_PEDAL_DEVICE,
 ) -> threading.Thread | None:
-    """Spawn a daemon thread that forwards pedal key-press codes to ``on_press``.
+    """启动一个守护线程，将脚踏板按键码转发给 ``on_press``。
 
-    Parameters
+    参数
     ----------
     on_press:
-        Callback invoked with the pressed key code string (e.g. ``"KEY_A"``)
-        on each pedal press event.  The callback runs in the listener thread
-        and must be thread-safe.
+        每次脚踏板按下事件时以按下的键码字符串（例如 ``"KEY_A"``）
+        调用的回调。回调在监听线程中运行，必须是线程安全的。
     device_path:
-        Linux input device path (e.g. ``/dev/input/by-id/...``).
+        Linux 输入设备路径（例如 ``/dev/input/by-id/...``）。
 
-    Returns
+    返回值
     -------
-    The started daemon :class:`threading.Thread`, or ``None`` when
-    :mod:`evdev` is not installed (optional dependency; silent no-op).
+    已启动的守护 :class:`threading.Thread`；当 :mod:`evdev`
+    未安装时返回 ``None``（可选依赖；静默不做任何操作）。
     """
     try:
         from evdev import InputDevice, categorize, ecodes
@@ -67,11 +66,11 @@ def start_pedal_listener(
                 code = key.keycode
                 if isinstance(code, (list, tuple)):
                     code = code[0]
-                if key.keystate != 1:  # only key-down events
+                if key.keystate != 1:  # 仅处理按键按下事件
                     continue
                 try:
                     on_press(code)
-                except Exception as cb_err:  # pragma: no cover - defensive
+                except Exception as cb_err:  # pragma: no cover - 防御性处理
                     logger.warning("Pedal callback error: %s", cb_err)
         except (FileNotFoundError, PermissionError):
             pass

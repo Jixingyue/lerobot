@@ -100,8 +100,8 @@ from .utils import (
     stat_dim_from_entry,
 )
 
-# Native GR00T N1.7 action horizon: checkpoints are trained to predict 40-step
-# action chunks, so processor-side horizons are capped at this value.
+# 原生 GR00T N1.7 动作时域：检查点训练时预测的是 40 步的动作分块，
+# 因此处理器侧的时域上限为该值。
 N1_7_NATIVE_ACTION_HORIZON = 40
 
 N1_7_EMBODIMENT_MAPPING = {
@@ -123,12 +123,11 @@ N1_7_EMBODIMENT_MAPPING = {
 
 @dataclass
 class _GrootN17CheckpointProcessorAssets:
-    """Processor metadata loaded from a raw Isaac-GR00T N1.7 checkpoint.
+    """从原始 Isaac-GR00T N1.7 检查点加载的处理器元数据。
 
-    Public N1.7 checkpoints store preprocessing and action-decoding choices next
-    to the model weights. Keeping those values together avoids falling back to
-    LeRobot defaults that are valid for older GR00T variants but change N1.7
-    inputs or decoded actions.
+    公开的 N1.7 检查点会把预处理和动作解码的选项与模型权重存放在一起。
+    将这些值集中保存可以避免回退到 LeRobot 的默认值——那些默认值对旧版
+    GR00T 变体有效，但会改变 N1.7 的输入或解码后的动作。
     """
 
     stats: dict[str, dict[str, Any]]
@@ -160,10 +159,10 @@ class _GrootN17ActionGroup:
 
 
 def _load_n1_7_checkpoint_processor_assets(config: GrootConfig) -> _GrootN17CheckpointProcessorAssets | None:
-    """Load N1.7 processor settings from checkpoint sidecar JSON files.
+    """从检查点的附属 JSON 文件加载 N1.7 处理器设置。
 
-    Returns ``None`` for non-raw N1.7 checkpoints so the generic GR00T pipeline
-    can keep using caller-provided dataset stats and config values.
+    对于非原始 N1.7 检查点返回 ``None``，以便通用 GR00T 流水线继续使用
+    调用方提供的数据集统计量和配置值。
     """
 
     if not is_raw_groot_n1_7_checkpoint(config.base_model_path):
@@ -267,11 +266,11 @@ def _load_n1_7_checkpoint_stats(
     modality_config: dict[str, Any] | None = None,
     use_relative_action: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    """Convert checkpoint modality-group stats into LeRobot flat tensor stats.
+    """将检查点的模态分组统计量转换为 LeRobot 的扁平张量统计量。
 
-    Isaac-GR00T keeps statistics keyed by semantic groups such as EEF pose and
-    joints. LeRobot normalizers operate over a single vector, so this function
-    preserves checkpoint group order while flattening each selected statistic.
+    Isaac-GR00T 的统计量按 EEF 位姿、关节等语义分组作为键。LeRobot 的
+    归一化器作用于单个向量，因此本函数在展平每一项所选统计量的同时，
+    保留检查点中的分组顺序。
     """
 
     if raw_stats is None:
@@ -365,10 +364,10 @@ def _load_n1_7_checkpoint_video_modality_keys(
     return keys or None
 
 
-# GR00T normalizes and represents actions inside its own processor steps, so it deliberately has no
-# standard NormalizerProcessorStep/UnnormalizerProcessorStep or generic relative/absolute action steps.
-# ``lerobot-train`` can still emit those generic override keys; for a GR00T pipeline they legitimately
-# match no step, so drop them up front without masking unrelated typo keys.
+# GR00T 在自己的处理器步骤内部完成动作的归一化和表示，因此它刻意没有标准的
+# NormalizerProcessorStep/UnnormalizerProcessorStep，也没有通用的相对/绝对动作步骤。
+# ``lerobot-train`` 仍可能发出这些通用覆写键；对于 GR00T 流水线而言，它们匹配不到
+# 任何步骤是合理的，因此提前将其丢弃，同时不掩盖其他无关的拼写错误键。
 _GROOT_ABSENT_STANDARD_OVERRIDE_KEYS = frozenset(
     {
         "absolute_actions_processor",
@@ -380,7 +379,7 @@ _GROOT_ABSENT_STANDARD_OVERRIDE_KEYS = frozenset(
 
 
 def _drop_groot_absent_standard_overrides(overrides: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Strip standard override keys that a GR00T pipeline has no step for."""
+    """移除 GR00T 流水线中没有对应步骤的标准覆写键。"""
 
     if not overrides:
         return overrides
@@ -402,17 +401,15 @@ def _apply_groot_step_overrides(
     pipeline: PolicyProcessorPipeline,
     overrides: dict[str, Any] | None,
 ) -> None:
-    """Apply ``from_pretrained``-style step overrides to a freshly built pipeline.
+    """将 ``from_pretrained`` 风格的步骤覆写应用到新建的流水线上。
 
-    Raw N1.7 checkpoints build their processors from scratch instead of
-    deserializing them, so caller overrides must be applied to the constructed
-    steps. Override keys match a step's registry name or, as a convenience, its
-    class name (``PolicyProcessorPipeline.from_pretrained`` matches registered
-    steps by registry name only — prefer registry names so overrides keep
-    working after the checkpoint is converted and reloaded from a serialized
-    pipeline). Keys or fields that match nothing raise instead of being dropped
-    silently (standard normalization keys GR00T has no step for are removed
-    beforehand by ``_drop_groot_absent_standard_overrides``).
+    原始 N1.7 检查点是从零构建处理器，而不是反序列化得到，因此调用方的覆写
+    必须应用到已构造好的步骤上。覆写键匹配步骤的注册表名，或者为方便起见
+    匹配其类名（``PolicyProcessorPipeline.from_pretrained`` 仅按注册表名匹配
+    已注册的步骤——建议优先使用注册表名，这样在检查点转换并从序列化流水线
+    重新加载后覆写仍能生效）。匹配不到的键或字段会直接报错，而不是被静默
+    丢弃（GR00T 没有对应步骤的标准归一化键会事先由
+    ``_drop_groot_absent_standard_overrides`` 移除）。
     """
 
     if not overrides:
@@ -448,8 +445,8 @@ def _apply_groot_step_overrides(
                         f"Available fields: {sorted(init_field_names)}."
                     )
                 setattr(step, field_name, value)
-            # Re-derive attributes computed from the overridden config (e.g.
-            # DeviceProcessorStep resolves its torch.device in __post_init__).
+            # 重新派生那些由被覆写配置计算出来的属性（例如
+            # DeviceProcessorStep 会在 __post_init__ 中解析其 torch.device）。
             post_init = getattr(step, "__post_init__", None)
             if callable(post_init):
                 post_init()
@@ -460,11 +457,10 @@ def _set_groot_preprocessor_training(
     *,
     training: bool,
 ) -> None:
-    """Set the runtime-only mode of GR00T stochastic processor steps.
+    """设置 GR00T 随机性处理器步骤的仅运行时模式。
 
-    Any dataclass step exposing a ``training`` field participates, so processor
-    steps can opt into train-time-only behavior (dropout, augmentation) without
-    this helper enumerating them.
+    任何暴露了 ``training`` 字段的 dataclass 步骤都会参与，因此处理器步骤
+    可以自行启用仅训练时的行为（dropout、数据增强），而无需本辅助函数逐一列举。
     """
     for step in preprocessor.steps:
         if is_dataclass(step) and any(f.name == "training" for f in fields(step)):
@@ -486,11 +482,11 @@ def make_groot_pre_post_processors_from_pretrained(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Load Groot processors for a raw N1.7 checkpoint or a serialized LeRobot pipeline."""
+    """为原始 N1.7 检查点或序列化的 LeRobot 流水线加载 Groot 处理器。"""
 
-    # Drop the standard normalizer/unnormalizer override keys lerobot-train emits unconditionally:
-    # GR00T has no such steps, so they would make both the raw-checkpoint and serialized override
-    # paths raise. This must happen before either branch below.
+    # 丢弃 lerobot-train 无条件发出的标准 normalizer/unnormalizer 覆写键：
+    # GR00T 没有这类步骤，它们会导致原始检查点和序列化覆写两条路径都报错。
+    # 此操作必须在下面任一分支之前执行。
     preprocessor_overrides = _drop_groot_absent_standard_overrides(preprocessor_overrides)
     postprocessor_overrides = _drop_groot_absent_standard_overrides(postprocessor_overrides)
 
@@ -502,9 +498,9 @@ def make_groot_pre_post_processors_from_pretrained(
             dataset_stats=dataset_stats,
             dataset_meta=dataset_meta,
         )
-        # Raw checkpoints have no serialized pipelines to load overrides into,
-        # so apply the caller overrides (e.g. device and rename_map from
-        # lerobot-eval or the policy server) to the freshly built steps.
+        # 原始检查点没有可供加载覆写的序列化流水线，
+        # 因此将调用方的覆写（例如来自 lerobot-eval 或策略服务器的
+        # device 和 rename_map）应用到新建的步骤上。
         _apply_groot_step_overrides(preprocessor, preprocessor_overrides)
         _apply_groot_step_overrides(postprocessor, postprocessor_overrides)
         _apply_groot_action_decode_transform(postprocessor, config.action_decode_transform)
@@ -537,8 +533,8 @@ def _load_groot_processor_pipelines(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    # Register the GR00T N1.5 rejection stubs before deserializing, so a saved N1.5 pipeline
-    # referencing their registry names fails with the canonical removal guidance.
+    # 在反序列化之前注册 GR00T N1.5 的拒绝存根，这样当已保存的 N1.5 流水线
+    # 引用它们的注册表名时，会以规范的移除指引报错。
     _register_removed_n1_5_step_stubs()
     preprocessor = PolicyProcessorPipeline.from_pretrained(
         pretrained_model_name_or_path=pretrained_path,
@@ -579,10 +575,10 @@ def _reconnect_groot_n1_7_pack_decode_steps(
     preprocessor: PolicyProcessorPipeline,
     postprocessor: PolicyProcessorPipeline,
 ) -> None:
-    """Re-link a deserialized N1.7 action decode step to its pack step.
+    """将反序列化后的 N1.7 动作解码步骤重新关联到其打包步骤。
 
-    The pack step holds the per-instance raw-state cache that relative-action
-    decoding reads its reference state from; the link itself is not serialized.
+    打包步骤保存着逐实例的原始状态缓存，相对动作解码要从中读取参考状态；
+    而这个关联本身不会被序列化。
     """
 
     pack_step = next(
@@ -738,8 +734,8 @@ def _compute_horizon_relative_action_stats(
 
 def _iter_action_state_training_samples(dataset: Any):
     ensure_reader = getattr(dataset, "_ensure_reader", None)
-    # Only the default parquet reader exposes hf_dataset; other readers
-    # (e.g. lance) fall through to the generic per-item loop below.
+    # 只有默认的 parquet reader 暴露了 hf_dataset；其他 reader
+    # （例如 lance）会落到下面通用的逐条循环。
     if callable(ensure_reader) and hasattr(reader := ensure_reader(), "hf_dataset"):
         if reader.hf_dataset is None:
             reader.load_and_activate()
@@ -834,7 +830,7 @@ def _make_relative_action_training_stats(
 
 
 def _relative_stats_action_horizon(action_stats: dict[str, Any]) -> int | None:
-    """Return the chunk horizon of horizon-preserving relative action stats, if any."""
+    """若存在保留时域的相对动作统计量，则返回其分块时域长度。"""
     for stat_name in ("min", "max", "mean", "std", "q01", "q99"):
         value = action_stats.get(stat_name)
         if value is None:
@@ -867,9 +863,9 @@ def _make_relative_action_training_stats_from_dataset_meta(
 
     require_package("datasets", extra="groot")
 
-    # Relative stats are computed per chunk timestep at the native N1.7 horizon, so the
-    # stats dataset must yield native-length action windows even when config.chunk_size
-    # executes fewer steps.
+    # 相对统计量是在 N1.7 原生时域上按分块时间步逐一计算的，因此即使
+    # config.chunk_size 实际执行的步数更少，用于统计的数据集也必须产出
+    # 原生长度的动作窗口。
     delta_timestamps = {ACTION: [index / fps for index in range(N1_7_NATIVE_ACTION_HORIZON)]}
     dataset = LeRobotDataset(
         repo_id,
@@ -1054,9 +1050,8 @@ def _build_n1_7_relative_action_processor_assets(
         }
         for group in groups
     ]
-    # Horizon-preserving relative stats are computed per chunk timestep at the native
-    # chunk length of the dataset samples, so they dictate the processor horizon even
-    # when config.chunk_size asks for fewer executed steps.
+    # 保留时域的相对统计量是在数据集样本的原生分块长度上按分块时间步计算的，
+    # 因此即使 config.chunk_size 要求执行更少的步数，处理器时域也由它决定。
     action_horizon = _relative_stats_action_horizon(relative_action_stats) or min(
         config.chunk_size, N1_7_NATIVE_ACTION_HORIZON
     )
@@ -1138,29 +1133,29 @@ def make_groot_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Create preprocessor and postprocessor for Groot policy.
+    """为 Groot 策略创建预处理器和后处理器。
 
-    This creates a processing pipeline that transforms LeRobot data format into
-    the format expected by Isaac-GR00T models:
+    这会创建一条处理流水线，将 LeRobot 数据格式转换为 Isaac-GR00T 模型
+    所期望的格式：
 
-    Preprocessing steps:
-    1. Optional key renaming (dataset-specific key mapping)
-    2. Add batch dimension to unbatched data
-    3. Pack video/state/action/language/embodiment and apply optional min-max normalization before padding
-    4. Encode video+language with the GR00T N1.7 VLM backbone (Qwen3-VL) into intermediate VLM content
-    5. Collate the VLM content into batched backbone input tensors
-    6. Move tensors to device (GPU)
+    预处理步骤：
+    1. 可选的键重命名（针对数据集的键映射）
+    2. 为未批量化的数据添加批量维度
+    3. 打包 video/state/action/language/embodiment，并在填充前可选地应用 min-max 归一化
+    4. 使用 GR00T N1.7 VLM 主干（Qwen3-VL）将视频+语言编码为中间 VLM 内容
+    5. 将 VLM 内容整理（collate）为批量化的主干输入张量
+    6. 将张量移动到设备（GPU）
 
-    NOTE: We optionally apply min-max normalization to STATE and ACTION using
-    dataset-provided statistics prior to padding, mapping values to [-1, 1].
-    This mirrors SO100-style preprocessing and keeps scales consistent with GR00T.
+    注意：我们可选地在填充之前利用数据集提供的统计量对 STATE 和 ACTION
+    应用 min-max 归一化，将值映射到 [-1, 1]。这与 SO100 风格的预处理一致，
+    并保持尺度与 GR00T 一致。
 
     Args:
-        config: Groot configuration containing data_config, embodiment_tag, etc.
-        dataset_stats: Optional per-key min/max statistics for normalization before padding.
+        config: Groot 配置，包含 data_config、embodiment_tag 等。
+        dataset_stats: 可选的逐键 min/max 统计量，用于填充前的归一化。
 
     Returns:
-        Tuple of (preprocessor, postprocessor) pipelines
+        （preprocessor, postprocessor）流水线组成的元组
     """
 
     dataset_meta = dataset_meta or getattr(config, "_runtime_dataset_meta", None)
@@ -1233,12 +1228,12 @@ def make_groot_pre_post_processors(
         modality_config=checkpoint_assets.modality_config if checkpoint_assets is not None else None,
     )
 
-    # Resolve the image preprocessing geometry. Honor the checkpoint's processor_config
-    # when it provides an image_target_size; otherwise fall back to the geometry the
-    # N1.7 backbone was trained on. Without this fallback a raw base checkpoint with no
-    # processor_config image sizing (e.g. fine-tuning nvidia/GR00T-N1.7-3B with a new
-    # embodiment, where checkpoint_assets is None) would patchify full-resolution camera
-    # frames, inflating the VLM token count and feeding the model a resolution it was not trained on.
+    # 确定图像预处理的几何尺寸。当检查点的 processor_config 提供了
+    # image_target_size 时以它为准；否则回退到 N1.7 主干训练时所用的几何尺寸。
+    # 如果没有这一回退，对于没有 processor_config 图像尺寸的原始基础检查点
+    # （例如用新本体微调 nvidia/GR00T-N1.7-3B，此时 checkpoint_assets 为 None），
+    # 就会对全分辨率相机帧做 patchify，导致 VLM token 数量膨胀，并向模型送入
+    # 其从未训练过的分辨率。
     if checkpoint_assets is not None and checkpoint_assets.image_target_size is not None:
         image_target_size = checkpoint_assets.image_target_size
         image_crop_size = checkpoint_assets.image_crop_size
@@ -1296,12 +1291,11 @@ def make_groot_pre_post_processors(
             "config.embodiment_tag to an embodiment present in the checkpoint's statistics.json."
         )
     if checkpoint_assets is None or not checkpoint_has_stats:
-        # When the checkpoint sidecars have no stats for the configured
-        # embodiment tag (e.g. finetuning a raw base checkpoint with the
-        # default 'new_embodiment' tag), the pack step above normalized with
-        # the dataset stats; the decode step must invert with the same stats
-        # instead of using a checkpoint decoder whose empty stats would
-        # silently return normalized [-1, 1] actions.
+        # 当检查点附属文件中没有所配置本体标签对应的统计量时
+        # （例如使用默认的 'new_embodiment' 标签微调原始基础检查点），
+        # 上面的打包步骤用数据集统计量做了归一化；解码步骤必须用相同的
+        # 统计量做逆变换，而不能使用检查点解码器——后者的空统计量会
+        # 静默返回仍处于归一化状态的 [-1, 1] 动作。
         action_decode_step: ProcessorStep = GrootActionUnpackUnnormalizeStep(
             env_action_dim=env_action_dim,
             stats=padded_stats,
@@ -1339,11 +1333,11 @@ def make_groot_pre_post_processors(
     )
 
 
-# GR00T specific processor steps
+# GR00T 专属的处理器步骤
 
 
 def _to_uint8_np_bthwc(img_t: torch.Tensor) -> np.ndarray:
-    # img_t: (B, C, H, W) or (B, T, C, H, W), float in [0,1] or uint8
+    # img_t: (B, C, H, W) 或 (B, T, C, H, W)，取值在 [0,1] 的 float 或 uint8
     if img_t.dtype.is_floating_point:
         img_t = (img_t.clamp(0, 1) * 255.0).to(torch.uint8)
     if img_t.dim() == 4:
@@ -1354,7 +1348,7 @@ def _to_uint8_np_bthwc(img_t: torch.Tensor) -> np.ndarray:
 
 
 def _align_video_horizon(video: np.ndarray, horizon: int | None) -> np.ndarray:
-    """Match the checkpoint video horizon by truncating or left-padding frames."""
+    """通过截断帧或在左侧填充帧，使视频时域与检查点要求的一致。"""
 
     if horizon is None or horizon <= 0:
         return video
@@ -1392,20 +1386,19 @@ def _transform_n1_7_image_for_vlm_albumentations(
     letter_box_transform: bool = False,
     crop_position: tuple[float, float] | None = None,
 ) -> np.ndarray:
-    """cv2/INTER_AREA eval transform mirroring Isaac-GR00T's albumentations preprocessing.
+    """复刻 Isaac-GR00T albumentations 预处理的 cv2/INTER_AREA 评估变换。
 
-    Used only for checkpoints saved with ``use_albumentations=True``. cv2 is
-    CPU/numpy-only so this path cannot run on GPU; the default (non-albumentations)
-    geometry is handled on-device by :func:`_transform_n1_7_image_for_vlm_torch`. The
-    cv2/INTER_AREA resize and floored center-crop here intentionally differ from that
-    torch path and must stay bit-exact to the upstream reference. The hot path accepts
-    and returns numpy arrays to avoid per-frame PIL round-trips.
+    仅用于以 ``use_albumentations=True`` 保存的检查点。cv2 只能在
+    CPU/numpy 上运行，因此该路径无法在 GPU 上执行；默认的（非
+    albumentations）几何处理由 :func:`_transform_n1_7_image_for_vlm_torch`
+    在设备上完成。这里的 cv2/INTER_AREA 缩放和向下取整的中心裁剪有意与
+    那条 torch 路径不同，并且必须与上游参考实现逐位一致。该热点路径
+    接收并返回 numpy 数组，以避免逐帧的 PIL 来回转换。
 
-    ``crop_position`` selects where the ``crop_fraction`` window sits: ``None``
-    keeps the deterministic center crop (eval contract), while ``(y, x)``
-    fractions in [0, 1] place the window for Isaac's train-time random crop
-    (0.5, 0.5 == center). Training samples one position per sample and reuses
-    it across camera views.
+    ``crop_position`` 选择 ``crop_fraction`` 窗口的位置：``None`` 保持
+    确定性的中心裁剪（评估时的约定），而 [0, 1] 内的 ``(y, x)`` 比例值
+    则为 Isaac 训练时随机裁剪放置窗口（(0.5, 0.5) 即中心）。训练时每个
+    样本采样一个位置，并在所有相机视角间复用。
     """
     if image_target_size is None:
         return image
@@ -1478,17 +1471,17 @@ def _transform_n1_7_image_for_vlm_torch(
     crop_fraction: float | None,
     letter_box_transform: bool = False,
 ) -> torch.Tensor:
-    """Default (non-albumentations) N1.7 image transform.
+    """默认的（非 albumentations）N1.7 图像变换。
 
-    Optionally pads to square, then resizes to ``shortest_image_edge``, center-crops
-    by ``crop_fraction``, and resizes to ``image_target_size``.
+    可选地先填充为正方形，然后缩放到 ``shortest_image_edge``，按
+    ``crop_fraction`` 做中心裁剪，最后缩放到 ``image_target_size``。
 
-    Operates on a ``(C, H, W)`` uint8 tensor and keeps the result on the input
-    tensor's device so the resize/crop run on GPU when the tensor is. Bicubic
-    interpolation with antialiasing matches PIL's ``Image.Resampling.BICUBIC``
-    closely (sub-``2/255`` per-pixel on worst-case inputs). The ``use_albumentations``
-    cv2/INTER_AREA path has no torch equivalent and stays on
-    :func:`_transform_n1_7_image_for_vlm_albumentations`.
+    该函数处理 ``(C, H, W)`` uint8 张量，并将结果保留在输入张量所在的
+    设备上，因此当张量在 GPU 上时缩放/裁剪也在 GPU 上运行。带抗锯齿的
+    双三次插值与 PIL 的 ``Image.Resampling.BICUBIC`` 非常接近（最坏输入下
+    逐像素误差小于 ``2/255``）。``use_albumentations`` 的 cv2/INTER_AREA
+    路径没有对应的 torch 实现，仍保留在
+    :func:`_transform_n1_7_image_for_vlm_albumentations` 中。
     """
     if image_target_size is None:
         return image
@@ -1513,9 +1506,9 @@ def _transform_n1_7_image_for_vlm_torch(
     if crop_fraction is None and image_crop_size is not None:
         crop_fraction = image_crop_size[0] / float(target_h)
     if crop_fraction is not None and 0.0 < crop_fraction < 1.0:
-        # Match the PIL helper's center crop exactly: round() the crop size but
-        # floor() the offset (torchvision.center_crop rounds the offset, which
-        # shifts the region by 1px when (edge - crop) is odd).
+        # 与 PIL 辅助函数的中心裁剪严格保持一致：裁剪尺寸用 round()，
+        # 但偏移量用 floor()（torchvision.center_crop 会对偏移量四舍五入，
+        # 当 (edge - crop) 为奇数时会使裁剪区域偏移 1px）。
         crop_h = max(1, int(round(image.shape[-2] * crop_fraction)))
         crop_w = max(1, int(round(image.shape[-1] * crop_fraction)))
         top = max(0, (image.shape[-2] - crop_h) // 2)
@@ -1532,11 +1525,10 @@ def _transform_n1_7_image_for_vlm_torch(
 @dataclass
 @ProcessorStepRegistry.register(name="groot_n1_7_pack_inputs_v1")
 class GrootN17PackInputsStep(ProcessorStep):
-    """Pack LeRobot transitions into the raw tensor layout expected by N1.7.
+    """将 LeRobot transition 打包为 N1.7 所期望的原始张量布局。
 
-    This step preserves the checkpoint's camera order, video horizon, language
-    formatting, normalization statistics, action mask semantics, and embodiment
-    id mapping before the Qwen3-VL processor sees the sample.
+    在 Qwen3-VL 处理器接触样本之前，本步骤保留检查点的相机顺序、视频时域、
+    语言格式、归一化统计量、动作掩码语义以及本体 id 映射。
     """
 
     state_horizon: int = 1
@@ -1572,10 +1564,9 @@ class GrootN17PackInputsStep(ProcessorStep):
         unmatched: list[str] = []
         for modality_key in self.video_modality_keys:
             candidates = [f"{OBS_IMAGES}.{modality_key}"]
-            # Alias for datasets converted with generic camera names (e.g. the
-            # LIBERO conversions expose the wrist camera as
-            # `observation.images.image2`), so raw N1.7 LIBERO checkpoints
-            # match those datasets out of the box.
+            # 针对使用通用相机名转换的数据集的别名（例如 LIBERO 转换后
+            # 腕部相机为 `observation.images.image2`），这样原始的 N1.7
+            # LIBERO 检查点可以直接匹配这些数据集。
             if modality_key == "wrist_image":
                 candidates.append(f"{OBS_IMAGES}.image2")
 
@@ -1770,11 +1761,12 @@ class GrootN17PackInputsStep(ProcessorStep):
         return torch.cat(normalized_groups, dim=-1)
 
     def _uses_relative_action_groups(self) -> bool:
-        """True when the action modality declares at least one relative group.
+        """当动作模态声明了至少一个相对分组时返回 True。
 
-        Relative groups normalize with per-chunk-timestep (2D) ``relative_action`` stats, which the
-        flat ``_min_max_norm`` fallback cannot honor, so a relative config that fails grouped
-        normalization must fail loudly rather than silently wrongly scale every timestep.
+        相对分组使用按分块时间步排列的（二维）``relative_action`` 统计量进行
+        归一化，扁平的 ``_min_max_norm`` 回退逻辑无法正确处理这一点，因此
+        当相对配置的分组归一化失败时，必须明确报错，而不是静默地对每个
+        时间步做出错误的缩放。
         """
         if not isinstance(self.modality_config, dict):
             return False
@@ -2010,7 +2002,7 @@ class GrootN17PackInputsStep(ProcessorStep):
         }
 
     def get_cached_raw_state(self) -> dict[str, np.ndarray] | None:
-        """Return the latest unnormalized state split by checkpoint modality key."""
+        """返回最近一次未经归一化的状态，按检查点模态键拆分。"""
 
         return self._last_raw_state
 
@@ -2039,17 +2031,16 @@ class GrootN17PackInputsStep(ProcessorStep):
 @dataclass
 @ProcessorStepRegistry.register(name="groot_n1_7_vlm_encode_v1")
 class GrootN17VLMEncodeStep(ProcessorStep):
-    """Tokenize N1.7's packed video-language prompt with the Qwen3-VL processor.
+    """使用 Qwen3-VL 处理器对 N1.7 打包好的视频-语言 prompt 进行分词。
 
-    The packed video has shape ``(B, T, V, H, W, C)``. Each frame/view becomes
-    an image item in the same chat message so the resulting image tokens match
-    the temporal VLM packing used by Isaac-GR00T.
+    打包后的视频形状为 ``(B, T, V, H, W, C)``。每一帧/每个视角都会成为
+    同一条聊天消息中的一个图像项，从而使生成的图像 token 与 Isaac-GR00T
+    使用的时序 VLM 打包方式一致。
 
-    Images are handed to the torchvision-backed Qwen3-VL processor as ``(C, H, W)``
-    uint8 tensors (no per-frame PIL roundtrip), and, when ``device`` resolves to a
-    CUDA device, the resize/rescale/normalize/patchify run there. This keeps the
-    output bit-identical on CPU and moves the dominant preprocessing cost off
-    the critical path on GPU.
+    图像以 ``(C, H, W)`` uint8 张量的形式交给基于 torchvision 的 Qwen3-VL
+    处理器（没有逐帧的 PIL 来回转换），并且当 ``device`` 解析为 CUDA 设备时，
+    缩放/重缩放/归一化/patchify 都在该设备上运行。这使得输出在 CPU 上
+    保持逐位一致，同时把主要的预处理开销从 GPU 的关键路径上移走。
     """
 
     model_name: str = GROOT_N1_7_BACKBONE_MODEL
@@ -2059,10 +2050,10 @@ class GrootN17VLMEncodeStep(ProcessorStep):
     crop_fraction: float | None = None
     use_albumentations: bool = False
     letter_box_transform: bool = False
-    # Runtime-only train/eval mode: True enables Isaac's train-time random crop
-    # (one window per sample, replayed across views); False keeps the
-    # deterministic center crop. Never serialized - reloaded pipelines default
-    # to eval and are re-enabled only when processors are built with dataset_meta.
+    # 仅运行时的训练/评估模式：True 启用 Isaac 训练时的随机裁剪
+    # （每个样本一个窗口，并在各视角间复用）；False 保持确定性的中心裁剪。
+    # 该字段不会被序列化——重新加载的流水线默认为评估模式，只有在使用
+    # dataset_meta 构建处理器时才会重新启用。
     training: bool = False
     device: str | None = None
     _proc: ProcessorMixin | None = field(default=None, init=False, repr=False)
@@ -2074,35 +2065,34 @@ class GrootN17VLMEncodeStep(ProcessorStep):
         return self._proc
 
     def _target_device(self) -> torch.device | None:
-        # The albumentations path is cv2/numpy only, so it cannot run on GPU.
+        # albumentations 路径只能使用 cv2/numpy，因此无法在 GPU 上运行。
         if self.device is None or self.use_albumentations:
             return None
         try:
             return get_safe_torch_device(self.device)
         except (AssertionError, RuntimeError):
-            # A device serialized at train time (e.g. "cuda") may be unavailable
-            # when the processor is reloaded elsewhere (e.g. CPU-only eval), and
-            # this step is not in the standard device-override set. Fall back to
-            # the CPU path, which is bit-identical, instead of crashing.
+            # 训练时序列化的设备（例如 "cuda"）在处理器被重新加载到其他地方时
+            # （例如仅用 CPU 评估）可能不可用，而本步骤不在标准的设备覆写
+            # 集合中。此时回退到逐位一致的 CPU 路径，而不是直接崩溃。
             return None
 
     def _build_sample_images(
         self, video: Any, batch_size: int, target_device: torch.device | None
     ) -> list[list[Any]]:
-        """Return, per batch item, its ordered ``(timestep, view)`` frames.
+        """按批量中的每个样本返回其有序的 ``(timestep, view)`` 帧。
 
-        ``use_albumentations`` keeps the legacy per-frame cv2/INTER_AREA transform;
-        otherwise frames are ``(C, H, W)`` uint8 tensors (moved to
-        ``target_device`` when set) for the torchvision-backed Qwen processor.
+        ``use_albumentations`` 保留旧版逐帧的 cv2/INTER_AREA 变换；
+        否则帧为 ``(C, H, W)`` uint8 张量（设置了 ``target_device`` 时
+        会移动到该设备），供基于 torchvision 的 Qwen 处理器使用。
         """
         if self.use_albumentations:
             video_np = np.asarray(video)
             train_crop = self.training and torch.is_grad_enabled()
             sample_images: list[list[Any]] = []
             for batch_idx in range(batch_size):
-                # Isaac-GR00T samples ONE crop window per sample and replays it
-                # across every (timestep, view) frame of that sample, keeping
-                # cross-view geometry consistent. Eval keeps the center crop.
+                # Isaac-GR00T 每个样本只采样一个裁剪窗口，并在该样本的
+                # 每个 (timestep, view) 帧上复用，从而保持跨视角几何一致。
+                # 评估时保持中心裁剪。
                 crop_position = (random.random(), random.random()) if train_crop else None
                 sample_images.append(
                     [
@@ -2225,7 +2215,7 @@ def _n1_7_decode_stats_for_action(
     use_relative_action: bool,
     use_percentiles: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Select the min/max arrays needed to decode one checkpoint action group."""
+    """选取解码一个检查点动作分组所需的 min/max 数组。"""
 
     is_relative = use_relative_action and config_value(action_config.get("rep")) == "relative"
     modality = "relative_action" if is_relative else "action"
@@ -2299,24 +2289,20 @@ def _apply_n1_7_action_decode_transform(
 @dataclass
 @ProcessorStepRegistry.register(name="groot_n1_7_action_decode_v1")
 class GrootN17ActionDecodeStep(ProcessorStep):
-    """Decode the full 132-D N1.7 model action back to environment actions.
+    """将完整的 132 维 N1.7 模型动作解码回环境动作。
 
-    N1.7 predicts checkpoint-order action groups. This step unnormalizes each
-    group with the checkpoint stats, converts relative groups to absolute values
-    using the raw state cached during packing, concatenates groups in checkpoint
-    order, and finally slices to the environment action dimension.
+    N1.7 预测的是按检查点顺序排列的动作分组。本步骤用检查点统计量对每个
+    分组做反归一化，利用打包时缓存的原始状态将相对分组转换为绝对值，按
+    检查点顺序拼接各分组，最后切片到环境动作维度。
 
-    Relative-action decoding reads the reference state from the connected
-    ``pack_step`` (re-linked after ``from_pretrained`` by
-    ``_reconnect_groot_n1_7_pack_decode_steps``), i.e. the state seen by the
-    most recent preprocess call. Engines that decode the whole chunk right
-    after prediction (RTC, async policy server) therefore use the
-    prediction-time state, matching Isaac-GR00T. The sync per-step queue path
-    instead decodes each popped (B, D) action against the latest observation:
-    the reference can be newer than the observation the chunk was predicted
-    from, and per-timestep relative stats are applied as if the popped action
-    were chunk step 0. Fixing that would require carrying the reference state
-    and chunk index alongside each queued action through the postprocessor.
+    相对动作解码从已关联的 ``pack_step``（在 ``from_pretrained`` 之后由
+    ``_reconnect_groot_n1_7_pack_decode_steps`` 重新关联）读取参考状态，
+    即最近一次预处理调用所见到的状态。因此，在预测后立即解码整个分块的
+    引擎（RTC、异步策略服务器）使用的是预测时的状态，与 Isaac-GR00T 一致。
+    而同步的逐步骤队列路径则针对最新观测解码每个弹出的 (B, D) 动作：
+    参考状态可能比分块预测时所用的观测更新，并且逐时间步的相对统计量会
+    被当作弹出动作处于分块第 0 步来应用。要修正这一点，需要在后处理过程中
+    让每个入队动作都携带参考状态和分块索引。
     """
 
     env_action_dim: int = 0
@@ -2349,9 +2335,9 @@ class GrootN17ActionDecodeStep(ProcessorStep):
                 "Decode the full action chunk returned by predict_action_chunk while the matching "
                 "GrootN17PackInputsStep state is still cached, then queue the decoded absolute actions."
             )
-        # The sync action queue postprocesses popped actions as (B, D); decode
-        # them as single-step (B, 1, D) chunks and squeeze the horizon back at
-        # the end so both ranks share the chunk decode logic below.
+        # 同步动作队列将弹出的动作为 (B, D) 做后处理；这里把它们当作
+        # 单步 (B, 1, D) 分块来解码，并在最后把时域维挤压回去，
+        # 以便两种形态共用下面的分块解码逻辑。
         squeeze_horizon = action_np.ndim == 2
         if squeeze_horizon:
             action_np = action_np[:, None, :]
@@ -2382,9 +2368,8 @@ class GrootN17ActionDecodeStep(ProcessorStep):
                 use_relative_action=self.use_relative_action,
                 use_percentiles=self.use_percentiles,
             )
-            # Per-timestep stats carry one row per chunk step; align them with
-            # the decoded horizon (chunks always start at step 0, and a popped
-            # (B, D) action is decoded as step 0).
+            # 逐时间步统计量的每个分块步骤对应一行；将其与解码时域对齐
+            # （分块总是从第 0 步开始，而弹出的 (B, D) 动作按第 0 步解码）。
             if min_v.ndim == 2 and normalized.shape[1] <= min_v.shape[0]:
                 min_v = min_v[: normalized.shape[1]]
                 max_v = max_v[: normalized.shape[1]]
@@ -2457,14 +2442,14 @@ class GrootN17ActionDecodeStep(ProcessorStep):
         }
 
 
-# v2: unlike the N1.5-era v1 step, this step no longer collapses (B, T, D)
-# action chunks to the last timestep, so old serialized v1 pipelines must not
-# silently load into it (v1 is stubbed below with the removal guidance).
+# v2：与 N1.5 时代的 v1 步骤不同，本步骤不再把 (B, T, D) 动作分块
+# 坍缩到最后一个时间步，因此旧的序列化 v1 流水线绝不能被静默加载到
+# 本步骤中（v1 在下方以带移除指引的存根形式占位）。
 @dataclass
 @ProcessorStepRegistry.register(name="groot_action_unpack_unnormalize_v2")
 class GrootActionUnpackUnnormalizeStep(ProcessorStep):
     env_action_dim: int = 0
-    # Apply inverse of min-max normalization if it was used in preprocessor
+    # 若预处理器中使用了 min-max 归一化，则在此应用其逆变换
     normalize_min_max: bool = True
     stats: dict[str, dict[str, Any]] | None = None
     clip_normalized_action: bool = False
@@ -2472,20 +2457,20 @@ class GrootActionUnpackUnnormalizeStep(ProcessorStep):
     libero_gripper_binarize: bool = True
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
-        # Expect model outputs to be in TransitionKey.ACTION as (B, T, D_model)
+        # 预期模型输出位于 TransitionKey.ACTION 中，形状为 (B, T, D_model)
         action = transition.get(TransitionKey.ACTION)
         if not isinstance(action, torch.Tensor):
             return transition
 
-        # Slice to env dimension while preserving an optional action horizon.
-        # Sync rollout postprocesses selected actions as (B, D); RTC postprocesses
-        # chunks as (B, T, D), matching Isaac-GR00T's decode_action contract.
+        # 切片到环境维度，同时保留可选的动作时域。
+        # 同步 rollout 对所选动作按 (B, D) 后处理；RTC 对分块按 (B, T, D)
+        # 后处理，与 Isaac-GR00T 的 decode_action 约定一致。
         if self.env_action_dim and action.shape[-1] >= self.env_action_dim:
             action = action[..., : self.env_action_dim]
 
-        # Inverse min-max normalization mirroring _min_max_norm:
-        # forward: y = 2 * (x - min) / denom - 1, with y=0 when denom==0
-        # inverse: x = (y+1)/2 * denom + min, and when denom==0 -> x = min
+        # 镜像 _min_max_norm 的 min-max 反归一化：
+        # 正向：y = 2 * (x - min) / denom - 1，当 denom==0 时 y=0
+        # 逆向：x = (y+1)/2 * denom + min，当 denom==0 时 x = min
         if self.normalize_min_max and self.stats is not None:
             if self.clip_normalized_action:
                 action = action.clamp(-1.0, 1.0)
@@ -2526,9 +2511,9 @@ class GrootActionUnpackUnnormalizeStep(ProcessorStep):
 
     def get_config(self) -> dict[str, Any]:
         """
-        Returns a serializable dictionary of the processor's configuration.
+        返回处理器配置的可序列化字典。
 
-        Excludes 'stats' since they are saved separately via state_dict().
+        不包含 'stats'，因为统计量通过 state_dict() 单独保存。
         """
         return {
             "env_action_dim": self.env_action_dim,
@@ -2540,9 +2525,9 @@ class GrootActionUnpackUnnormalizeStep(ProcessorStep):
 
     def state_dict(self) -> dict[str, torch.Tensor]:
         """
-        Returns normalization statistics as a flat state dictionary.
+        以扁平 state 字典的形式返回归一化统计量。
 
-        This enables saving stats to safetensors files, similar to normalizer_processor.
+        这使得统计量可以保存到 safetensors 文件，与 normalizer_processor 类似。
         """
         if not self.stats:
             return {}
@@ -2556,9 +2541,9 @@ class GrootActionUnpackUnnormalizeStep(ProcessorStep):
 
     def load_state_dict(self, state: dict[str, torch.Tensor]) -> None:
         """
-        Loads normalization statistics from a flat state dictionary.
+        从扁平 state 字典加载归一化统计量。
 
-        This enables loading stats from safetensors files during from_pretrained.
+        这使得在 from_pretrained 期间可以从 safetensors 文件加载统计量。
         """
         if not state:
             return
@@ -2575,11 +2560,11 @@ class GrootActionUnpackUnnormalizeStep(ProcessorStep):
             self.stats = reconstructed
 
 
-# Registry names that only GR00T N1.5 processor pipelines serialize. Saved N1.5 checkpoints
-# reference these in their processor JSON, so deserializing one must fail with the canonical N1.5
-# removal guidance instead of an opaque registry KeyError (or, for
-# ``groot_action_unpack_unnormalize_v1``, silently loading the v2 step whose action-chunk
-# semantics changed).
+# 只有 GR00T N1.5 处理器流水线才会序列化的注册表名。已保存的 N1.5 检查点
+# 会在其处理器 JSON 中引用这些名字，因此反序列化时必须以规范的 N1.5 移除
+# 指引报错，而不是抛出难以理解的注册表 KeyError（对于
+# ``groot_action_unpack_unnormalize_v1``，还要避免静默加载动作分块语义
+# 已发生变化的 v2 步骤）。
 _REMOVED_N1_5_STEP_NAMES = (
     "groot_pack_inputs_v3",
     "groot_eagle_encode_v3",
@@ -2589,10 +2574,11 @@ _REMOVED_N1_5_STEP_NAMES = (
 
 
 def _register_removed_n1_5_step_stub(registry_name: str) -> None:
-    """Register a single rejecting stub for a removed GR00T N1.5 processor step name.
+    """为已移除的 GR00T N1.5 处理器步骤名注册一个拒绝型存根。
 
-    Idempotent: ``ProcessorStepRegistry.register`` raises on a duplicate name, so already-registered
-    names are skipped. This lets the caller re-run on every processor load without a run-once guard.
+    该操作是幂等的：``ProcessorStepRegistry.register`` 在遇到重复名字时会
+    抛错，因此已注册的名字会被跳过。这样调用方在每次加载处理器时都可以
+    重新执行，而无需“只运行一次”的守卫。
     """
     if registry_name in ProcessorStepRegistry.list():
         return
@@ -2613,11 +2599,12 @@ def _register_removed_n1_5_step_stub(registry_name: str) -> None:
 
 
 def _register_removed_n1_5_step_stubs() -> None:
-    """Register the GR00T N1.5 removal stubs, lazily.
+    """惰性注册 GR00T N1.5 移除存根。
 
-    Deferred from import time so importing this module has no global side effects; invoked just
-    before a GR00T processor pipeline is deserialized (the only point at which a saved N1.5 pipeline
-    could reference these registry names). Idempotent via :func:`_register_removed_n1_5_step_stub`.
+    将注册时机从导入时推迟，使导入本模块不产生全局副作用；该函数恰好在
+    GR00T 处理器流水线反序列化之前调用（这是已保存的 N1.5 流水线唯一可能
+    引用这些注册表名的时机）。通过 :func:`_register_removed_n1_5_step_stub`
+    保证幂等。
     """
     for registry_name in _REMOVED_N1_5_STEP_NAMES:
         _register_removed_n1_5_step_stub(registry_name)

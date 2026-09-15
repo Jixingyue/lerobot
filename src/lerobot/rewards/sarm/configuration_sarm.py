@@ -29,34 +29,34 @@ from lerobot.utils.constants import OBS_IMAGES, OBS_STATE
 @RewardModelConfig.register_subclass("sarm")
 @dataclass
 class SARMConfig(RewardModelConfig):
-    """Configuration class for SARM (Stage-Aware Reward Modeling).
+    """SARM（Stage-Aware Reward Modeling，阶段感知奖励建模）的配置类。
 
-    Supports three annotation modes:
+    支持三种标注模式：
 
-    1. single_stage (default): No annotations needed. Uses the episode's task description
-       as a single stage covering the entire episode.
+    1. single_stage（默认）：无需标注。使用 episode 的任务描述
+       作为覆盖整个 episode 的单个阶段。
 
-    2. dense_only: Uses dense (fine-grained) annotations from VLM, with an auto-generated
-       single sparse "task" stage covering the full episode. The dense head learns detailed
-       subtask progression while sparse provides overall task completion.
+    2. dense_only：使用来自 VLM 的稠密（细粒度）标注，并自动生成
+       覆盖整个 episode 的单个稀疏 "task" 阶段。dense 头学习详细的
+       子任务进展，而 sparse 头提供整体任务完成情况。
 
-    3. dual: Full dual-head mode with both sparse (high-level) and dense (fine-grained)
-       annotations from VLM. Both heads are trained on their respective annotations.
+    3. dual：完整的双头模式，同时使用来自 VLM 的稀疏（高层级）和
+       稠密（细粒度）标注。两个头分别在各自的标注上训练。
 
-    The annotation_mode determines how sparse_temporal_proportions and dense_temporal_proportions
-    are loaded/generated during model initialization.
+    annotation_mode 决定了模型初始化时如何加载/生成
+    sparse_temporal_proportions 和 dense_temporal_proportions。
     """
 
-    annotation_mode: str = "single_stage"  # "single_stage", "dense_only", or "dual"
-    n_obs_steps: int = 8  # Number of observation history steps
-    frame_gap: int = 30  # Frame gap between frames (at 30 fps = 1 second)
-    max_rewind_steps: int = 4  # Maximum rewind steps for temporal augmentation
+    annotation_mode: str = "single_stage"  # "single_stage"、"dense_only" 或 "dual"
+    n_obs_steps: int = 8  # 观测历史步数
+    frame_gap: int = 30  # 帧间隔（30 fps 下 = 1 秒）
+    max_rewind_steps: int = 4  # 时间增强的最大回退步数
 
-    # Total frames = 1 + n_obs_steps + max_rewind_steps (computed in property)
-    # During training with rewind: [obs_frames] + [rewind_frames]
-    # During inference: [obs_frames] only
+    # 总帧数 = 1 + n_obs_steps + max_rewind_steps（在 property 中计算）
+    # 带回退的训练期间：[obs_frames] + [rewind_frames]
+    # 推理期间：仅 [obs_frames]
 
-    # Architecture params
+    # 架构参数
     image_dim: int = 512
     text_dim: int = 512
     hidden_dim: int = 768
@@ -67,30 +67,30 @@ class SARMConfig(RewardModelConfig):
     batch_size: int = 64
     clip_batch_size: int = 64
     dropout: float = 0.1
-    stage_loss_weight: float = 1.0  # Weight for stage classification loss when using subtask annotations
+    stage_loss_weight: float = 1.0  # 使用子任务标注时阶段分类损失的权重
 
     rewind_probability: float = 0.8
     language_perturbation_probability: float = 0.2
 
-    # Sparse annotations (high-level stages)
+    # 稀疏标注（高层级阶段）
     num_sparse_stages: int = 1
     sparse_subtask_names: list | None = None
     sparse_temporal_proportions: list | None = None
 
-    # Dense annotations (fine-grained stages)
+    # 稠密标注（细粒度阶段）
     num_dense_stages: int | None = None
     dense_subtask_names: list | None = None
     dense_temporal_proportions: list | None = None
 
     pretrained_model_path: str | None = None
     device: str | None = None
-    image_key: str = OBS_IMAGES + ".top"  # Key for image used from the dataset
+    image_key: str = OBS_IMAGES + ".top"  # 从数据集中使用的图像键
     state_key: str = OBS_STATE
 
-    # Populated by the processor (video_features, state_features, text_features)
+    # 由处理器填充（video_features、state_features、text_features）
     input_features: dict = field(default_factory=lambda: {})
 
-    # Output features (updated in __post_init__)
+    # 输出特征（在 __post_init__ 中更新）
     output_features: dict = field(
         default_factory=lambda: {
             "stage": PolicyFeature(shape=(9, 5), type=FeatureType.REWARD),
@@ -115,7 +115,7 @@ class SARMConfig(RewardModelConfig):
             )
 
         if self.annotation_mode == "single_stage":
-            # Use task description as stage name, full episode as one stage
+            # 使用任务描述作为阶段名，整个 episode 作为单个阶段
             self.num_sparse_stages = 1
             self.sparse_subtask_names = ["task"]
             self.sparse_temporal_proportions = [1.0]
@@ -139,7 +139,7 @@ class SARMConfig(RewardModelConfig):
             type=FeatureType.STATE,
         )
 
-        # Update output features based on annotation_mode
+        # 根据 annotation_mode 更新输出特征
         if self.annotation_mode in ["dense_only", "dual"]:
             self.output_features["sparse_stage"] = PolicyFeature(
                 shape=(self.num_frames, self.num_sparse_stages), type=FeatureType.REWARD
@@ -176,7 +176,7 @@ class SARMConfig(RewardModelConfig):
             raise ValueError(f"num_dense_stages must be at least 2, got {self.num_dense_stages}")
 
     def get_optimizer_preset(self) -> AdamWConfig:
-        """Get default optimizer configuration for SARM training."""
+        """获取 SARM 训练的默认优化器配置。"""
         return AdamWConfig(
             lr=5e-5,
             weight_decay=1e-3,
@@ -185,7 +185,7 @@ class SARMConfig(RewardModelConfig):
         )
 
     def get_scheduler_preset(self) -> CosineDecayWithWarmupSchedulerConfig:
-        """Get default learning rate scheduler configuration."""
+        """获取默认的学习率调度器配置。"""
         return CosineDecayWithWarmupSchedulerConfig(
             peak_lr=5e-5,
             decay_lr=5e-6,
@@ -198,15 +198,15 @@ class SARMConfig(RewardModelConfig):
 
     @property
     def uses_dual_heads(self) -> bool:
-        """Whether the model uses dual heads (dense_only or dual annotation modes)."""
+        """模型是否使用双头（dense_only 或 dual 标注模式）。"""
         return self.annotation_mode in ["dense_only", "dual"]
 
     @property
     def num_frames(self) -> int:
-        """Total number of frames in sequence.
+        """序列中的总帧数。
 
-        For training: 1 + n_obs_steps + max_rewind_steps
-        The sequence is: [obs_frames (n_obs_steps + 1)] + [rewind_frames (max_rewind_steps)]
+        训练时：1 + n_obs_steps + max_rewind_steps
+        序列为：[obs_frames (n_obs_steps + 1)] + [rewind_frames (max_rewind_steps)]
         """
         return 1 + self.n_obs_steps + self.max_rewind_steps
 
@@ -216,13 +216,13 @@ class SARMConfig(RewardModelConfig):
 
     @property
     def observation_delta_indices(self) -> list[int]:
-        """Bidirectional frame sampling centered on target frame.
+        """以目标帧为中心的双向帧采样。
 
-        Example with n_obs_steps=8, gap=30:
-        Before: [-120, -90, -60, -30]  (4 frames)
-        Current: [0]                   (1 frame)
-        After:  [30, 60, 90, 120]      (4 frames)
-        Total: 9 frames
+        n_obs_steps=8、gap=30 的示例：
+        之前：[-120, -90, -60, -30]  （4 帧）
+        当前：[0]                   （1 帧）
+        之后：[30, 60, 90, 120]      （4 帧）
+        总计：9 帧
         """
         half_steps = self.n_obs_steps // 2
 
@@ -230,14 +230,14 @@ class SARMConfig(RewardModelConfig):
         future_deltas = [self.frame_gap * i for i in range(1, half_steps + 1)]
         obs_deltas = past_deltas + [0] + future_deltas
 
-        # Rewind placeholders
+        # 回退占位符
         rewind_deltas = [-self.frame_gap * (i + 1) for i in range(self.max_rewind_steps)]
 
         return obs_deltas + rewind_deltas
 
     @property
     def action_delta_indices(self) -> None:
-        """SARM is a reward model, not an action policy."""
+        """SARM 是奖励模型，不是动作策略。"""
         return None
 
     @property

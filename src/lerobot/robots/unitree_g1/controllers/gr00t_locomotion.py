@@ -33,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 GROOT_DEFAULT_ANGLES = np.zeros(29, dtype=np.float32)
-GROOT_DEFAULT_ANGLES[[0, 6]] = -0.1  # Hip pitch
-GROOT_DEFAULT_ANGLES[[3, 9]] = 0.3  # Knee
-GROOT_DEFAULT_ANGLES[[4, 10]] = -0.2  # Ankle pitch
+GROOT_DEFAULT_ANGLES[[0, 6]] = -0.1  # 髋关节俯仰
+GROOT_DEFAULT_ANGLES[[3, 9]] = 0.3  # 膝关节
+GROOT_DEFAULT_ANGLES[[4, 10]] = -0.2  # 踝关节俯仰
 
-# Control parameters
+# 控制参数
 ACTION_SCALE = 0.25
 CONTROL_DT = 0.02  # 50Hz
 ANG_VEL_SCALE: float = 0.25
@@ -52,14 +52,14 @@ DEFAULT_GROOT_REPO_ID = "nepyope/GR00T-WholeBodyControl_g1"
 def load_groot_policies(
     repo_id: str = DEFAULT_GROOT_REPO_ID,
 ) -> tuple[ort.InferenceSession, ort.InferenceSession]:
-    """Load GR00T dual-policy system (Balance + Walk) from the hub.
+    """从 Hub 加载 GR00T 双策略系统（Balance + Walk）。
 
     Args:
-        repo_id: Hugging Face Hub repository ID containing the ONNX policies.
+        repo_id: 包含 ONNX 策略的 Hugging Face Hub 仓库 ID。
     """
     logger.info(f"Loading GR00T dual-policy system from the hub ({repo_id})...")
 
-    # Download ONNX policies from Hugging Face Hub
+    # 从 Hugging Face Hub 下载 ONNX 策略
     balance_path = hf_hub_download(
         repo_id=repo_id,
         filename="GR00T-WholeBodyControl-Balance.onnx",
@@ -69,7 +69,7 @@ def load_groot_policies(
         filename="GR00T-WholeBodyControl-Walk.onnx",
     )
 
-    # Load ONNX policies
+    # 加载 ONNX 策略
     policy_balance = ort.InferenceSession(balance_path)
     policy_walk = ort.InferenceSession(walk_path)
 
@@ -79,35 +79,35 @@ def load_groot_policies(
 
 
 class GrootLocomotionController(RobotController):
-    """GR00T lower-body locomotion controller for the Unitree G1."""
+    """用于 Unitree G1 的 GR00T 下半身行走控制器。"""
 
     control_dt = CONTROL_DT
 
     def __init__(self):
-        # Load policies
+        # 加载策略
         self.policy_balance, self.policy_walk = load_groot_policies()
 
         self.default_angles = GROOT_DEFAULT_ANGLES
         self.cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # vx, vy, theta_dot
 
-        # Robot state
+        # 机器人状态
         self.groot_qj_all = np.zeros(29, dtype=np.float32)
         self.groot_dqj_all = np.zeros(29, dtype=np.float32)
         self.groot_action = np.zeros(15, dtype=np.float32)
         self.groot_obs_single = np.zeros(86, dtype=np.float32)
         self.groot_obs_history = deque(maxlen=6)
         self.groot_obs_stacked = np.zeros(516, dtype=np.float32)
-        self.groot_height_cmd = 0.74  # Default base height
+        self.groot_height_cmd = 0.74  # 默认基座高度
         self.groot_orientation_cmd = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
-        # Input to GR00T is 6 frames (6*86D=516)
+        # GR00T 的输入为 6 帧（6*86 维 = 516 维）
         for _ in range(6):
             self.groot_obs_history.append(np.zeros(86, dtype=np.float32))
 
         logger.info("GrootLocomotionController initialized")
 
     def reset(self) -> None:
-        """Reset internal state for a new episode."""
+        """为新的回合重置内部状态。"""
         self.cmd[:] = 0.0
         self.groot_qj_all[:] = 0.0
         self.groot_dqj_all[:] = 0.0
@@ -121,52 +121,52 @@ class GrootLocomotionController(RobotController):
             self.groot_obs_history.append(np.zeros(86, dtype=np.float32))
 
     def run_step(self, action: dict, lowstate) -> dict:
-        """Run one step of the locomotion controller.
+        """运行行走控制器的一个步骤。
 
         Args:
-            action: Action dict containing remote.lx/ly/rx/ry and buttons
-            lowstate: Robot lowstate containing motor positions/velocities and IMU
+            action: 包含 remote.lx/ly/rx/ry 和按键的动作字典
+            lowstate: 包含电机位置/速度和 IMU 的机器人低层状态
 
         Returns:
-            Action dict for lower body joints (0-14)
+            下半身关节（0-14）的动作字典
         """
         if lowstate is None:
             return {}
 
         buttons = [int(action.get(k, 0)) for k in REMOTE_BUTTONS]
-        if buttons[0]:  # R1 - raise waist
+        if buttons[0]:  # R1 - 升高腰部
             self.groot_height_cmd += 0.001
             self.groot_height_cmd = np.clip(self.groot_height_cmd, 0.50, 1.00)
-        if buttons[4]:  # R2 - lower waist
+        if buttons[4]:  # R2 - 降低腰部
             self.groot_height_cmd -= 0.001
             self.groot_height_cmd = np.clip(self.groot_height_cmd, 0.50, 1.00)
 
         lx, ly, rx, _ry = (action.get(k, 0.0) for k in REMOTE_AXES)
-        self.cmd[0] = ly  # Forward/backward
-        self.cmd[1] = -lx  # Left/right (negated)
-        self.cmd[2] = -rx  # Rotation rate (negated)
+        self.cmd[0] = ly  # 前进/后退
+        self.cmd[1] = -lx  # 左/右（取反）
+        self.cmd[2] = -rx  # 旋转角速度（取反）
 
-        # Get joint positions and velocities from lowstate
+        # 从低层状态获取关节位置和速度
         for motor in G1_29_JointIndex:
             idx = motor.value
             self.groot_qj_all[idx] = lowstate.motor_state[idx].q
             self.groot_dqj_all[idx] = lowstate.motor_state[idx].dq
 
-        # Scale joint positions and velocities
+        # 缩放关节位置和速度
         qj_obs = self.groot_qj_all.copy()
         dqj_obs = self.groot_dqj_all.copy()
 
-        # Express IMU data in gravity frame of reference
+        # 将 IMU 数据转换到重力参考系下表示
         quat = lowstate.imu_state.quaternion
         ang_vel = np.array(lowstate.imu_state.gyroscope, dtype=np.float32)
         gravity_orientation = get_gravity_orientation(quat)
 
-        # Scale joint positions and velocities before policy inference
+        # 在策略推理前缩放关节位置和速度
         qj_obs = (qj_obs - GROOT_DEFAULT_ANGLES) * DOF_POS_SCALE
         dqj_obs = dqj_obs * DOF_VEL_SCALE
         ang_vel_scaled = ang_vel * ANG_VEL_SCALE
 
-        # Build single frame observation
+        # 构建单帧观测
         self.groot_obs_single[:3] = self.cmd * np.array(CMD_SCALE)
         self.groot_obs_single[3] = self.groot_height_cmd
         self.groot_obs_single[4:7] = self.groot_orientation_cmd
@@ -174,12 +174,12 @@ class GrootLocomotionController(RobotController):
         self.groot_obs_single[10:13] = gravity_orientation
         self.groot_obs_single[13:42] = qj_obs
         self.groot_obs_single[42:71] = dqj_obs
-        self.groot_obs_single[71:86] = self.groot_action  # 15D previous actions
+        self.groot_obs_single[71:86] = self.groot_action  # 15 维上一时刻动作
 
-        # Add to history and stack observations (6 frames × 86D = 516D)
+        # 加入历史并堆叠观测（6 帧 × 86 维 = 516 维）
         self.groot_obs_history.append(self.groot_obs_single.copy())
 
-        # Stack all 6 frames into 516D vector
+        # 将全部 6 帧堆叠为 516 维向量
         for i, obs_frame in enumerate(self.groot_obs_history):
             start_idx = i * 86
             end_idx = start_idx + 86
@@ -188,17 +188,17 @@ class GrootLocomotionController(RobotController):
         cmd_magnitude = np.linalg.norm(self.cmd)
         selected_policy = (
             self.policy_balance if cmd_magnitude < 0.05 else self.policy_walk
-        )  # Balance/standing policy for small commands, walking policy for movement commands
+        )  # 小指令用平衡/站立策略，移动指令用行走策略
 
-        # Run policy inference
+        # 运行策略推理
         ort_inputs = {selected_policy.get_inputs()[0].name: np.expand_dims(self.groot_obs_stacked, axis=0)}
         ort_outs = selected_policy.run(None, ort_inputs)
         self.groot_action = ort_outs[0].squeeze()
 
-        # Transform action back to target joint positions
+        # 将动作转换回目标关节位置
         target_dof_pos_15 = GROOT_DEFAULT_ANGLES[:15] + self.groot_action * ACTION_SCALE
 
-        # Build action dict
+        # 构建动作字典
         action_dict = {}
         for i in range(15):
             motor_name = G1_29_JointIndex(i).name

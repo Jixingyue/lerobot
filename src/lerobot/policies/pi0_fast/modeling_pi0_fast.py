@@ -26,7 +26,7 @@ from torch import Tensor, nn
 
 from lerobot.utils.import_utils import _scipy_available, _transformers_available, require_package
 
-# Conditional import for type checking and lazy loading
+# 用于类型检查和延迟加载的条件导入
 if TYPE_CHECKING or _scipy_available:
     from scipy.fftpack import idct
 else:
@@ -66,8 +66,8 @@ class ActionSelectKwargs(TypedDict, total=False):
     temperature: float | None
 
 
-class GemmaConfig:  # see openpi `gemma.py: Config`
-    """Configuration for Gemma model variants."""
+class GemmaConfig:  # 参见 openpi `gemma.py: Config`
+    """Gemma 模型变体的配置。"""
 
     def __init__(self, width, depth, mlp_dim, num_heads, num_kv_heads, head_dim):
         self.width = width
@@ -78,8 +78,8 @@ class GemmaConfig:  # see openpi `gemma.py: Config`
         self.head_dim = head_dim
 
 
-def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_config`
-    """Returns config for specified gemma variant."""
+def get_gemma_config(variant: str) -> GemmaConfig:  # 参见 openpi `gemma.py: get_config`
+    """返回指定 gemma 变体的配置。"""
     if variant == "gemma_300m":
         return GemmaConfig(
             width=1024,
@@ -103,7 +103,7 @@ def get_gemma_config(variant: str) -> GemmaConfig:  # see openpi `gemma.py: get_
 
 
 class PI0FastPaliGemma(nn.Module):
-    """PaliGemma model for PI0Fast"""
+    """用于 PI0Fast 的 PaliGemma 模型"""
 
     def __init__(
         self,
@@ -136,8 +136,8 @@ class PI0FastPaliGemma(nn.Module):
 
         self.paligemma = PaliGemmaForConditionalGenerationWithPiGemma(config=vlm_config_hf)
 
-        # Use PI Gemma (AdaRMS) as language model when use_adarms[0] is True so that
-        # forward(..., adarms_cond=...) is supported (same as pi0/pi05).
+        # 当 use_adarms[0] 为 True 时，使用 PI Gemma（AdaRMS）作为语言模型，
+        # 以支持 forward(..., adarms_cond=...)（与 pi0/pi05 相同）。
         if use_adarms[0]:
             text_config = self.paligemma.config.text_config
             del self.paligemma.model.language_model
@@ -154,8 +154,8 @@ class PI0FastPaliGemma(nn.Module):
         else:
             raise ValueError(f"Invalid precision: {precision}")
 
-        # Keep full vision path in float32 so we never toggle (toggle causes optimizer
-        # "same dtype" error). Align with PI05.
+        # 将完整的视觉路径保持为 float32，以避免来回切换（切换会导致
+        # 优化器报 "same dtype" 错误）。与 PI05 保持一致。
         params_to_keep_float32 = [
             "vision_tower",
             "multi_modal_projector",
@@ -169,7 +169,7 @@ class PI0FastPaliGemma(nn.Module):
                 param.data = param.data.to(dtype=torch.float32)
 
     def embed_image(self, image: torch.Tensor):
-        # Vision tower and multi_modal_projector are kept in float32 (params_to_keep_float32). Align with PI05.
+        # 视觉塔（vision tower）和 multi_modal_projector 保持为 float32（params_to_keep_float32）。与 PI05 保持一致。
         out_dtype = image.dtype
         if image.dtype != torch.float32:
             image = image.to(torch.float32)
@@ -205,15 +205,15 @@ class PI0FastPaliGemma(nn.Module):
                 adarms_cond=adarms_cond[0] if adarms_cond is not None else None,
             )
             prefix_past_key_values = prefix_output.past_key_values
-            # prefix_output to be used for the language head
-            # shape: [batch_size, seq_len, hidden_size] with hidden_size = 2048
+            # prefix_output 供语言头使用
+            # 形状：[batch_size, seq_len, hidden_size]，其中 hidden_size = 2048
             prefix_output = prefix_output.last_hidden_state
             suffix_output = None
         return [prefix_output, suffix_output], prefix_past_key_values
 
 
-class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
-    """Core PI0Fast PyTorch model."""
+class PI0FastPytorch(nn.Module):  # 参见 openpi `PI0Pytorch`
+    """PI0Fast 核心 PyTorch 模型。"""
 
     def __init__(
         self,
@@ -234,19 +234,19 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
             precision=config.dtype,
         )
 
-        # Initialize gradient checkpointing flag
+        # 初始化梯度检查点标志
         self.gradient_checkpointing_enabled = False
 
-        # Compile model if requested
+        # 如有需要则编译模型
         if config.compile_model:
             torch.set_float32_matmul_precision("high")
             self.sample_actions_fast = torch.compile(self.sample_actions_fast, mode=config.compile_mode)
             self.forward = torch.compile(self.forward, mode=config.compile_mode)
 
     def gradient_checkpointing_enable(self):
-        """Enable gradient checkpointing for memory optimization."""
+        """启用梯度检查点以优化显存。"""
         self.gradient_checkpointing_enabled = True
-        # Call the proper gradient_checkpointing_enable() method with use_reentrant=False for better memory efficiency
+        # 调用正确的 gradient_checkpointing_enable() 方法，并使用 use_reentrant=False 以获得更好的显存效率
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing_enable(
             gradient_checkpointing_kwargs={"use_reentrant": False}
         )
@@ -256,15 +256,15 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         logging.info("Enabled gradient checkpointing for PI0FastPytorch model")
 
     def gradient_checkpointing_disable(self):
-        """Disable gradient checkpointing."""
+        """禁用梯度检查点。"""
         self.gradient_checkpointing_enabled = False
-        # Call the proper gradient_checkpointing_disable() method
+        # 调用正确的 gradient_checkpointing_disable() 方法
         self.paligemma_with_expert.paligemma.model.language_model.gradient_checkpointing_disable()
         self.paligemma_with_expert.paligemma.model.vision_tower.gradient_checkpointing_disable()
         logging.info("Disabled gradient checkpointing for PI0FastPytorch model")
 
     def _apply_checkpoint(self, func, *args, **kwargs):
-        """Helper method to apply gradient checkpointing if enabled."""
+        """辅助方法：如果启用了梯度检查点则应用之。"""
         if self.gradient_checkpointing_enabled and self.training:
             return torch.utils.checkpoint.checkpoint(
                 func, *args, use_reentrant=False, preserve_rng_state=False, **kwargs
@@ -280,26 +280,26 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         fast_action_tokens=None,
         fast_action_masks=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, int]:
-        """Embed images, language tokens, and FAST action tokens.
+        """嵌入图像、语言 token 和 FAST 动作 token。
 
-        Attention pattern:
-        - Images + Language: bidirectional among themselves
-        - FAST: attend to images + language, causal among themselves
+        注意力模式：
+        - 图像 + 语言：彼此之间双向关注
+        - FAST：关注图像 + 语言，彼此之间为因果（causal）关注
 
-        Args:
-            images: List of image tensors
-            img_masks: List of image masks
-            tokens: Language instruction tokens
-            masks: Attention masks for tokens
-            fast_action_tokens: FAST action tokens (discrete token IDs)
-            fast_action_masks: Padding masks for FAST action tokens
+        参数：
+            images: 图像张量列表
+            img_masks: 图像掩码列表
+            tokens: 语言指令 token
+            masks: token 的注意力掩码
+            fast_action_tokens: FAST 动作 token（离散 token ID）
+            fast_action_masks: FAST 动作 token 的填充掩码
 
-        Returns:
-            embs: Concatenated embeddings [images, tokens, fast_action_tokens]
-            pad_masks: Padding masks
-            att_masks: 2D attention mask
-            total_T_images: Total number of image tokens
-            num_fast_embs: Number of FAST action token embeddings
+        返回：
+            embs: 拼接后的嵌入 [images, tokens, fast_action_tokens]
+            pad_masks: 填充掩码
+            att_masks: 2D 注意力掩码
+            total_T_images: 图像 token 总数
+            num_fast_embs: FAST 动作 token 嵌入的数量
         """
         embs = []
         pad_masks = []
@@ -307,7 +307,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         total_t_images = 0
         num_fast_embs = 0
 
-        # Process images
+        # 处理图像
         for img, img_mask in zip(images, img_masks, strict=True):
 
             def image_embed_func(img):
@@ -321,7 +321,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
             att_mask_segments.append(("image", num_img_embs))
             total_t_images += num_img_embs
 
-        # Process language instruction tokens
+        # 处理语言指令 token
         def lang_embed_func(tokens):
             lang_emb = self.paligemma_with_expert.embed_language_tokens(tokens)
             return lang_emb
@@ -333,7 +333,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         num_lang_embs = lang_emb.shape[1]
         att_mask_segments.append(("language", num_lang_embs))
 
-        # Process FAST action tokens (discrete token IDs)
+        # 处理 FAST 动作 token（离散 token ID）
         if fast_action_tokens is not None:
 
             def fast_action_embed_func(fast_action_tokens):
@@ -350,19 +350,19 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         embs = torch.cat(embs, dim=1)
         pad_masks = torch.cat(pad_masks, dim=1)
 
-        # Create custom 2D attention mask:
-        # - Images + Language: bidirectional among themselves
-        # - FAST: attend to images + language, causal among themselves
+        # 创建自定义 2D 注意力掩码：
+        # - 图像 + 语言：彼此之间双向关注
+        # - FAST：关注图像 + 语言，彼此之间为因果（causal）关注
         att_masks = self._create_custom_attention_mask_fast(att_mask_segments, pad_masks, bsize)
 
         return embs, pad_masks, att_masks, total_t_images, num_fast_embs
 
     def _create_custom_attention_mask_fast(self, att_mask_segments, pad_masks, bsize):
-        """Create custom 2D attention mask.
+        """创建自定义 2D 注意力掩码。
 
-        Attention rules:
-        - Images + Language: bidirectional among themselves
-        - FAST: attend to images + language, causal among themselves
+        注意力规则：
+        - 图像 + 语言：彼此之间双向关注
+        - FAST：关注图像 + 语言，彼此之间为因果（causal）关注
         """
         total_len = sum(length for _, length in att_mask_segments)
         device = pad_masks.device
@@ -377,7 +377,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         for _i, (query_type, query_start, query_end) in enumerate(positions):
             for _j, (key_type, key_start, key_end) in enumerate(positions):
-                # Images and Language can attend to each other bidirectionally
+                # 图像和语言可以双向地相互关注
                 if (
                     query_type in ["image", "language"]
                     and key_type in ["image", "language"]
@@ -386,13 +386,13 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
                 ):
                     att_2d_masks[:, query_start:query_end, key_start:key_end] = True
 
-                # FAST tokens attend causally to themselves
+                # FAST token 以因果方式关注自身
                 elif query_type == "fast" and key_type == "fast":
                     fast_len = query_end - query_start
                     causal_mask = torch.tril(torch.ones(fast_len, fast_len, dtype=torch.bool, device=device))
                     att_2d_masks[:, query_start:query_end, key_start:key_end] = causal_mask[None, :, :]
 
-        # Apply padding masks
+        # 应用填充掩码
         pad_2d_masks = pad_masks[:, None, :] * pad_masks[:, :, None]
         att_2d_masks = att_2d_masks & pad_2d_masks
 
@@ -407,26 +407,25 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         fast_action_tokens,
         fast_action_masks,
     ) -> dict:
-        """Forward pass for PI0Fast.
+        """PI0Fast 的前向传播。
 
-        This implements the Pi0FAST training objective: predict next action token
-        using cross-entropy loss.
+        实现了 Pi0FAST 训练目标：使用交叉熵损失预测下一个动作 token。
 
-        Args:
-            images: List of image tensors
-            img_masks: List of image masks
-            tokens: Language instruction tokens
-            masks: Attention masks for tokens
-            fast_action_tokens: Discrete action token IDs [B, max_action_tokens]
-            fast_action_masks: Padding masks for fast action tokens [B, max_action_tokens]
+        参数：
+            images: 图像张量列表
+            img_masks: 图像掩码列表
+            tokens: 语言指令 token
+            masks: token 的注意力掩码
+            fast_action_tokens: 离散动作 token ID [B, max_action_tokens]
+            fast_action_masks: 快速动作 token 的填充掩码 [B, max_action_tokens]
 
-        Returns:
-            Dictionary with 'fast_loss' and 'loss' keys
+        返回：
+            包含 'fast_loss' 和 'loss' 键的字典
         """
         if fast_action_tokens is None or fast_action_masks is None:
             raise ValueError("fast_action_tokens and fast_action_masks are required for FAST-only mode")
 
-        # Embed prefix with FAST tokens
+        # 嵌入带 FAST token 的前缀
         prefix_embs, prefix_pad_masks, prefix_att_masks, total_t_images, num_fast_embs = (
             self.embed_prefix_fast(
                 images,
@@ -438,14 +437,14 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
             )
         )
 
-        # Convert embeddings to bfloat16 if needed
+        # 如有需要，将嵌入转换为 bfloat16
         if (
             self.paligemma_with_expert.paligemma.model.language_model.layers[0].self_attn.q_proj.weight.dtype
             == torch.bfloat16
         ):
             prefix_embs = prefix_embs.to(dtype=torch.bfloat16)
 
-        # for next-token prediction, input tokens [0:T-1] to predict tokens [1:T]
+        # 对于下一 token 预测，输入 token [0:T-1] 以预测 token [1:T]
         input_embs = prefix_embs
         input_pad_masks = prefix_pad_masks
         input_att_masks = prefix_att_masks
@@ -453,34 +452,34 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         position_ids = torch.cumsum(input_pad_masks, dim=1) - 1
         att_2d_4d = prepare_attention_masks_4d(input_att_masks, dtype=input_embs.dtype)
 
-        # forward pass through paligemma (language model)
+        # 通过 paligemma（语言模型）进行前向传播
         (prefix_out, _), _ = self.paligemma_with_expert.forward(
             attention_mask=att_2d_4d,
             position_ids=position_ids,
             past_key_values=None,
-            inputs_embeds=[input_embs, None],  # No suffix/action expert
+            inputs_embeds=[input_embs, None],  # 无后缀/动作专家
             use_cache=False,
             adarms_cond=[None, None],
         )
 
-        # Get logits for FAST action tokens using the FAST LM head
-        # only compute logits for the positions that predict FAST tokens
+        # 使用 FAST LM 头获取 FAST 动作 token 的 logits
+        # 仅对预测 FAST token 的位置计算 logits
         lm_head = self.paligemma_with_expert.paligemma.lm_head
 
-        # Targets are the FAST action tokens
+        # 目标是 FAST 动作 token
         fast_targets = fast_action_tokens  # (B, num_fast_embs)
 
-        # extract logits for FAST token prediction
+        # 提取用于 FAST token 预测的 logits
         fast_hidden = prefix_out[:, -fast_targets.shape[1] :, :]
         fast_logits_for_pred = lm_head(fast_hidden)  # (B, num_fast_embs, gemma_vocab_size)
 
-        # Shift left for next-step prediction and shift target
-        # logits[:, i] predicts targets[:, i+1]
-        fast_logits_for_pred = fast_logits_for_pred[:, :-1, :]  # shift logits left
-        fast_targets = fast_targets[:, 1:]  # shift targets right
-        fast_action_masks = fast_action_masks[:, 1:]  # shift masks to match targets
+        # 左移以进行下一步预测，并右移目标
+        # logits[:, i] 预测 targets[:, i+1]
+        fast_logits_for_pred = fast_logits_for_pred[:, :-1, :]  # logits 左移
+        fast_targets = fast_targets[:, 1:]  # 目标右移
+        fast_action_masks = fast_action_masks[:, 1:]  # 掩码右移以与目标对齐
 
-        # compute cross-entropy loss
+        # 计算交叉熵损失
         loss_fct = torch.nn.CrossEntropyLoss(reduction="none")
         fast_logits_flat = fast_logits_for_pred.reshape(-1, fast_logits_for_pred.size(-1))
         fast_targets_flat = fast_targets.reshape(-1)
@@ -488,7 +487,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         fast_loss_per_token = loss_fct(fast_logits_flat, fast_targets_flat)
         fast_loss_per_token = fast_loss_per_token.reshape(fast_targets.shape)
 
-        # apply mask and compute mean loss
+        # 应用掩码并计算平均损失
         masked_fast_loss = fast_loss_per_token * fast_action_masks.float()
         fast_loss = masked_fast_loss.sum() / fast_action_masks.sum().clamp(min=1)
 
@@ -508,9 +507,9 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         temperature=0.0,
     ) -> torch.Tensor:
         """
-        Inefficient but safe autoregressive decoding for FAST tokens.
-        Matches the pattern of _generate_subtask_tokens.
-        TODO: jadechoghari, should we move this logic to PI0FastPolicy class?
+        FAST token 的低效但安全的自回归解码。
+        与 _generate_subtask_tokens 的模式一致。
+        TODO: jadechoghari，我们是否应该将此逻辑移到 PI0FastPolicy 类中？
         """
         if max_decoding_steps is None:
             max_decoding_steps = self.config.max_action_tokens
@@ -519,15 +518,15 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         device = tokens.device
         lm_head = self.paligemma_with_expert.paligemma.lm_head
 
-        # add bos token after tokens
+        # 在 token 之后添加 bos token
         bos_token = torch.full(
             (bsize, 1), self._paligemma_tokenizer.bos_token_id, dtype=torch.long, device=device
         )
         tokens = torch.cat([tokens, bos_token], dim=1)
         masks = torch.cat([masks, torch.ones((bsize, 1), dtype=torch.bool, device=device)], dim=1)
 
-        # 1. Initial Embedding (matches training prefix)
-        # prefix_embs will include [Images, Language Prompt, BOS]
+        # 1. 初始嵌入（与训练前缀一致）
+        # prefix_embs 将包含 [图像、语言提示、BOS]
         prefix_embs, prefix_pad_masks, prefix_att_masks, total_t_images, _ = self.embed_prefix_fast(
             images, img_masks, tokens, masks, fast_action_tokens=None, fast_action_masks=None
         )
@@ -540,13 +539,13 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
 
         generated_action_tokens = torch.zeros((bsize, max_decoding_steps), dtype=torch.long, device=device)
 
-        # 2. Decoding Loop (each step re-computes full sequence)
+        # 2. 解码循环（每一步都重新计算完整序列）
         for t in range(max_decoding_steps):
-            # always re-calculate position IDs from the current pad mask
+            # 始终根据当前的填充掩码重新计算位置 ID
             position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
             att_4d = prepare_attention_masks_4d(prefix_att_masks, dtype=prefix_embs.dtype)
 
-            # full forward pass (no kv cache)
+            # 完整的前向传播（无 kv 缓存）
             (prefix_out, _), _ = self.paligemma_with_expert.forward(
                 attention_mask=att_4d,
                 position_ids=position_ids,
@@ -556,7 +555,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
                 adarms_cond=[None, None],
             )
 
-            # predict next token from the very last sequence position
+            # 从序列的最后一个位置预测下一个 token
             last_logits = lm_head(prefix_out[:, -1:, :])  # (B, 1, vocab_size)
 
             if temperature > 0:
@@ -567,27 +566,27 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
 
             generated_action_tokens[:, t] = next_token.squeeze(-1)
 
-            # 3. Update sequence for next iteration (unless it's the last step)
+            # 3. 为下一次迭代更新序列（除非是最后一步）
             if t < max_decoding_steps - 1:
-                # embed the newly generated token
+                # 嵌入新生成的 token
                 next_token_emb = self.paligemma_with_expert.embed_language_tokens(next_token)
                 if prefix_embs.dtype == torch.bfloat16:
                     next_token_emb = next_token_emb.to(dtype=torch.bfloat16)
 
-                # append to embeddings
+                # 追加到嵌入中
                 prefix_embs = torch.cat([prefix_embs, next_token_emb], dim=1)
 
-                # update padding mask (new token is always valid/1)
+                # 更新填充掩码（新 token 始终有效/为 1）
                 prefix_pad_masks = torch.cat(
                     [prefix_pad_masks, torch.ones((bsize, 1), dtype=torch.bool, device=device)], dim=1
                 )
 
-                # update 2d attention mask: grow the matrix
+                # 更新 2D 注意力掩码：扩展矩阵
                 old_len = prefix_att_masks.shape[1]
                 new_len = old_len + 1
                 new_att_masks = torch.zeros((bsize, new_len, new_len), dtype=torch.bool, device=device)
                 new_att_masks[:, :old_len, :old_len] = prefix_att_masks
-                # new token attends to all non-padding tokens in the updated sequence
+                # 新 token 关注更新后序列中所有非填充的 token
                 new_att_masks[:, -1, :] = prefix_pad_masks
                 prefix_att_masks = new_att_masks
         return generated_action_tokens
@@ -603,13 +602,12 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         temperature=0.0,
     ) -> torch.Tensor:
         """
-        Optimized autoregressive decoding for FAST tokens using KV Caching.
+        使用 KV 缓存优化的 FAST token 自回归解码。
 
-        Greedy decoding stops once every sequence emits the end-of-action marker. The
-        returned tensor keeps its fixed shape, with positions not generated after the
-        batch-wide stop left zero-filled. Stochastic decoding always runs to
-        ``max_decoding_steps`` so early stopping does not change the RNG state used by
-        subsequent calls.
+        一旦所有序列都输出了动作结束标记，贪心解码就会停止。返回的
+        张量保持其固定形状，批次级停止之后未生成的位置保持为零填充。
+        随机解码始终运行到 ``max_decoding_steps``，这样提前停止就不会
+        改变后续调用所使用的随机数状态。
         """
         if max_decoding_steps is None:
             max_decoding_steps = self.config.max_action_tokens
@@ -618,53 +616,53 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         device = tokens.device
         lm_head = self.paligemma_with_expert.paligemma.lm_head
 
-        # detokenize_actions() cuts at the first "|", so greedy decoding can stop once
-        # every sequence has emitted it. Keep stochastic decoding unchanged because
-        # skipping multinomial calls would shift the RNG state for subsequent calls.
+        # detokenize_actions() 会在第一个 "|" 处截断，因此一旦所有序列都输出了
+        # 该标记，贪心解码就可以停止。随机解码保持不变，因为跳过
+        # multinomial 调用会使后续调用的随机数状态发生偏移。
         end_of_action_token_id = self._paligemma_tokenizer.convert_tokens_to_ids("|")
         finished = torch.zeros(bsize, dtype=torch.bool, device=device) if temperature == 0 else None
 
-        # --- 1. PREFILL PHASE ---
-        # Process Images + Text Prompt + BOS token once to populate the KV cache.
+        # --- 1. 预填充阶段 ---
+        # 一次性处理 图像 + 文本提示 + BOS token，以填充 KV 缓存。
 
-        # Add BOS token to the prompt
+        # 向提示添加 BOS token
         bos_token = torch.full(
             (bsize, 1), self._paligemma_tokenizer.bos_token_id, dtype=torch.long, device=device
         )
         tokens_in = torch.cat([tokens, bos_token], dim=1)
         masks_in = torch.cat([masks, torch.ones((bsize, 1), dtype=torch.bool, device=device)], dim=1)
 
-        # Embed prefix [Images, Language, BOS]
-        # fast_action_tokens=None means we are just embedding the condition (images+text)
+        # 嵌入前缀 [图像、语言、BOS]
+        # fast_action_tokens=None 表示我们只是嵌入条件（图像+文本）
         prefix_embs, prefix_pad_masks, prefix_att_masks, total_t_images, _ = self.embed_prefix_fast(
             images, img_masks, tokens_in, masks_in, fast_action_tokens=None, fast_action_masks=None
         )
 
-        # Ensure correct precision (bfloat16/float32)
+        # 确保精度正确（bfloat16/float32）
         if (
             self.paligemma_with_expert.paligemma.model.language_model.layers[0].self_attn.q_proj.weight.dtype
             == torch.bfloat16
         ):
             prefix_embs = prefix_embs.to(dtype=torch.bfloat16)
 
-        # Create position IDs (cumsum of mask - 1)
+        # 创建位置 ID（掩码的累加和减 1）
         position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
 
-        # Create 4D mask for the prefix
+        # 为前缀创建 4D 掩码
         att_4d = prepare_attention_masks_4d(prefix_att_masks, dtype=prefix_embs.dtype)
 
-        # Forward pass (Prefill) with use_cache=True
-        # We only pass [prefix_embs, None] because we aren't using the suffix (expert) model yet
+        # 使用 use_cache=True 进行前向传播（预填充）
+        # 我们只传入 [prefix_embs, None]，因为此时尚未使用后缀（专家）模型
         (prefix_out, _), past_key_values = self.paligemma_with_expert.forward(
             attention_mask=att_4d,
             position_ids=position_ids,
             past_key_values=None,
             inputs_embeds=[prefix_embs, None],
-            use_cache=True,  # Enable caching
+            use_cache=True,  # 启用缓存
             adarms_cond=[None, None],
         )
 
-        # Sample the first action token from the last logit of the prefix
+        # 从前缀的最后一个 logit 采样第一个动作 token
         last_logits = lm_head(prefix_out[:, -1:, :])  # (B, 1, V)
         if temperature > 0:
             probs = torch.softmax(last_logits[:, -1] / temperature, dim=-1)
@@ -672,7 +670,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
         else:
             next_token = torch.argmax(last_logits[:, -1], dim=-1, keepdim=True)
 
-        # Initialize storage for generated tokens
+        # 初始化生成 token 的存储
         generated_action_tokens = torch.zeros((bsize, max_decoding_steps), dtype=torch.long, device=device)
         generated_action_tokens[:, 0] = next_token.squeeze(-1)
         if finished is not None:
@@ -680,46 +678,46 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
             if bool(finished.all()):
                 return generated_action_tokens
 
-        # Track valid tokens mask (0 for pad, 1 for valid)
-        # We need this to tell the new token what it can attend to (images + text + past actions)
+        # 跟踪有效 token 掩码（填充为 0，有效为 1）
+        # 我们需要用它来告诉新 token 可以关注哪些内容（图像 + 文本 + 历史动作）
         current_pad_mask = prefix_pad_masks
 
-        # --- 2. DECODING PHASE ---
-        # Generate remaining tokens one by one using the cache.
+        # --- 2. 解码阶段 ---
+        # 使用缓存逐个生成剩余的 token。
 
         for t in range(1, max_decoding_steps):
-            # Embed the single previous token
-            # We use embed_language_tokens directly to avoid overhead of full prefix embedding
+            # 嵌入前一个单独的 token
+            # 直接使用 embed_language_tokens，以避免完整前缀嵌入的开销
             next_token_emb = self.paligemma_with_expert.embed_language_tokens(next_token)
             if prefix_embs.dtype == torch.bfloat16:
                 next_token_emb = next_token_emb.to(dtype=torch.bfloat16)
 
-            # Update Pad Mask: append 1s for the new valid token
+            # 更新填充掩码：为新的有效 token 追加 1
             new_column = torch.ones((bsize, 1), dtype=torch.bool, device=device)
             current_pad_mask = torch.cat([current_pad_mask, new_column], dim=1)
 
-            # Update Position IDs for the single new token
+            # 更新单个新 token 的位置 ID
             current_position_ids = (torch.sum(current_pad_mask, dim=1, keepdim=True) - 1).long()
 
-            # Create Attention Mask for the single new step
-            # The new token attends to all valid tokens in history (captured by current_pad_mask).
-            # Shape becomes (B, 1, 1, Total_Len) which works with HF's cache logic.
+            # 为单个新步骤创建注意力掩码
+            # 新 token 关注历史中所有有效的 token（由 current_pad_mask 捕获）。
+            # 形状变为 (B, 1, 1, Total_Len)，与 HF 的缓存逻辑兼容。
             step_att_mask = prepare_attention_masks_4d(
                 current_pad_mask.unsqueeze(1), dtype=next_token_emb.dtype
             )
 
-            # Forward pass (Decoding step)
-            # input_embeds is just the new token (B, 1, D)
+            # 前向传播（解码步骤）
+            # input_embeds 仅为新 token (B, 1, D)
             (step_out, _), past_key_values = self.paligemma_with_expert.forward(
                 attention_mask=step_att_mask,
                 position_ids=current_position_ids,
-                past_key_values=past_key_values,  # Pass updated cache
+                past_key_values=past_key_values,  # 传入更新后的缓存
                 inputs_embeds=[next_token_emb, None],
                 use_cache=True,
                 adarms_cond=[None, None],
             )
 
-            # Sample next token
+            # 采样下一个 token
             last_logits = lm_head(step_out[:, -1:, :])
             if temperature > 0:
                 probs = torch.softmax(last_logits[:, -1] / temperature, dim=-1)
@@ -738,7 +736,7 @@ class PI0FastPytorch(nn.Module):  # see openpi `PI0Pytorch`
 
 
 class PI0FastPolicy(PreTrainedPolicy):
-    """PI0Fast Policy for LeRobot."""
+    """用于 LeRobot 的 PI0Fast 策略。"""
 
     config_class = PI0FastConfig
     name = "pi0_fast"
@@ -749,8 +747,8 @@ class PI0FastPolicy(PreTrainedPolicy):
         **kwargs,
     ):
         """
-        Args:
-            config: Policy configuration class instance.
+        参数：
+            config: 策略配置类实例。
         """
         require_package("transformers", extra="pi")
         require_package("scipy", extra="pi")
@@ -758,14 +756,14 @@ class PI0FastPolicy(PreTrainedPolicy):
         config.validate_features()
         self.config = config
 
-        # Load tokenizers first
+        # 首先加载分词器
         try:
-            # Load FAST tokenizer
+            # 加载 FAST 分词器
             self.action_tokenizer = AutoProcessor.from_pretrained(
                 config.action_tokenizer_name, trust_remote_code=True
             )
 
-            # Load PaliGemma tokenizer for token conversion
+            # 加载 PaliGemma 分词器用于 token 转换
             self._paligemma_tokenizer = AutoTokenizer.from_pretrained(
                 config.text_tokenizer_name, trust_remote_code=True, add_eos_token=True, add_bos_token=False
             )
@@ -776,13 +774,13 @@ class PI0FastPolicy(PreTrainedPolicy):
             logging.error("Tokenizer loading is required for proper policy initialization; aborting.")
             raise RuntimeError("Failed to load required tokenizers for PI0FastPolicy initialization") from e
 
-        # Initialize the core PI0Fast model
+        # 初始化 PI0Fast 核心模型
         self.init_rtc_processor()
         self.model = PI0FastPytorch(
             config, rtc_processor=self.rtc_processor, paligemma_tokenizer=self._paligemma_tokenizer
         )
 
-        # Enable gradient checkpointing if requested
+        # 如有需要则启用梯度检查点
         if config.gradient_checkpointing:
             self.model.gradient_checkpointing_enable()
 
@@ -806,7 +804,7 @@ class PI0FastPolicy(PreTrainedPolicy):
         strict: bool = True,
         **kwargs,
     ) -> T:
-        """Override the from_pretrained method to handle key remapping and display important disclaimer."""
+        """重写 from_pretrained 方法，以处理键重映射并显示重要声明。"""
         print(
             "The PI0Fast model is a direct port of the OpenPI implementation. \n"
             "This implementation follows the original OpenPI structure for compatibility. \n"
@@ -815,7 +813,7 @@ class PI0FastPolicy(PreTrainedPolicy):
         if pretrained_name_or_path is None:
             raise ValueError("pretrained_name_or_path is required")
 
-        # Use provided config if available, otherwise create default config
+        # 如果提供了配置则使用，否则创建默认配置
         if config is None:
             config = PreTrainedConfig.from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,
@@ -829,11 +827,11 @@ class PI0FastPolicy(PreTrainedPolicy):
                 **kwargs,
             )
 
-        # Initialize model without loading weights
-        # Check if dataset_stats were provided in kwargs
+        # 初始化模型但不加载权重
+        # 检查 kwargs 中是否提供了 dataset_stats
         model = cls(config, **kwargs)
 
-        # Load state dict (expects keys with "model." prefix)
+        # 加载 state dict（期望键带有 "model." 前缀）
         try:
             print(f"Loading model from: {pretrained_name_or_path}")
             try:
@@ -859,10 +857,10 @@ class PI0FastPolicy(PreTrainedPolicy):
                 print("Returning model without loading pretrained weights")
                 return model
 
-            # First, fix any key differences (see openpi model.py, _fix_pytorch_state_dict_keys)
+            # 首先，修复所有键差异（参见 openpi model.py, _fix_pytorch_state_dict_keys）
             fixed_state_dict = model._fix_pytorch_state_dict_keys(original_state_dict, model.config)
 
-            # Then add "model." prefix for all keys that don't already have it
+            # 然后，为所有尚未带 "model." 前缀的键添加该前缀
             remapped_state_dict = {}
             remap_count = 0
 
@@ -877,7 +875,7 @@ class PI0FastPolicy(PreTrainedPolicy):
             if remap_count > 0:
                 print(f"Remapped {remap_count} state dict keys")
 
-            # Load the remapped state dict into the model
+            # 将重映射后的 state dict 加载到模型中
             missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=strict)
 
             if missing_keys:
@@ -910,17 +908,17 @@ class PI0FastPolicy(PreTrainedPolicy):
 
     def _fix_pytorch_state_dict_keys(
         self, state_dict, model_config
-    ):  # see openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
-        """Fix state dict keys to match current model architecture."""
+    ):  # 参见 openpi `BaseModelConfig, _fix_pytorch_state_dict_keys`
+        """修复 state dict 键，使其与当前模型架构匹配。"""
 
         fixed_state_dict = {}
 
         for key, value in state_dict.items():
             new_key = key
 
-            # Handle vision tower embedding layer potential differences
+            # 处理视觉塔嵌入层的潜在差异
             if "patch_embedding" in key:
-                # Some checkpoints might have this, but current model expects different structure
+                # 某些检查点可能包含此项，但当前模型期望不同的结构
                 logging.warning(f"Vision embedding key might need handling: {key}")
 
             if (
@@ -939,18 +937,18 @@ class PI0FastPolicy(PreTrainedPolicy):
         return self.parameters()
 
     def reset(self):
-        """Reset internal state - called when environment resets."""
+        """重置内部状态——在环境重置时调用。"""
         self._action_queue = deque(maxlen=self.config.n_action_steps)
         self._queues = {
             ACTION: deque(maxlen=self.config.n_action_steps),
         }
 
     def init_rtc_processor(self):
-        """Initialize RTC processor if RTC is enabled in config."""
+        """如果配置中启用了 RTC，则初始化 RTC 处理器。"""
         self.rtc_processor = None
 
-        # Create processor if config provided
-        # If RTC is not enabled - we can still track the denoising data
+        # 如果提供了配置则创建处理器
+        # 即使未启用 RTC，我们仍然可以跟踪去噪数据
         if self.config.rtc_config is not None:
             self.rtc_processor = RTCProcessor(self.config.rtc_config)
 
@@ -962,15 +960,15 @@ class PI0FastPolicy(PreTrainedPolicy):
         return self.config.rtc_config is not None and self.config.rtc_config.enabled
 
     def _preprocess_images(self, batch: dict[str, Tensor]) -> tuple[list[Tensor], list[Tensor]]:
-        """Preprocess images for the model.
+        """为模型预处理图像。
 
-        Images from LeRobot are typically in [B, C, H, W] format and normalized to [0, 1].
-        PaliGemma expects images in [B, C, H, W] format and normalized to [-1, 1].
+        来自 LeRobot 的图像通常为 [B, C, H, W] 格式，并归一化到 [0, 1]。
+        PaliGemma 期望图像为 [B, C, H, W] 格式，并归一化到 [-1, 1]。
         """
         images = []
         img_masks = []
 
-        # Get device from model parameters
+        # 从模型参数获取设备
         device = next(self.parameters()).device
 
         present_img_keys = [key for key in self.config.image_features if key in batch]
@@ -982,65 +980,65 @@ class PI0FastPolicy(PreTrainedPolicy):
                 f"(batch: {batch.keys()}) (image_features: {self.config.image_features})"
             )
 
-        # Preprocess image features present in the batch
+        # 预处理批次中存在的图像特征
         for key in present_img_keys:
             img = batch[key]
 
-            # Ensure tensor is on the same device as the model
+            # 确保张量与模型在同一设备上
             if img.device != device:
                 img = img.to(device)
 
-            # Ensure float32 dtype for consistency
+            # 为保持一致，确保数据类型为 float32
             if img.dtype != torch.float32:
                 img = img.to(torch.float32)
 
-            # from openpi preprocess_observation_pytorch: Handle both [B, C, H, W] and [B, H, W, C] formats
-            is_channels_first = img.shape[1] == 3  # Check if channels are in dimension 1
+            # 来自 openpi preprocess_observation_pytorch：同时处理 [B, C, H, W] 和 [B, H, W, C] 两种格式
+            is_channels_first = img.shape[1] == 3  # 检查通道是否位于维度 1
 
             if is_channels_first:
-                # Convert [B, C, H, W] to [B, H, W, C] for processing
+                # 将 [B, C, H, W] 转换为 [B, H, W, C] 以便处理
                 img = img.permute(0, 2, 3, 1)
 
-            # from openpi preprocess_observation_pytorch: Resize with padding if needed
+            # 来自 openpi preprocess_observation_pytorch：如有需要则带填充缩放
             if img.shape[1:3] != self.config.image_resolution:
                 img = resize_with_pad_torch(img, *self.config.image_resolution)
 
-            # Normalize from [0,1] to [-1,1] as expected by siglip
+            # 按照 siglip 的预期，从 [0,1] 归一化到 [-1,1]
             img = img * 2.0 - 1.0
 
-            # from openpi preprocess_observation_pytorch: Convert back to [B, C, H, W] format if it was originally channels-first
+            # 来自 openpi preprocess_observation_pytorch：如果原本就是通道优先格式，则转换回 [B, C, H, W] 格式
             if is_channels_first:
                 img = img.permute(0, 3, 1, 2)  # [B, H, W, C] -> [B, C, H, W]
 
             images.append(img)
-            # Create mask (all ones for real images)
+            # 创建掩码（真实图像全为 1）
             bsize = img.shape[0]
             mask = torch.ones(bsize, dtype=torch.bool, device=device)
             img_masks.append(mask)
 
-        # Create image features not present in the batch as fully 0 padded images
+        # 将批次中不存在的图像特征创建为全填充 -1 的图像
         for _num_empty_cameras in range(len(missing_img_keys)):
-            img = torch.ones_like(img) * -1  # Padded with -1 for SigLIP
-            mask = torch.zeros_like(mask)  # Mask is zero for empty cameras
+            img = torch.ones_like(img) * -1  # 为 SigLIP 填充 -1
+            mask = torch.zeros_like(mask)  # 空相机的掩码为零
             images.append(img)
             img_masks.append(mask)
 
         return images, img_masks
 
     def prepare_action(self, batch):
-        """Pad action"""
+        """填充动作"""
         actions = pad_vector(batch[ACTION], self.config.max_action_dim)
         return actions
 
     def _paligemma_tokens_to_act_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
         """
-        Converts PaliGemma tokens back to action tokens (inverse of _act_tokens_to_paligemma_tokens).
+        将 PaliGemma token 转换回动作 token（_act_tokens_to_paligemma_tokens 的逆操作）。
 
-        Args:
-            tokens: PaliGemma token IDs
+        参数：
+            tokens: PaliGemma token ID
 
-        Returns:
-            Action token IDs
+        返回：
+            动作 token ID
         """
         return self._paligemma_tokenizer.vocab_size - 1 - self.config.fast_skip_tokens - tokens
 
@@ -1048,16 +1046,16 @@ class PI0FastPolicy(PreTrainedPolicy):
         self, token_ids: list[int], time_horizon: int, action_dim: int, relaxed_decoding: bool = True
     ) -> np.ndarray:
         """
-        Decodes action token IDs back to continuous action values using the FAST tokenizer.
+        使用 FAST 分词器将动作 token ID 解码回连续动作值。
 
-        Args:
-            token_ids: List of token IDs to decode.
-            time_horizon: The number of timesteps for actions.
-            action_dim: The dimensionality of each action.
-            relaxed_decoding: Whether to use relaxed decoding (allows partial sequences).
+        参数：
+            token_ids: 要解码的 token ID 列表。
+            time_horizon: 动作的时间步数。
+            action_dim: 每个动作的维度。
+            relaxed_decoding: 是否使用宽松解码（允许部分序列）。
 
-        Returns:
-            A numpy array representing the decoded actions.
+        返回：
+            表示解码后动作的 numpy 数组。
         """
         decoded_actions = []
 
@@ -1067,15 +1065,15 @@ class PI0FastPolicy(PreTrainedPolicy):
                 decoded_dct_coeff = np.array(list(map(ord, decoded_tokens))) + self.action_tokenizer.min_token
 
                 if relaxed_decoding:
-                    # expected sequence length
+                    # 期望的序列长度
                     expected_seq_len = time_horizon * action_dim
                     diff = expected_seq_len - decoded_dct_coeff.shape[0]
 
-                    # apply truncation if too long
+                    # 如果过长则应用截断
                     if diff < 0:
-                        decoded_dct_coeff = decoded_dct_coeff[:expected_seq_len]  # truncate on the right
+                        decoded_dct_coeff = decoded_dct_coeff[:expected_seq_len]  # 从右侧截断
 
-                    # apply padding if too short
+                    # 如果过短则应用填充
                     elif diff > 0:
                         decoded_dct_coeff = np.pad(
                             decoded_dct_coeff, (0, diff), mode="constant", constant_values=0
@@ -1102,40 +1100,40 @@ class PI0FastPolicy(PreTrainedPolicy):
 
     def detokenize_actions(self, tokens: torch.Tensor, action_horizon: int, action_dim: int) -> torch.Tensor:
         """
-        Detokenizes action tokens back to continuous actions.
+        将动作 token 反分词回连续动作。
 
-        This method converts predicted action tokens from the model back to continuous action values
-        using the FAST tokenizer. It handles the conversion from PaliGemma token space to action token
-        space, then decodes the action tokens to continuous values using DCT decoding.
+        该方法使用 FAST 分词器将模型预测的动作 token 转换回连续动作值。
+        它处理从 PaliGemma token 空间到动作 token 空间的转换，
+        然后使用 DCT 解码将动作 token 解码为连续值。
 
-        Args:
-            tokens: The input tensor of tokenized outputs. Shape: (B, seq_len) or (seq_len,)
-            action_horizon: The number of timesteps for actions.
-            action_dim: The dimensionality of each action.
+        参数：
+            tokens: 分词输出的输入张量。形状：(B, seq_len) 或 (seq_len,)
+            action_horizon: 动作的时间步数。
+            action_dim: 每个动作的维度。
 
-        Returns:
-            The continuous action tensor. Shape: (B, action_horizon, action_dim) or (action_horizon, action_dim)
+        返回：
+            连续动作张量。形状：(B, action_horizon, action_dim) 或 (action_horizon, action_dim)
         """
         if self.action_tokenizer is None or self._paligemma_tokenizer is None:
             raise ValueError(
                 "Action tokenizer not initialized. Make sure fast_only=True in config and tokenizers loaded successfully."
             )
 
-        # Handle single sample (add batch dimension)
+        # 处理单个样本（添加批次维度）
         single_sample = tokens.dim() == 1
         if single_sample:
             tokens = tokens.unsqueeze(0)
 
-        # Convert token IDs to token strings
+        # 将 token ID 转换为 token 字符串
         decoded_tokens = [self._paligemma_tokenizer.convert_ids_to_tokens(seq.tolist()) for seq in tokens]
-        # Get the token sequence for "Action: " to remove it
+        # 获取 "Action: " 的 token 序列以便将其移除
         action_prefix_ids = self._paligemma_tokenizer.encode("Action: ", add_special_tokens=False)
         action_prefix_tokens = self._paligemma_tokenizer.convert_ids_to_tokens(action_prefix_ids)
         action_prefix_len = len(action_prefix_tokens)
 
-        # Clean tokens by removing everything after the first "|" (end-of-action marker)
-        # and removing all occurrences of "Action: " token sequence
-        # assert that beginning contain "Action: "
+        # 通过移除第一个 "|"（动作结束标记）之后的所有内容
+        # 以及移除所有出现的 "Action: " token 序列来清理 token
+        # 断言开头包含 "Action: "
         if self.config.validate_action_token_prefix:
             for token_seq in decoded_tokens:
                 assert len(token_seq) >= 2 and token_seq[0] == "Action" and token_seq[1] == ":", (
@@ -1144,22 +1142,22 @@ class PI0FastPolicy(PreTrainedPolicy):
 
         cleaned_tokens = []
         for token_seq in decoded_tokens:
-            # Remove everything after "|"
+            # 移除 "|" 之后的所有内容
             if "|" in token_seq:
                 token_seq = token_seq[: token_seq.index("|")]
 
-            # Remove all occurrences of "Action: " token sequence
+            # 移除所有出现的 "Action: " token 序列
             i = 0
             while i <= len(token_seq) - action_prefix_len:
                 if token_seq[i : i + action_prefix_len] == action_prefix_tokens:
-                    # Found a match, remove it
+                    # 找到匹配项，将其移除
                     token_seq = token_seq[:i] + token_seq[i + action_prefix_len :]
                 else:
                     i += 1
 
             cleaned_tokens.append(token_seq)
 
-        # Convert token strings back to IDs
+        # 将 token 字符串转换回 ID
         raw_action_tokens = [
             torch.tensor(
                 self._paligemma_tokenizer.convert_tokens_to_ids(token_seq),
@@ -1169,20 +1167,20 @@ class PI0FastPolicy(PreTrainedPolicy):
             for token_seq in cleaned_tokens
         ]
 
-        # Convert PaliGemma tokens to action tokens
+        # 将 PaliGemma token 转换为动作 token
         action_tokens = [
             self._paligemma_tokens_to_act_tokens(raw_action_token) for raw_action_token in raw_action_tokens
         ]
 
-        # Decode action tokens to continuous actions
+        # 将动作 token 解码为连续动作
         actions = self.decode_actions_with_fast(
             action_tokens, time_horizon=action_horizon, action_dim=action_dim
         )
 
-        # Convert to tensor and return
+        # 转换为张量并返回
         actions_tensor = torch.tensor(actions, dtype=torch.float32, device=tokens.device)
 
-        # Remove batch dimension if input was single sample
+        # 如果输入是单个样本，则移除批次维度
         if single_sample:
             actions_tensor = actions_tensor.squeeze(0)
 
@@ -1190,37 +1188,37 @@ class PI0FastPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select a single action given environment observations."""
+        """根据环境观测选择单个动作。"""
         assert not self._rtc_enabled(), (
             "RTC is not supported for select_action, use it with predict_action_chunk"
         )
 
         self.eval()
 
-        # Action queue logic for n_action_steps > 1
+        # n_action_steps > 1 时的动作队列逻辑
         if len(self._action_queue) == 0:
             actions = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
-            # Transpose to get shape (n_action_steps, batch_size, action_dim)
+            # 转置以得到形状 (n_action_steps, batch_size, action_dim)
             self._action_queue.extend(actions.transpose(0, 1))
 
         return self._action_queue.popleft()
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs: Unpack[ActionSelectKwargs]) -> Tensor:
-        """Predict a chunk of actions given environment observations."""
+        """根据环境观测预测一个动作块。"""
         self.eval()
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
 
-        # FAST-only mode: use autoregressive decoding
+        # 仅 FAST 模式：使用自回归解码
         tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
         masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
 
-        # Get decoding parameters
+        # 获取解码参数
         temperature = self.config.temperature
         max_decoding_steps = self.config.max_decoding_steps
 
-        # Sample action tokens autoregressively
+        # 自回归地采样动作 token
         if self.config.use_kv_cache:
             action_tokens = self.model.sample_actions_fast_kv_cache(
                 images,
@@ -1240,7 +1238,7 @@ class PI0FastPolicy(PreTrainedPolicy):
                 temperature=temperature,
             )
 
-        # Detokenize action tokens to continuous actions
+        # 将动作 token 反分词为连续动作
         action_horizon = self.config.n_action_steps
         action_dim = self.config.output_features[ACTION].shape[0]
 
@@ -1251,16 +1249,16 @@ class PI0FastPolicy(PreTrainedPolicy):
         return continuous_actions
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
-        """Run the batch through the model and compute the loss for training."""
+        """将批次送入模型并计算训练损失。"""
 
-        # Prepare inputs
+        # 准备输入
         images, img_masks = self._preprocess_images(batch)
 
-        # Get FAST action tokens from batch
+        # 从批次中获取 FAST 动作 token
         fast_action_tokens = batch.get(ACTION_TOKENS)  # (B, max_action_tokens)
         fast_action_masks = batch.get(ACTION_TOKEN_MASK)  # (B, max_action_tokens)
 
-        # Use full language tokens (no separation into high_level_task and subtask)
+        # 使用完整的语言 token（不区分 high_level_task 和 subtask）
         tokens = batch.get(OBS_LANGUAGE_TOKENS)
         masks = batch.get(OBS_LANGUAGE_ATTENTION_MASK)
 

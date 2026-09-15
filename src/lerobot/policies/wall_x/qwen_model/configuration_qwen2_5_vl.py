@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wall-X configuration extensions for the native Transformers Qwen2.5-VL config."""
+"""针对 Transformers 原生 Qwen2.5-VL 配置的 Wall-X 配置扩展。"""
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -33,16 +33,15 @@ else:
 
     @dataclass
     class _TransformersConfigFallback:
-        """Import-safe stand-in used only when Transformers is unavailable."""
+        """仅在 Transformers 不可用时使用的、导入安全的替代类。"""
 
     TransformersQwen2_5_VLConfig = _TransformersConfigFallback
     TransformersQwen2_5_VLTextConfig = _TransformersConfigFallback
     Qwen2_5_VLVisionConfig = None
 
-# Wall-X checkpoints pre0.6.0 use the legacy, flat Qwen2.5-VL config layout.  The native
-# ``Qwen2_5_VLConfig`` accepts that layout and moves text-model fields into its
-# ``text_config`` sub-config, so only the Wall-X-specific MoE fields need to be
-# declared here.
+# 0.6.0 之前的 Wall-X checkpoint 使用旧的、扁平的 Qwen2.5-VL 配置布局。原生的
+# ``Qwen2_5_VLConfig`` 可以接受该布局，并会把文本模型字段移入其 ``text_config``
+# 子配置中，因此这里只需要声明 Wall-X 特有的 MoE 字段。
 _LEGACY_TEXT_ATTRIBUTES = {
     "attention_dropout",
     "attention_moe",
@@ -73,7 +72,7 @@ _LEGACY_TEXT_ATTRIBUTES = {
 
 @strict
 class Qwen2_5_VLTextConfig(TransformersQwen2_5_VLTextConfig):  # noqa: N801
-    """Native Qwen2.5-VL text config plus Wall-X's hard-routed MoE settings."""
+    """原生 Qwen2.5-VL 文本配置，加上 Wall-X 的硬路由 MoE 设置。"""
 
     num_experts: int = 4
     experts: list[dict] | None = None
@@ -90,10 +89,10 @@ class Qwen2_5_VLTextConfig(TransformersQwen2_5_VLTextConfig):  # noqa: N801
 
 @strict
 class Qwen2_5_VLConfig(TransformersQwen2_5_VLConfig):  # noqa: N801
-    """Native composite Qwen2.5-VL config with a Wall-X text sub-config.
+    """带 Wall-X 文本子配置的原生复合 Qwen2.5-VL 配置。
 
-    The native composite loader supports both current nested configs and the
-    flat layout used by existing ``wall-oss-flow`` checkpoints.
+    原生的复合加载器同时支持当前的嵌套配置和现有 ``wall-oss-flow``
+    checkpoint 所使用的扁平布局。
     """
 
     sub_configs = {
@@ -102,11 +101,10 @@ class Qwen2_5_VLConfig(TransformersQwen2_5_VLConfig):  # noqa: N801
     }
 
     def __getattr__(self, name):
-        """Keep legacy direct access to fields now owned by ``text_config``.
+        """保留对现归属于 ``text_config`` 的字段的旧式直接访问。
 
-        Wall-X historically used a flat config and accesses fields such as
-        ``hidden_size`` and ``num_experts`` directly. Forwarding unknown
-        attributes preserves that API without duplicating the native config.
+        Wall-X 过去使用扁平配置，并直接访问 ``hidden_size`` 和 ``num_experts``
+        等字段。转发未知属性可以保留该 API，而无需重复原生配置。
         """
         text_config = self.__dict__.get("text_config")
         if name in _LEGACY_TEXT_ATTRIBUTES and text_config is not None and hasattr(text_config, name):

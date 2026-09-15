@@ -27,14 +27,14 @@ def create_initial_features(
     action: RobotAction | None = None, observation: RobotObservation | None = None
 ) -> dict[PipelineFeatureType, dict[str, Any]]:
     """
-    Creates the initial features dict for the dataset from action and observation specs.
+    根据动作和观测的规格创建数据集的初始特征字典。
 
     Args:
-        action: A dictionary of action feature names to their types/shapes.
-        observation: A dictionary of observation feature names to their types/shapes.
+        action: 动作特征名称到其类型/形状的字典。
+        observation: 观测特征名称到其类型/形状的字典。
 
     Returns:
-        The initial features dictionary structured by PipelineFeatureType.
+        按 PipelineFeatureType 组织的初始特征字典。
     """
     features = {PipelineFeatureType.ACTION: {}, PipelineFeatureType.OBSERVATION: {}}
     if action:
@@ -44,7 +44,7 @@ def create_initial_features(
     return features
 
 
-# Helper to filter state/action keys based on compiled regex patterns.
+# 辅助函数：根据已编译的正则表达式模式过滤 state/action 键。
 def should_keep(key: str, patterns: tuple[re.Pattern] | None) -> bool:
     if patterns is None:
         return True
@@ -58,8 +58,8 @@ def strip_prefix(key: str, prefixes_to_strip: tuple[str]) -> str:
     return key
 
 
-# Define prefixes to strip from feature keys for clean names.
-# Handles both fully qualified (e.g., "action.state") and short (e.g., "state") forms.
+# 定义要从特征键中去除的前缀，以获得干净的名称。
+# 同时处理完整限定形式（例如 "action.state"）和简短形式（例如 "state"）。
 PREFIXES_TO_STRIP = tuple(
     f"{token}." for const in (ACTION, OBS_STATE, OBS_IMAGES) for token in (const, const.split(".")[-1])
 )
@@ -74,44 +74,44 @@ def aggregate_pipeline_dataset_features(
     patterns: Sequence[str] | None = None,
 ) -> dict[str, dict]:
     """
-    Aggregates and filters pipeline features to create a dataset-ready features dictionary.
+    聚合并过滤流水线特征，以创建可用于数据集的特征字典。
 
-    This function transforms initial features using the pipeline, categorizes them as action or observations
-    (image or state), filters them based on `exclude_images` and `patterns`, and finally
-    formats them for use with a Hugging Face LeRobot Dataset.
+    该函数使用流水线转换初始特征，将其归类为动作或观测
+    （图像或状态），根据 `exclude_images` 和 `patterns` 进行过滤，最后
+    将其格式化为可供 Hugging Face LeRobot Dataset 使用的形式。
 
     Args:
-        pipeline: The DataProcessorPipeline to apply.
-        initial_features: A dictionary of raw feature specs for actions and observations.
-        use_videos: Controls the storage dtype for image features. If True, images are stored as "video"; if False, they are stored as "image".
-        exclude_images: If True, image features are dropped entirely from the output.
-        patterns: A sequence of regex patterns to filter action and state features.
-                  Image features are not affected by this filter.
+        pipeline: 要应用的 DataProcessorPipeline。
+        initial_features: 动作和观测的原始特征规格字典。
+        use_videos: 控制图像特征的存储 dtype。如果为 True，图像存储为 "video"；如果为 False，则存储为 "image"。
+        exclude_images: 如果为 True，图像特征将从输出中完全丢弃。
+        patterns: 用于过滤动作和状态特征的正则表达式模式序列。
+                  图像特征不受此过滤器影响。
 
     Returns:
-        A dictionary of features formatted for a Hugging Face LeRobot Dataset.
+        为 Hugging Face LeRobot Dataset 格式化好的特征字典。
     """
     compiled_patterns = tuple(re.compile(p) for p in patterns) if patterns is not None else None
 
     all_features = pipeline.transform_features(initial_features)
 
-    # Intermediate storage for categorized and filtered features.
+    # 用于存放已分类和已过滤特征的中间存储。
     processed_features: dict[str, dict[str, Any]] = {
         ACTION: {},
         OBS_STR: {},
     }
     images_token = OBS_IMAGES.split(".")[-1]
 
-    # Iterate through all features transformed by the pipeline.
+    # 遍历流水线转换后的所有特征。
     for ptype, feats in all_features.items():
         if ptype not in [PipelineFeatureType.ACTION, PipelineFeatureType.OBSERVATION]:
             continue
 
         for key, value in feats.items():
-            # 1. Categorize the feature.
+            # 1. 对特征进行分类。
             is_action = ptype == PipelineFeatureType.ACTION
-            # Observations are classified as images if their key matches image-related tokens or if the shape of the feature is 3.
-            # All other observations are treated as state.
+            # 如果观测的键匹配与图像相关的词元，或者特征的形状为 3 维，则将其归类为图像。
+            # 所有其他观测都被视为状态。
             is_image = not is_action and (
                 (isinstance(value, tuple) and len(value) == 3)
                 or (
@@ -121,20 +121,20 @@ def aggregate_pipeline_dataset_features(
                 )
             )
 
-            # 2. Apply filtering rules.
+            # 2. 应用过滤规则。
             if is_image and exclude_images:
                 continue
             if not is_image and not should_keep(key, compiled_patterns):
                 continue
 
-            # 3. Add the feature to the appropriate group with a clean name.
+            # 3. 使用干净的名称将特征添加到相应的组中。
             name = strip_prefix(key, PREFIXES_TO_STRIP)
             if is_action:
                 processed_features[ACTION][name] = value
             else:
                 processed_features[OBS_STR][name] = value
 
-    # Convert the processed features into the final dataset format.
+    # 将处理后的特征转换为最终的数据集格式。
     dataset_features = {}
     if processed_features[ACTION]:
         dataset_features.update(hw_to_dataset_features(processed_features[ACTION], ACTION, use_videos))

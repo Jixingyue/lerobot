@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 class BiRebot102Leader(BimanualMixin, Teleoperator):
-    """Bimanual Seeed Studio StarArm102 / reBot Arm 102 leader.
+    """双臂 Seeed Studio StarArm102 / reBot Arm 102 主手。
 
-    Composes two single-arm :class:`RebotArm102Leader` instances. Action keys of
-    each arm are namespaced with a ``left_`` / ``right_`` prefix, so a bimanual
-    leader can teleoperate a bimanual reBot B601 follower.
+    由两个单臂 :class:`RebotArm102Leader` 实例组合而成。每个臂的动作键
+    通过 ``left_`` / ``right_`` 前缀进行命名空间区分，从而使双臂主手能够
+    遥操作双臂 reBot B601 从手机器人。
     """
 
     config_class = BiRebot102LeaderConfig

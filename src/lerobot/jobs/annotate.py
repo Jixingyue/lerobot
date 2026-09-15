@@ -11,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Run ``lerobot-annotate`` on HF Jobs (HuggingFace GPUs).
+"""在 HF Jobs（HuggingFace GPU）上运行 ``lerobot-annotate``。
 
-Same shape as the training submitter in ``hf.py``, with one difference: the
-annotation pipeline serves its own VLM, so the pod starts from the official
-``vllm/vllm-openai`` image (which has no lerobot) instead of the prebuilt
-``lerobot-gpu`` image, and installs lerobot on top before running.
+与 ``hf.py`` 中的训练提交器形状相同，有一个区别：标注
+流水线服务于自己的 VLM，因此 pod 从官方的
+``vllm/vllm-openai`` 镜像（没有 lerobot）启动，而不是预构建的
+``lerobot-gpu`` 镜像，并在运行前在其上安装 lerobot。
 
-Because there is no config repo to stage, the pod replays the user's own CLI
-flags — everything except the client-only ``--job.*`` and the host-local
-``--root``, which is replaced by ``--repo_id`` so the pod pulls the dataset
-from the Hub.
+因为没有配置仓库需要暂存，pod 重放用户自己的 CLI
+标志——除了仅客户端的 ``--job.*`` 和主机本地的
+``--root``（被替换为 ``--repo_id``，以便 pod 从 Hub 拉取数据集）
+之外的所有内容。
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from huggingface_hub import HfApi, get_token, run_job
 
 from .dataset import ensure_dataset_available
 
-# Package-internal reuse of the training submitter's job plumbing: following a
-# submitted job and forwarding argv are identical for annotation runs.
+# 包内部重用训练提交器的作业管道：跟踪已提交的作业
+# 和转发 argv 对于标注运行是相同的。
 from .hf import _pod_forwarded_args, follow_job, resolve_job_tags
 
 if TYPE_CHECKING:
@@ -44,58 +44,57 @@ if TYPE_CHECKING:
 
 LEROBOT_GIT_URL = "https://github.com/huggingface/lerobot.git"
 
-# Mirrors the pins in pyproject.toml. The vLLM image resolves dependencies on its
-# own otherwise, and pulls av 18 / datasets 5 / draccus 0.11 — each of which breaks
-# lerobot at import time. `--upgrade-strategy only-if-needed` keeps vLLM's own
-# (torch, transformers, ...) pins intact.
+# 镜像 pyproject.toml 中的固定版本。vLLM 镜像否则会自行解析依赖，
+# 并拉取 av 18 / datasets 5 / draccus 0.11——每一个都会在导入时
+# 破坏 lerobot。`--upgrade-strategy only-if-needed` 保持 vLLM 自己的
+# （torch、transformers、...）固定版本不变。
 _RUNTIME_REQUIREMENTS = (
     "'datasets>=4.7.0,<5.0.0' 'pyarrow>=21.0.0,<30.0.0' 'av>=15.0.0,<16.0.0' 'draccus==0.10.0' "
     "'pandas>=2.0.0,<3.0.0' jsonlines gymnasium torchcodec mergedeep pyyaml-include toml typing-inspect "
     "openai"
 )
 
-# Flags the submitter resolves itself instead of forwarding verbatim: `--root`
-# names a directory only this machine has, `--repo_id` is re-emitted from the
-# config, and the config-file args name local files (rejected up front by
-# `submit_annotate_to_hf`). `--job.*` is dropped separately, by prefix; bare
-# `--job` is not, hence its entry here — it is the one arg that could smuggle a
-# remote `target` onto the pod and have the job recursively submit itself.
+# 提交器自行解析而不是逐字转发的标志：`--root`
+# 命名仅此机器具有的目录，`--repo_id` 从配置中重新发出，
+# 配置文件参数命名本地文件（由 `submit_annotate_to_hf` 预先拒绝）。
+# `--job.*` 单独按前缀删除；裸 `--job` 不删除，因此它在此处有条目——
+# 它是唯一一个可以将远程 `target` 偷运到 pod 并让作业递归提交自身的参数。
 _SUBMITTER_OWNED_ARGS = ("--root", "--repo_id", "--config_path", "--job")
 
 
 def _local_config_file_args(cfg: AnnotationPipelineConfig) -> list[str]:
-    """The CLI args that name a config file on the client's disk.
+    """命名客户端磁盘上配置文件的 CLI 参数。
 
-    draccus exposes ``--config_path`` for the whole config plus a ``--<field>``
-    for every nested dataclass (``--vlm``, ``--plan``, ``--job``, ...). The pod has
-    none of those files, so a remote run has to reject them rather than silently
-    drop the settings they carry.
+    draccus 为整个配置暴露 ``--config_path``，并为每个嵌套数据类
+    （``--vlm``、``--plan``、``--job``、...）暴露一个 ``--<field>``。pod 没有
+    这些文件，因此远程运行必须拒绝它们，而不是静默地
+    丢弃它们携带的设置。
     """
     return ["--config_path", *(f"--{name}" for name in vars(cfg) if is_dataclass(getattr(cfg, name)))]
 
 
 def build_pod_setup(lerobot_ref: str) -> str:
-    """Shell prelude that turns the vLLM image into a ``lerobot-annotate`` runtime."""
+    """将 vLLM 镜像转换为 ``lerobot-annotate`` 运行时的 shell 前言。"""
     spec = f"lerobot @ git+{LEROBOT_GIT_URL}@{lerobot_ref}"
     return (
-        # git to install from the repo, ffmpeg to decode the dataset's videos.
+        # git 用于从仓库安装，ffmpeg 用于解码数据集的视频。
         "apt-get update -qq && apt-get install -y -qq git ffmpeg && "
         f"pip install --no-deps {shlex.quote(spec)} && "
         f"pip install --upgrade-strategy only-if-needed {_RUNTIME_REQUIREMENTS} && "
-        # vLLM's cudagraph memory estimate over-reserves and starves the KV cache;
-        # PyAV is the video backend the server can decode our frames with.
+        # vLLM 的 cudagraph 内存估计过度预留并使 KV 缓存饥饿；
+        # PyAV 是服务器可以解码我们帧的视频后端。
         "export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 && "
         "export VLLM_VIDEO_BACKEND=pyav"
     )
 
 
 def build_pod_command(repo_id: str, lerobot_ref: str, argv: list[str]) -> list[str]:
-    """Build the ``bash -c`` command the pod runs: setup prelude, then annotation.
+    """构建 pod 运行的 ``bash -c`` 命令：设置前言，然后标注。
 
-    ``argv`` is the user's CLI (``sys.argv[1:]``) minus the flags in
-    ``_SUBMITTER_OWNED_ARGS``; ``--repo_id`` is re-added from the config so the pod
-    always annotates the dataset we just made sure is reachable on the Hub.
-    ``--job.target=local`` stops the pod from re-dispatching to itself.
+    ``argv`` 是用户的 CLI（``sys.argv[1:]``）减去 ``_SUBMITTER_OWNED_ARGS``
+    中的标志；``--repo_id`` 从配置中重新添加，以便 pod
+    始终标注我们刚刚确保在 Hub 上可访问的数据集。
+    ``--job.target=local`` 阻止 pod 重新分发到自身。
     """
     forwarded = _pod_forwarded_args(argv, drop_names=_SUBMITTER_OWNED_ARGS, drop_prefixes=("--job.",))
     annotate = shlex.join(["lerobot-annotate", f"--repo_id={repo_id}", *forwarded, "--job.target=local"])
@@ -103,12 +102,12 @@ def build_pod_command(repo_id: str, lerobot_ref: str, argv: list[str]) -> list[s
 
 
 def submit_annotate_to_hf(cfg: AnnotationPipelineConfig) -> None:
-    """Submit an annotation run to HF Jobs infrastructure.
+    """向 HF Jobs 基础设施提交标注运行。
 
-    Resolves credentials, makes sure the source dataset is reachable from the pod,
-    submits the job, then tails its logs until the job reaches a terminal stage —
-    or returns immediately with ``--job.detach``. Ctrl-C detaches without
-    cancelling the remote job.
+    解析凭据，确保源数据集可从 pod 访问，
+    提交作业，然后尾随其日志直到作业到达终端阶段——
+    或使用 ``--job.detach`` 立即返回。Ctrl-C 分离而不
+    取消远程作业。
     """
     token = get_token()
     if not token:
@@ -130,9 +129,9 @@ def submit_annotate_to_hf(cfg: AnnotationPipelineConfig) -> None:
         )
 
     if not cfg.push_to_hub:
-        # The pod's filesystem is discarded when the job ends, so without a push the
-        # run produces nothing. Warn rather than fail: a smoke test over
-        # --only_episodes that only inspects the logs is a legitimate use.
+        # 作业结束时 pod 的文件系统会被丢弃，因此没有推送的话
+        # 运行不会产生任何结果。警告而不是失败：对
+        # --only_episodes 的冒烟测试只检查日志是合法的用例。
         print(
             "WARNING: --push_to_hub is off. The annotated dataset lives only on the pod and is "
             "discarded when the job ends. Pass --push_to_hub=true to keep the result."
@@ -151,7 +150,7 @@ def submit_annotate_to_hf(cfg: AnnotationPipelineConfig) -> None:
         flavor=cfg.job.target,
         secrets={"HF_TOKEN": token},
         timeout=cfg.job.timeout,
-        # HF Jobs labels are key/value; expose each tag as a queryable label.
+        # HF Jobs 标签是键/值；将每个标签暴露为可查询的标签。
         labels=dict.fromkeys(tags, "true"),
     )
     job_id = job_info.id
@@ -165,8 +164,8 @@ def submit_annotate_to_hf(cfg: AnnotationPipelineConfig) -> None:
     print(f"  Monitor:      hf jobs logs {job_id}")
     print(f"  Cancel:       hf jobs cancel {job_id}")
 
-    # No success marker: `lerobot-annotate` keeps working after the upload log line
-    # (dataset card, version tag), so completion has to be stage-based.
+    # 没有成功标记：`lerobot-annotate` 在上传日志行之后继续工作
+    # （数据集卡片、版本标签），因此完成必须基于阶段。
     if not follow_job(job_id, detach=cfg.job.detach):
         return
 

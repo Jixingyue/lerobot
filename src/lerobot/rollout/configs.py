@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration dataclasses for the rollout deployment engine."""
+"""rollout 部署引擎的配置数据类。"""
 
 from __future__ import annotations
 
@@ -35,30 +35,30 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Strategy configs (polymorphic dispatch via draccus ChoiceRegistry)
+# 策略配置（通过 draccus ChoiceRegistry 进行多态分发）
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class RolloutStrategyConfig(draccus.ChoiceRegistry, abc.ABC):
-    """Abstract base for rollout strategy configurations.
+    """rollout 策略配置的抽象基类。
 
-    Use ``--strategy.type=<name>`` on the CLI to select a strategy.  The registry is
-    open: a third-party package can register its own strategy and drive it from the
-    same flag — see "Bring your own strategy" in ``docs/source/inference.mdx``.
+    在 CLI 上使用 ``--strategy.type=<name>`` 来选择策略。注册表是
+    开放的：第三方包可以注册自己的策略并通过同一个标志来驱动它——
+    参见 ``docs/source/inference.mdx`` 中的 "Bring your own strategy"。
 
-    The ClassVars and hooks below declare what the engine arranges on the strategy's
-    behalf, so nothing outside the strategy needs to know its concrete type.
+    下面的 ClassVar 和钩子声明了引擎代表策略所安排的事项，
+    这样策略之外的任何代码都无需知道其具体类型。
     """
 
-    # Whether the strategy honours the restartable-run() contract that
-    # ``--interactive=true`` requires (see ``RolloutStrategy``).
+    # 该策略是否遵守 ``--interactive=true`` 所要求的可重启 run() 契约
+    # （参见 ``RolloutStrategy``）。
     supports_interactive: ClassVar[bool] = False
-    # "none": any --dataset.* flag is rejected.  "optional": a dataset is created when
-    # --dataset.* flags are given (``ctx.data.dataset`` may be None).  "required":
-    # --dataset.repo_id is mandatory.
+    # "none"：拒绝任何 --dataset.* 标志。"optional"：当给出 --dataset.* 标志时
+    # 创建数据集（``ctx.data.dataset`` 可能为 None）。"required"：
+    # --dataset.repo_id 是必填项。
     dataset_mode: ClassVar[str] = "none"
-    # Whether --teleop.type is mandatory (human-in-the-loop strategies).
+    # --teleop.type 是否为必填（人在回路中的策略）。
     requires_teleop: ClassVar[bool] = False
 
     @property
@@ -66,18 +66,18 @@ class RolloutStrategyConfig(draccus.ChoiceRegistry, abc.ABC):
         return self.get_choice_name(self.__class__)
 
     def requires_streaming_encoding(self) -> bool:
-        """Whether ``--dataset.streaming_encoding`` must be forced on.
+        """是否必须强制开启 ``--dataset.streaming_encoding``。
 
-        Return True when frames are written from inside the timed control loop, where a
-        blocking encode would collapse the cadence.  A method rather than a ClassVar so
-        the answer can depend on the strategy's own fields (see DAgger).
+        当帧是在定时控制循环内部写入时返回 True，因为阻塞式编码
+        会破坏节奏。用方法而不是 ClassVar，是为了让结果可以
+        依赖策略自身的字段（参见 DAgger）。
         """
         return False
 
     def extra_dataset_features(self) -> dict[str, dict]:
-        """Strategy-owned dataset columns, merged into the robot/policy features.
+        """策略拥有的数据集列，会合并到机器人/策略特征中。
 
-        Every recorded frame must carry every key declared here.
+        每个记录的帧都必须包含这里声明的所有键。
         """
         return {}
 
@@ -85,7 +85,7 @@ class RolloutStrategyConfig(draccus.ChoiceRegistry, abc.ABC):
 @RolloutStrategyConfig.register_subclass("base")
 @dataclass
 class BaseStrategyConfig(RolloutStrategyConfig):
-    """Autonomous rollout with no data recording."""
+    """不记录数据的自主 rollout。"""
 
     supports_interactive: ClassVar[bool] = True
 
@@ -93,23 +93,22 @@ class BaseStrategyConfig(RolloutStrategyConfig):
 @RolloutStrategyConfig.register_subclass("sentry")
 @dataclass
 class SentryStrategyConfig(RolloutStrategyConfig):
-    """Continuous autonomous rollout with always-on recording.
+    """持续自主 rollout，始终开启记录。
 
-    Episode duration is derived from camera resolution, FPS, and
-    ``target_video_file_size_mb`` so that each saved episode produces a
-    video file that has crossed the target size.  This aligns episode
-    boundaries with the dataset's video file chunking, so each
-    ``push_to_hub`` call uploads complete video files rather than
-    re-uploading a growing file that hasn't crossed the chunk boundary.
+    回合时长由相机分辨率、FPS 和 ``target_video_file_size_mb``
+    推导得出，使每个保存的回合产生的视频文件恰好超过目标大小。
+    这样回合边界与数据集的视频文件分块对齐，每次 ``push_to_hub``
+    调用上传的都是完整的视频文件，而不是重新上传一个尚未越过
+    分块边界的不断增大的文件。
     """
 
     supports_interactive: ClassVar[bool] = True
     dataset_mode: ClassVar[str] = "required"
 
     upload_every_n_episodes: int = 5
-    # Target video file size in MB for episode rotation.  Episodes are
-    # saved once the estimated video duration would exceed this limit.
-    # Defaults to DEFAULT_VIDEO_FILE_SIZE_IN_MB when set to None.
+    # 用于回合轮换的目标视频文件大小（MB）。当估计的视频时长
+    # 将超过此限制时保存回合。
+    # 设为 None 时默认为 DEFAULT_VIDEO_FILE_SIZE_IN_MB。
     target_video_file_size_mb: int | None = None
 
     def requires_streaming_encoding(self) -> bool:
@@ -119,12 +118,11 @@ class SentryStrategyConfig(RolloutStrategyConfig):
 @RolloutStrategyConfig.register_subclass("highlight")
 @dataclass
 class HighlightStrategyConfig(RolloutStrategyConfig):
-    """Autonomous rollout with on-demand recording via ring buffer.
+    """通过环形缓冲区实现按需记录的自主 rollout。
 
-    A memory-bounded ring buffer continuously captures telemetry.  When
-    the user presses the save key, the buffer contents are flushed to
-    the dataset and live recording continues until the key is pressed
-    again.
+    一个内存受限的环形缓冲区持续捕获遥测数据。当用户
+    按下保存键时，缓冲区内容会被刷入数据集，并持续进行
+    实时记录，直到再次按下该键为止。
     """
 
     dataset_mode: ClassVar[str] = "required"
@@ -140,10 +138,10 @@ class HighlightStrategyConfig(RolloutStrategyConfig):
 
 @dataclass
 class DAggerKeyboardConfig:
-    """Keyboard key bindings for DAgger controls.
+    """DAgger 控制的键盘按键绑定。
 
-    Keys are specified as single characters (e.g. ``"c"``, ``"h"``) or
-    special key names (``"space"``).
+    按键以单个字符（例如 ``"c"``、``"h"``）或
+    特殊键名（``"space"``）指定。
     """
 
     pause_resume: str = "space"
@@ -153,9 +151,9 @@ class DAggerKeyboardConfig:
 
 @dataclass
 class DAggerPedalConfig:
-    """Foot pedal configuration for DAgger controls.
+    """DAgger 控制的脚踏板配置。
 
-    Pedal codes are evdev key code strings (e.g. ``"KEY_A"``).
+    踏板代码是 evdev 键码字符串（例如 ``"KEY_A"``）。
     """
 
     device_path: str = "/dev/input/by-id/usb-PCsensor_FootSwitch-event-kbd"
@@ -167,85 +165,84 @@ class DAggerPedalConfig:
 @RolloutStrategyConfig.register_subclass("episodic")
 @dataclass
 class EpisodicStrategyConfig(RolloutStrategyConfig):
-    """Episode-oriented recording that mirrors the behavior of ``lerobot-record``.
+    """面向回合的记录方式，行为与 ``lerobot-record`` 一致。
 
-    Records ``dataset.num_episodes`` episodes of maximum ``dataset.episode_time_s`` each.
-    After each episode, runs ``dataset.reset_time_s`` seconds of reset time.
+    记录 ``dataset.num_episodes`` 个回合，每个回合最长 ``dataset.episode_time_s`` 秒。
+    每个回合结束后，运行 ``dataset.reset_time_s`` 秒的重置时间。
 
-    Keyboard controls:
-        Right arrow  — end current episode or reset phase early
-        Left arrow   — discard current episode and re-record
-        Escape       — stop recording session
+    键盘控制：
+        右方向键  — 提前结束当前回合或重置阶段
+        左方向键  — 丢弃当前回合并重新记录
+        Escape    — 停止记录会话
 
-    In between episodes:
-    - if there is no teleop leader, the robot is held at its initial joint positions captured at startup.
-    - else, the robot is moved smoothly to the position of the teleop leader.
+    在回合之间：
+    - 如果没有遥操作主手，机器人保持在启动时捕获的初始关节位置。
+    - 否则，机器人平滑移动到遥操作主手的位置。
     """
 
     dataset_mode: ClassVar[str] = "required"
 
-    # This only applies if there are no teleop leaders specified.
-    # When True (default), moves the robot back to the joint positions captured at startup.
-    # Otherwise, leave the robot in its current position.
+    # 仅当未指定遥操作主手时适用。
+    # 为 True（默认）时，将机器人移回启动时捕获的关节位置。
+    # 否则，让机器人保持在当前位置。
     reset_to_initial_position: bool = True
 
-    # Whether to turn on or off the leader -> follower smooth handover behavior.
-    # When False, fallback to follower -> leader handover.
-    # Note that leader -> follower handover is only supported when the leader has `send_feedback` capability.
+    # 是否开启主手 -> 从手的平滑交接行为。
+    # 为 False 时，回退到从手 -> 主手的交接方式。
+    # 注意：主手 -> 从手的交接仅在主手具备 `send_feedback` 能力时受支持。
     smooth_leader_to_follower_handover: bool = True
 
-    # Whether to turn on or off the smooth handover behavior at the start of the
-    # reset phase: the leader is driven to the follower position (actuated
-    # teleops, see `smooth_leader_to_follower_handover`), or the follower is
-    # slid to the teleop pose (non-actuated teleops). Disable for clutch-style
-    # teleoperators (e.g. VR controllers) that re-reference at the current robot
-    # pose on engage: the handover is already continuous there, and the blocking
-    # interpolation only delays the start of the reset phase.
+    # 是否在重置阶段开始时开启平滑交接行为：
+    # 主手被驱动到从手位置（带驱动的遥操作设备，
+    # 参见 `smooth_leader_to_follower_handover`），或者从手被
+    # 滑动到遥操作姿态（无驱动的遥操作设备）。对于离合器式
+    # 遥操作设备（例如 VR 控制器）应禁用，这类设备在接入时会以
+    # 当前机器人姿态为基准重新对齐：那里的交接本来就是连续的，
+    # 阻塞式插值只会延迟重置阶段的开始。
     smooth_handover: bool = True
 
 
 @RolloutStrategyConfig.register_subclass("dagger")
 @dataclass
 class DAggerStrategyConfig(RolloutStrategyConfig):
-    """Human-in-the-loop data collection (DAgger / RaC).
+    """人在回路的数据采集（DAgger / RaC）。
 
-    Alternates between autonomous policy execution and human intervention.
-    Intervention frames are tagged with ``intervention=True``.
+    在自主策略执行和人工干预之间交替。
+    干预帧会被标记为 ``intervention=True``。
 
-    Input is controlled via either a keyboard or foot pedal, selected by
-    ``input_device``.  Each device exposes three actions:
+    输入通过键盘或脚踏板控制，由 ``input_device`` 选择。
+    每种设备都提供三个动作：
 
-    1. **pause_resume** — toggle policy execution on/off.
-    2. **correction** — toggle human correction recording.
-    3. **upload** — push dataset to hub on demand (corrections-only mode).
+    1. **pause_resume** — 切换策略执行的开/关。
+    2. **correction** — 切换人工纠正记录的开/关。
+    3. **upload** — 按需将数据集推送到 hub（仅纠正模式）。
 
-    When ``record_autonomous=False`` (default) only human-correction windows
-    are recorded — each correction becomes its own episode.  Set to ``True``
-    to record both autonomous and correction frames with size-based episode
-    rotation (same as Sentry) and background uploading.  ``push_to_hub`` is
-    blocked while a correction is in progress.
+    当 ``record_autonomous=False``（默认）时，只记录人工纠正窗口——
+    每次纠正成为独立的回合。设为 ``True`` 则同时记录自主帧和纠正帧，
+    并采用基于大小的回合轮换（与 Sentry 相同）和后台上传。
+    纠正进行中时 ``push_to_hub`` 会被阻塞。
     """
 
-    # TODO(Steven): DAgger shouldn't require a dataset (user may want to just rollout+intervene
-    # without recording), but for now we require it to simplify the implementation.
+    # TODO(Steven): DAgger 本不应要求数据集（用户可能只想 rollout+干预
+    # 而不记录），但目前为了简化实现仍要求提供数据集。
     dataset_mode: ClassVar[str] = "required"
     requires_teleop: ClassVar[bool] = True
 
-    # Number of correction episodes to collect (corrections-only mode).
-    # When None, falls back to ``--dataset.num_episodes``.
+    # 要收集的纠正回合数（仅纠正模式）。
+    # 为 None 时，回退到 ``--dataset.num_episodes``。
     num_episodes: int | None = None
     record_autonomous: bool = False
     upload_every_n_episodes: int = 5
-    # Target video file size in MB for episode rotation (record_autonomous
-    # mode only).  Defaults to DEFAULT_VIDEO_FILE_SIZE_IN_MB when None.
+    # 用于回合轮换的目标视频文件大小（MB）（仅限 record_autonomous
+    # 模式）。为 None 时默认为 DEFAULT_VIDEO_FILE_SIZE_IN_MB。
     target_video_file_size_mb: int | None = None
-    # Whether to turn on or off the smooth handover behavior at phase transitions:
-    # the leader is driven to the follower position on pause (teleops with
-    # `send_feedback` capability), and the follower is slid to the teleop pose when
-    # a correction starts (non-actuated teleops). Disable for clutch-style
-    # teleoperators (e.g. VR controllers) that re-reference at the current robot
-    # pose on engage: the handover is already continuous there, and the blocking
-    # interpolation only delays the start of the correction.
+    # 是否在阶段切换时开启平滑交接行为：
+    # 暂停时主手被驱动到从手位置（具备 `send_feedback` 能力的
+    # 遥操作设备），纠正开始时从手被滑动到遥操作姿态
+    # （无驱动的遥操作设备）。对于离合器式遥操作设备
+    # （例如 VR 控制器）应禁用，这类设备在接入时会以当前机器人
+    # 姿态为基准重新对齐：那里的交接本来就是连续的，
+    # 阻塞式插值只会延迟纠正的开始。
     smooth_handover: bool = True
     input_device: str = "keyboard"
     keyboard: DAggerKeyboardConfig = field(default_factory=DAggerKeyboardConfig)
@@ -256,7 +253,7 @@ class DAggerStrategyConfig(RolloutStrategyConfig):
             raise ValueError(f"DAgger input_device must be 'keyboard' or 'pedal', got '{self.input_device}'")
 
     def requires_streaming_encoding(self) -> bool:
-        # Only when the autonomous phase is recorded too; corrections are saved between phases.
+        # 仅当自主阶段也被记录时才需要；纠正在阶段之间保存。
         return self.record_autonomous
 
     def extra_dataset_features(self) -> dict[str, dict]:
@@ -264,77 +261,76 @@ class DAggerStrategyConfig(RolloutStrategyConfig):
 
 
 # ---------------------------------------------------------------------------
-# Top-level rollout config
+# 顶层 rollout 配置
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class RolloutConfig:
-    """Top-level configuration for the ``lerobot-rollout`` CLI.
+    """``lerobot-rollout`` CLI 的顶层配置。
 
-    Combines hardware, policy, strategy, and runtime settings.  The
-    ``__post_init__`` method performs fail-fast validation to reject
-    invalid flag combinations early.
+    组合了硬件、策略、运行时等设置。
+    ``__post_init__`` 方法执行快速失败校验，
+    尽早拒绝无效的标志组合。
     """
 
-    # Hardware
+    # 硬件
     robot: RobotConfig | None = None
     teleop: TeleoperatorConfig | None = None
 
-    # Policy (loaded from --policy.path via __post_init__)
+    # 策略（通过 __post_init__ 从 --policy.path 加载）
     policy: PreTrainedConfig | None = None
 
-    # Strategy (polymorphic: --strategy.type=base|sentry|highlight|dagger|episodic,
-    # or any name registered by a third-party package)
+    # 策略（多态：--strategy.type=base|sentry|highlight|dagger|episodic，
+    # 或第三方包注册的任何名称）
     strategy: RolloutStrategyConfig = field(default_factory=BaseStrategyConfig)
 
-    # Inference backend (polymorphic: --inference.type=sync|rtc)
+    # 推理后端（多态：--inference.type=sync|rtc）
     inference: InferenceEngineConfig = field(default_factory=SyncInferenceConfig)
 
-    # Dataset (required, optional or rejected according to the strategy's ``dataset_mode``)
+    # 数据集（根据策略的 ``dataset_mode`` 为必填、可选或拒绝）
     dataset: DatasetRecordConfig | None = None
 
-    # Runtime
+    # 运行时
     fps: float = 30.0
-    # Run time in seconds; 0 = infinite (24/7 mode).  In interactive mode this
-    # bounds each /start segment, not the whole session.
+    # 运行时长（秒）；0 = 无限（24/7 模式）。在交互模式下，
+    # 它限制每个 /start 片段，而不是整个会话。
     duration: float = 0.0
-    # Control the rollout from stdin with chat-style commands (/start, /subtask,
-    # /vqa, /autosteer, /reset, /stop) while hardware and policy stay warm.  The
-    # robot does not move until /start, and logs below ERROR are muted for the
-    # session's duration.
+    # 通过 stdin 以聊天式命令（/start、/subtask、/vqa、/autosteer、
+    # /reset、/stop）控制 rollout，同时硬件和策略保持热状态。
+    # 在 /start 之前机器人不会移动，会话期间低于 ERROR 级别的
+    # 日志会被静音。
     interactive: bool = False
-    # /autosteer: seconds of robot motion between two "what is the next subtask?"
-    # queries, measured from the moment a subtask is applied.  Lower values
-    # re-plan sooner but spend more of the loop generating text instead of acting.
+    # /autosteer：两次 "what is the next subtask?" 查询之间的机器人运动
+    # 秒数，从子任务生效时刻开始计算。值越小重新规划越早，
+    # 但循环中用于生成文本而非执行动作的时间占比越高。
     autosteer_interval_s: float = 10.0
-    # Robot commands sent per policy action.  Values > 1 linearly interpolate
-    # between consecutive policy actions for smoother motion: commands go to
-    # the robot at ``fps × multiplier`` Hz while policy inference and dataset
-    # recording stay at ``fps`` Hz.
+    # 每个策略动作发送的机器人指令数。值大于 1 时会在相邻策略动作
+    # 之间线性插值以获得更平滑的运动：指令以 ``fps × multiplier`` Hz
+    # 发送给机器人，而策略推理和数据集记录仍保持 ``fps`` Hz。
     interpolation_multiplier: int = 1
     device: str | None = None
     task: str = ""
     display_data: bool = False
-    # Visualization backend used when display_data is True: "rerun" or "foxglove".
+    # display_data 为 True 时使用的可视化后端："rerun" 或 "foxglove"。
     display_mode: str = "rerun"
-    # For "rerun": IP of a remote server to send to. For "foxglove": interface to bind the WebSocket
-    # server to (127.0.0.1 for local only, 0.0.0.0 for all interfaces).
+    # 对于 "rerun"：要发送到的远程服务器 IP。对于 "foxglove"：WebSocket
+    # 服务器绑定的接口（127.0.0.1 仅限本地，0.0.0.0 为所有接口）。
     display_ip: str | None = None
-    # For "rerun": port of the remote server. For "foxglove": port to bind the WebSocket server to.
+    # 对于 "rerun"：远程服务器的端口。对于 "foxglove"：WebSocket 服务器绑定的端口。
     display_port: int | None = None
-    # Whether to display compressed (JPEG) images instead of raw frames
+    # 是否显示压缩（JPEG）图像而不是原始帧
     display_compressed_images: bool = False
-    # Use vocal synthesis to read events
+    # 使用语音合成朗读事件
     play_sounds: bool = True
     resume: bool = False
-    # Rename map for mapping robot/dataset observation keys to policy keys
+    # 用于将机器人/数据集观测键映射到策略键的重命名映射
     rename_map: dict[str, str] = field(default_factory=dict)
 
-    # Hardware teardown
-    # When True (default), smoothly interpolate the robot back to the joint
-    # positions captured at startup before disconnecting.  Set to False to
-    # leave the robot in its final achieved pose at shutdown.
+    # 硬件关闭清理
+    # 为 True（默认）时，在断开连接前平滑插值将机器人移回
+    # 启动时捕获的关节位置。设为 False 则在关闭时
+    # 让机器人保持在最终到达的姿态。
     return_to_initial_position: bool = True
 
     # Torch compile
@@ -344,13 +340,13 @@ class RolloutConfig:
     compile_warmup_inferences: int = 2
 
     def __post_init__(self):
-        """Validate config invariants and load the policy config from ``--policy.path``."""
+        """校验配置不变量，并从 ``--policy.path`` 加载策略配置。"""
         if self.interpolation_multiplier < 1:
             raise ValueError(f"interpolation_multiplier must be >= 1, got {self.interpolation_multiplier}")
 
-        # --- Strategy capabilities ---
-        # Read off the strategy's declarations, never its concrete type, so a
-        # third-party strategy is validated exactly like a built-in one.
+        # --- 策略能力 ---
+        # 只读取策略的声明，绝不检查其具体类型，这样
+        # 第三方策略与内置策略的校验方式完全一致。
         strategy = self.strategy
         if strategy.requires_teleop and self.teleop is None:
             raise ValueError(f"{strategy.type} strategy requires --teleop.type to be set")
@@ -364,8 +360,8 @@ class RolloutConfig:
         if self.dataset is not None and not self.dataset.repo_id:
             raise ValueError("--dataset.repo_id must be set when passing --dataset.* flags")
 
-        # Interactive mode calls strategy.run() once per segment, so only strategies
-        # declaring ``supports_interactive`` may be driven by it.
+        # 交互模式对每个片段调用一次 strategy.run()，因此只有声明了
+        # ``supports_interactive`` 的策略才能由它驱动。
         if self.interactive and not self.strategy.supports_interactive:
             supported = " or ".join(
                 sorted(
@@ -381,8 +377,8 @@ class RolloutConfig:
         if self.autosteer_interval_s < 0:
             raise ValueError(f"--autosteer_interval_s must be >= 0 (got {self.autosteer_interval_s}).")
 
-        # A strategy that writes frames from inside the timed control loop cannot afford
-        # a blocking encode: force streaming encoding on its behalf.
+        # 在定时控制循环内部写帧的策略承受不起阻塞式编码：
+        # 代表它强制开启流式编码。
         if (
             self.dataset is not None
             and strategy.requires_streaming_encoding()
@@ -391,7 +387,7 @@ class RolloutConfig:
             logger.warning("%s strategy forces streaming_encoding=True", strategy.type)
             self.dataset.streaming_encoding = True
 
-        # --- Policy loading ---
+        # --- 策略加载 ---
         if self.robot is None:
             raise ValueError("--robot.type is required for rollout")
 
@@ -412,10 +408,10 @@ class RolloutConfig:
         if self.policy is None:
             raise ValueError("--policy.path is required for rollout")
 
-        # --- Task resolution ---
-        # When any --dataset.* flag is passed, draccus creates a DatasetRecordConfig with single_task="".
-        # If the user set the task via the top-level --task flag, propagate it so that all
-        # downstream consumers (inference engine, dataset frame builders) see it.
+        # --- 任务解析 ---
+        # 当传入任何 --dataset.* 标志时，draccus 会创建一个 single_task="" 的 DatasetRecordConfig。
+        # 如果用户通过顶层 --task 标志设置了任务，则将其传播下去，
+        # 使所有下游使用者（推理引擎、数据集帧构建器）都能看到它。
         if self.dataset is not None and not self.dataset.single_task and self.task:
             logger.info("Propagating top-level task '%s' to dataset config", self.task)
             self.dataset.single_task = self.task
@@ -423,10 +419,10 @@ class RolloutConfig:
             logger.info("Propagating dataset single_task '%s' to top-level task", self.dataset.single_task)
             self.task = self.dataset.single_task
 
-        # --- Device resolution ---
-        # Resolve device from the policy config when not explicitly set so all
-        # components (policy.to, preprocessor, inference engine) use the same
-        # device string instead of inconsistent fallbacks.
+        # --- 设备解析 ---
+        # 未显式设置时从策略配置解析设备，使所有组件
+        # （policy.to、预处理器、推理引擎）使用相同的
+        # 设备字符串，而不是不一致的回退值。
         if self.device is None or not is_torch_device_available(self.device):
             resolved = self.policy.device
             if resolved:

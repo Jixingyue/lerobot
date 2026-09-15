@@ -44,7 +44,7 @@ from .configuration_pi0_fast import PI0FastConfig
 @dataclass
 class Pi0FastPrepareStateAndLanguageTokenizerProcessorStep(ProcessorStep):
     """
-    Processor step to prepare the state and tokenize the language input.
+    用于准备状态并对语言输入进行分词的处理步骤。
     """
 
     max_state_dim: int = 32
@@ -60,11 +60,11 @@ class Pi0FastPrepareStateAndLanguageTokenizerProcessorStep(ProcessorStep):
         if tasks is None:
             raise ValueError("No task found in complementary data")
 
-        # TODO: check if this necessary
+        # TODO: 检查这是否必要
         state = deepcopy(state)
 
-        # State should already be normalized to [-1, 1] by the NormalizerProcessorStep that runs before this step
-        # Discretize into 256 bins (see openpi `PaligemmaTokenizer.tokenize()`)
+        # 状态应已由在此步骤之前运行的 NormalizerProcessorStep 归一化到 [-1, 1]
+        # 离散化为 256 个区间（参见 openpi `PaligemmaTokenizer.tokenize()`）
         state_np = state.cpu().numpy()
         discretized_states = np.digitize(state_np, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
 
@@ -76,15 +76,15 @@ class Pi0FastPrepareStateAndLanguageTokenizerProcessorStep(ProcessorStep):
             full_prompts.append(full_prompt)
 
         transition[TransitionKey.COMPLEMENTARY_DATA][self.task_key] = full_prompts
-        # Normalize state to [-1, 1] range if needed (assuming it's already normalized by normalizer processor step!!)
-        # Discretize into 256 bins (see openpi `PaligemmaTokenizer.tokenize()`)
+        # 如有需要，将状态归一化到 [-1, 1] 范围（假设它已由归一化处理步骤归一化！！）
+        # 离散化为 256 个区间（参见 openpi `PaligemmaTokenizer.tokenize()`）
         return transition
 
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        This step does not alter the feature definitions.
+        该步骤不会改变特征定义。
         """
         return features
 
@@ -97,28 +97,28 @@ def make_pi0_fast_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the PI0Fast policy.
+    为 PI0Fast 策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares input data for the model by:
-    1. Renaming features to match pretrained configurations.
-    2. Normalizing input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Appending a newline character to the task description for tokenizer compatibility.
-    5. Tokenizing the text prompt using the PaliGemma tokenizer.
-    6. Moving all data to the specified device.
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征以匹配预训练配置。
+    2. 根据数据集统计信息对输入和输出特征进行归一化。
+    3. 添加批次维度。
+    4. 在任务描述末尾追加换行符以兼容分词器。
+    5. 使用 PaliGemma 分词器对文本提示进行分词。
+    6. 将所有数据移动到指定设备。
 
-    The post-processing pipeline handles the model's output by:
-    1. Moving data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    后处理流水线通过以下步骤处理模型的输出：
+    1. 将数据移动到 CPU。
+    2. 将输出特征反归一化到其原始尺度。
 
-    Args:
-        config: The configuration object for the PI0Fast policy.
-        dataset_stats: A dictionary of statistics for normalization.
-        preprocessor_kwargs: Additional arguments for the pre-processor pipeline.
-        postprocessor_kwargs: Additional arguments for the post-processor pipeline.
+    参数：
+        config: PI0Fast 策略的配置对象。
+        dataset_stats: 用于归一化的统计信息字典。
+        preprocessor_kwargs: 预处理器流水线的附加参数。
+        postprocessor_kwargs: 后处理器流水线的附加参数。
 
-    Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+    返回：
+        包含已配置的预处理器和后处理器流水线的元组。
     """
     relative_step = RelativeActionsProcessorStep(
         enabled=config.use_relative_actions,
@@ -128,16 +128,16 @@ def make_pi0_fast_pre_post_processors(
 
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
-    # Pi0Fast order: relative → normalize → tokenize → model → unnormalize → absolute
-    # This matches pi0/pi0.5: RelativeActionsProcessorStep runs first on raw absolute actions,
-    # caching the raw state. NormalizerProcessorStep then normalizes the raw relative actions,
-    # so the normalizer (and action tokenizer) sees delta values — relative stats are required.
-    # NOTE: RelativeActionsProcessorStep only modifies the action in the transition; it reads
-    # state from the observation but does not change it. NormalizerProcessorStep still runs
-    # before Pi0FastPrepareStateAndLanguageTokenizerProcessorStep, so the state tokenizer
-    # continues to receive normalized state in [-1, 1] as expected.
+    # Pi0Fast 顺序：相对 → 归一化 → 分词 → 模型 → 反归一化 → 绝对
+    # 这与 pi0/pi0.5 一致：RelativeActionsProcessorStep 首先对原始绝对动作运行，
+    # 并缓存原始状态。随后 NormalizerProcessorStep 对原始相对动作进行归一化，
+    # 因此归一化器（以及动作分词器）看到的是增量值——需要相对统计信息。
+    # 注意：RelativeActionsProcessorStep 仅修改转移（transition）中的动作；它从
+    # 观测中读取状态但不会更改状态。NormalizerProcessorStep 仍然在
+    # Pi0FastPrepareStateAndLanguageTokenizerProcessorStep 之前运行，因此状态分词器
+    # 仍会按预期接收到 [-1, 1] 范围内的归一化状态。
     input_steps: list[ProcessorStep] = [
-        steps.rename_observations,  # To mimic the same processor as pretrained one
+        steps.rename_observations,  # 模拟与预训练模型相同的处理器
         steps.add_batch_dim,
         relative_step,
         steps.normalize,

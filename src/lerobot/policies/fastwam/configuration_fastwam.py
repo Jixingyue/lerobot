@@ -135,7 +135,7 @@ def _validate_wan_model_id(value: str, field_name: str) -> str:
 
 
 def is_fastwam_base_compatible_config(config: FastWAMConfig) -> bool:
-    """Return whether `fastwam_base` partial weights can initialize this config."""
+    """返回 `fastwam_base` 的部分权重是否可以初始化此配置。"""
 
     default_video_config = default_video_dit_config(config.action_dim)
     default_action_config = default_action_dit_config(config.action_dim)
@@ -151,35 +151,32 @@ def is_fastwam_base_compatible_config(config: FastWAMConfig) -> bool:
 @PreTrainedConfig.register_subclass("fastwam")
 @dataclass
 class FastWAMConfig(PreTrainedConfig):
-    """Configuration for the FastWAM LeRobot policy.
+    """FastWAM LeRobot 策略的配置。
 
     Args:
-        action_dim (int): Number of scalar action channels per timestep.
-        proprio_dim (int | None): Number of proprioception channels used as an
-            extra text-context token. `None` disables proprio conditioning.
-        action_horizon (int): Number of actions predicted by one policy call.
-        num_video_frames (int): Raw video sampling window (in dataset frames). The
-            model actually operates on `model_video_frames` frames after subsampling
-            by `action_video_freq_ratio`.
-        action_video_freq_ratio (int): Actions are sampled at this multiple of the
-            video frame rate. Video frames are taken every `action_video_freq_ratio`-th
-            raw frame, so the model sees `(num_video_frames - 1) // ratio + 1` frames
-            spanning the same time window as `action_horizon` actions (ratio actions
-            per video frame).
-        image_size (tuple[int, int]): Concatenated image size as `(height, width)`.
-        context_len (int): Maximum text embedding token length.
-        video_dit_config (dict[str, Any] | None): Wan video expert config.
-        action_dit_config (dict[str, Any] | None): Action expert config.
-        use_gradient_checkpointing (bool): Enable activation checkpointing in both DiT
-            experts (trades compute for memory; propagated into the DiT configs).
-        compile_action_infer (bool): Compile the cached action-denoising path with
-            ``torch.compile`` in reduce-overhead mode. The first inference call incurs
-            compilation warm-up; subsequent calls with the same shapes reuse the graph.
-        freeze_video_expert (bool): Freeze the ~5B Wan video expert
-            (`model.video_expert`) so only the action expert + proprio encoder train.
-            Cuts the AdamW optimizer footprint substantially; the video expert keeps its
-            pretrained weights. (If enabled, also set `loss.lambda_video=0` to skip the
-            now-gradient-free video loss compute.)
+        action_dim (int): 每个时间步的标量动作通道数。
+        proprio_dim (int | None): 用作额外文本上下文 token 的本体感知通道数。
+            `None` 表示禁用本体感知条件输入。
+        action_horizon (int): 一次策略调用预测的动作数量。
+        num_video_frames (int): 原始视频采样窗口（以数据集帧数计）。模型在按
+            `action_video_freq_ratio` 降采样后，实际操作 `model_video_frames` 帧。
+        action_video_freq_ratio (int): 动作以视频帧率的该倍数进行采样。每隔
+            `action_video_freq_ratio` 个原始帧取一个视频帧，因此模型看到
+            `(num_video_frames - 1) // ratio + 1` 帧，覆盖与 `action_horizon`
+            个动作相同的时间窗口（每个视频帧对应 ratio 个动作）。
+        image_size (tuple[int, int]): 拼接后的图像尺寸，格式为 `(height, width)`。
+        context_len (int): 文本嵌入的最大 token 长度。
+        video_dit_config (dict[str, Any] | None): Wan 视频专家的配置。
+        action_dit_config (dict[str, Any] | None): 动作专家的配置。
+        use_gradient_checkpointing (bool): 在两个 DiT 专家中启用激活检查点
+            （以计算换内存；会传递到 DiT 配置中）。
+        compile_action_infer (bool): 使用 ``torch.compile`` 以 reduce-overhead 模式
+            编译带缓存的动作去噪路径。首次推理调用会产生编译预热开销；之后相同
+            形状的调用会复用计算图。
+        freeze_video_expert (bool): 冻结约 5B 的 Wan 视频专家（`model.video_expert`），
+            只训练动作专家 + 本体感知编码器。可大幅减少 AdamW 优化器的内存占用；
+            视频专家保留其预训练权重。（如果启用，还应设置 `loss.lambda_video=0`
+            以跳过此时已无梯度的视频损失计算。）
     """
 
     n_obs_steps: int = 1
@@ -290,17 +287,16 @@ class FastWAMConfig(PreTrainedConfig):
         return None
 
     def set_dataset_feature_metadata(self, dataset_features: dict[str, Any]) -> None:
-        """Rebuild visual input features from the dataset's real camera keys.
+        """根据数据集真实的相机键重建视觉输入特征。
 
-        FastWAM's `__post_init__` installs a synthetic single-image default
-        (`observation.images.image` at full `image_size` width). For datasets
-        with one or more separately-named cameras (e.g. `observation.images.top`,
-        `observation.images.wrist`), this hook — invoked by `make_policy` once the
-        dataset metadata is known — replaces that default with the actual camera
-        keys, each declared at the policy's native per-camera resolution
-        (`image_size[0]` x `image_size[1] // num_cameras`). The accompanying
-        resize step in `make_fastwam_pre_post_processors` resizes raw frames to
-        match, so heterogeneous source resolutions (e.g. 480x640) are supported.
+        FastWAM 的 `__post_init__` 会安装一个合成的单图像默认值
+        （`observation.images.image`，宽度为完整的 `image_size`）。对于具有一个或多个
+        独立命名相机的数据集（例如 `observation.images.top`、`observation.images.wrist`），
+        此钩子——在数据集元数据已知后由 `make_policy` 调用——会用实际的相机键替换
+        该默认值，每个相机按策略原生的单相机分辨率声明
+        （`image_size[0]` x `image_size[1] // num_cameras`）。`make_fastwam_pre_post_processors`
+        中配套的 resize 步骤会把原始帧 resize 到匹配的尺寸，因此支持异构的源分辨率
+        （例如 480x640）。
         """
         image_keys = sorted(
             key
@@ -331,9 +327,9 @@ class FastWAMConfig(PreTrainedConfig):
             raise ValueError(
                 f"`action_video_freq_ratio` must be positive, got {self.action_video_freq_ratio}."
             )
-        # Video frames are subsampled by action_video_freq_ratio; the resulting model frame
-        # count must satisfy T % 4 == 1 for the VAE temporal tokenization (mirrors the
-        # original FastWAM dataset asserts).
+        # 视频帧按 action_video_freq_ratio 降采样；得到的模型帧数必须满足
+        # T % 4 == 1 才能进行 VAE 时间维 tokenization（与原始 FastWAM 数据集的
+        # 断言保持一致）。
         if (self.num_video_frames - 1) % self.action_video_freq_ratio != 0:
             raise ValueError(
                 f"`num_video_frames - 1` ({self.num_video_frames - 1}) must be divisible by "
@@ -381,17 +377,17 @@ class FastWAMConfig(PreTrainedConfig):
 
     @property
     def model_video_frames(self) -> int:
-        """Number of video frames the model actually operates on, after subsampling the
-        raw `num_video_frames` window by `action_video_freq_ratio` (e.g. 33 -> 9)."""
+        """模型实际操作的视频帧数，即原始 `num_video_frames` 窗口按
+        `action_video_freq_ratio` 降采样后的结果（例如 33 -> 9）。"""
         return (self.num_video_frames - 1) // self.action_video_freq_ratio + 1
 
     @property
     def observation_delta_indices(self) -> list[int]:
-        # Load the video frames the model is supervised on: the future window subsampled by
-        # action_video_freq_ratio (e.g. [0, 4, 8, ..., 32] -> 9 frames). Each video frame is
-        # thus `action_video_freq_ratio` actions apart, while actions load at the full rate
-        # (`action_delta_indices` = range(action_horizon)). Returning None would load only the
-        # current frame, making the video target a static repeat (degenerate supervision).
+        # 加载模型受监督的视频帧：按 action_video_freq_ratio 降采样的未来窗口
+        # （例如 [0, 4, 8, ..., 32] -> 9 帧）。因此相邻视频帧之间间隔
+        # `action_video_freq_ratio` 个动作，而动作按完整速率加载
+        # （`action_delta_indices` = range(action_horizon)）。如果返回 None 则只加载
+        # 当前帧，会使视频目标变成静态重复（退化的监督信号）。
         return list(range(0, self.num_video_frames, self.action_video_freq_ratio))
 
     @property

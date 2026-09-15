@@ -29,13 +29,13 @@ from lerobot.utils.constants import PRETRAINED_MODEL_DIR
 def cfg_to_group(
     cfg: TrainPipelineConfig, return_list: bool = False, truncate_tags: bool = False, max_tag_length: int = 64
 ) -> list[str] | str:
-    """Return a group name for logging. Optionally returns group name as list."""
+    """返回用于日志记录的组名称。可选地将组名称作为列表返回。"""
 
     def _maybe_truncate(tag: str) -> str:
-        """Truncate tag to max_tag_length characters if required.
+        """如果需要，将标签截断为 max_tag_length 个字符。
 
-        wandb rejects tags longer than 64 characters.
-        See: https://github.com/wandb/wandb/blob/main/wandb/sdk/wandb_settings.py
+        wandb 拒绝超过 64 个字符的标签。
+        参见：https://github.com/wandb/wandb/blob/main/wandb/sdk/wandb_settings.py
         """
         if len(tag) <= max_tag_length:
             return tag
@@ -59,7 +59,7 @@ def cfg_to_group(
 
 
 def get_wandb_run_id_from_filesystem(log_dir: Path) -> str:
-    # Get the WandB run ID.
+    # 获取 WandB 运行 ID。
     paths = glob(str(log_dir / "wandb/latest-run/run-*"))
     if len(paths) != 1:
         raise RuntimeError("Couldn't get the previous WandB run ID for run resumption.")
@@ -71,12 +71,12 @@ def get_wandb_run_id_from_filesystem(log_dir: Path) -> str:
 
 
 def get_safe_wandb_artifact_name(name: str):
-    """WandB artifacts don't accept ":" or "/" in their name."""
+    """WandB 工件在名称中不接受 ":" 或 "/"。"""
     return name.replace(":", "_").replace("/", "_")
 
 
 class WandBLogger:
-    """A helper class to log object using wandb."""
+    """使用 wandb 记录对象的助手类。"""
 
     def __init__(self, cfg: TrainPipelineConfig):
         self.cfg = cfg.wandb
@@ -85,7 +85,7 @@ class WandBLogger:
         self.env_fps = cfg.env.fps if cfg.env else None
         self._group = cfg_to_group(cfg)
 
-        # Set up WandB.
+        # 设置 WandB。
         os.environ["WANDB_SILENT"] = "True"
         import wandb
 
@@ -105,9 +105,9 @@ class WandBLogger:
             tags=cfg_to_group(cfg, return_list=True, truncate_tags=True) if self.cfg.add_tags else None,
             dir=self.log_dir,
             config=cfg.to_dict(),
-            # TODO(rcadene): try set to True
+            # TODO(rcadene)：尝试设置为 True
             save_code=False,
-            # TODO(rcadene): split train and eval, and run async eval with job_type="eval"
+            # TODO(rcadene)：拆分训练和评估，并使用 job_type="eval" 运行异步评估
             job_type="train_eval",
             resume=self.cfg.resume or ("must" if cfg.resume else None),
             mode=self.cfg.mode if self.cfg.mode in ["online", "offline", "disabled"] else "online",
@@ -118,17 +118,17 @@ class WandBLogger:
             ),
         )
         run_id = wandb.run.id
-        # NOTE: We will override the cfg.wandb.run_id with the wandb run id.
-        # This is because we want to be able to resume the run from the wandb run id.
+        # 注意：我们将用 wandb 运行 ID 覆盖 cfg.wandb.run_id。
+        # 这是因为我们希望能够从 wandb 运行 ID 恢复运行。
         cfg.wandb.run_id = run_id
-        # Handle custom step key for rl asynchronous training.
+        # 为 rl 异步训练处理自定义步键。
         self._wandb_custom_step_key: set[str] | None = None
         logging.info(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
         logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
         self._wandb = wandb
 
     def log_policy(self, checkpoint_dir: Path):
-        """Checkpoints the policy to wandb."""
+        """将策略检查点保存到 wandb。"""
         if self.cfg.disable_artifact:
             return
 
@@ -138,22 +138,22 @@ class WandBLogger:
         artifact = self._wandb.Artifact(artifact_name, type="model")
         pretrained_model_dir = checkpoint_dir / PRETRAINED_MODEL_DIR
 
-        # Check if this is a PEFT model (has adapter files instead of model.safetensors)
+        # 检查这是否是 PEFT 模型（有适配器文件而不是 model.safetensors）
         adapter_model_file = pretrained_model_dir / "adapter_model.safetensors"
         standard_model_file = pretrained_model_dir / SAFETENSORS_SINGLE_FILE
 
         if adapter_model_file.exists():
-            # PEFT model: add adapter files and configs
+            # PEFT 模型：添加适配器文件和配置
             artifact.add_file(adapter_model_file)
             adapter_config_file = pretrained_model_dir / "adapter_config.json"
             if adapter_config_file.exists():
                 artifact.add_file(adapter_config_file)
-            # Also add the policy config which is needed for loading
+            # 同时添加加载所需的策略配置
             config_file = pretrained_model_dir / "config.json"
             if config_file.exists():
                 artifact.add_file(config_file)
         elif standard_model_file.exists():
-            # Standard model: add the single safetensors file
+            # 标准模型：添加单个 safetensors 文件
             artifact.add_file(standard_model_file)
         else:
             logging.warning(
@@ -172,11 +172,11 @@ class WandBLogger:
         if step is None and custom_step_key is None:
             raise ValueError("Either step or custom_step_key must be provided.")
 
-        # NOTE: This is not simple. Wandb step must always monotonically increase and it
-        # increases with each wandb.log call, but in the case of asynchronous RL for example,
-        # multiple time steps is possible. For example, the interaction step with the environment,
-        # the training step, the evaluation step, etc. So we need to define a custom step key
-        # to log the correct step for each metric.
+        # 注意：这不简单。Wandb 步必须始终单调增加，并且
+        # 每次 wandb.log 调用都会增加，但在异步 RL 的情况下，
+        # 多个时间步是可能的。例如，与环境的交互步、
+        # 训练步、评估步等。因此我们需要定义一个自定义步键
+        # 来为每个指标记录正确的步。
         if custom_step_key is not None:
             if self._wandb_custom_step_key is None:
                 self._wandb_custom_step_key = set()
@@ -187,7 +187,7 @@ class WandBLogger:
 
         batch_data = {}
         for k, v in d.items():
-            # Skip the custom step key here, it's added to the batch below.
+            # 在此跳过自定义步键，它将在下面添加到批次中。
             if custom_step_key is not None and k == custom_step_key:
                 continue
 

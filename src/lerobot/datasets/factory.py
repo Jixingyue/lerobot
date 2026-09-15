@@ -38,25 +38,25 @@ def resolve_delta_timestamps(
     ds_meta: LeRobotDatasetMetadata,
     rename_map: dict[str, str] | None = None,
 ) -> dict[str, list] | None:
-    """Resolves delta_timestamps by reading from the 'delta_indices' properties of the config.
+    """通过读取配置中的 'delta_indices' 属性来解析 delta_timestamps。
 
     Args:
-        cfg (PreTrainedConfig | RewardModelConfig): The config to read delta_indices from. Both
-            ``PreTrainedConfig`` and concrete ``RewardModelConfig`` subclasses expose the
-            ``{observation,action,reward}_delta_indices`` properties used below.
-        ds_meta (LeRobotDatasetMetadata): The dataset from which features and fps are used to build
-            delta_timestamps against.
+        cfg (PreTrainedConfig | RewardModelConfig): 从中读取 delta_indices 的配置。
+            ``PreTrainedConfig`` 和具体的 ``RewardModelConfig`` 子类都暴露
+            下面使用的 ``{observation,action,reward}_delta_indices`` 属性。
+        ds_meta (LeRobotDatasetMetadata): 用于构建 delta_timestamps 的数据集，
+            提供其特征和 fps。
 
     Returns:
-        dict[str, list] | None: A dictionary of delta_timestamps, e.g.:
+        dict[str, list] | None: delta_timestamps 字典，例如：
             {
                 "observation.state": [-0.04, -0.02, 0]
                 "observation.action": [-0.02, 0, 0.02]
             }
-            returns `None` if the resulting dict is empty.
+            如果结果字典为空，则返回 `None`。
     """
-    # Only policies that opt into modality-specific history (currently Pi05 with MEM)
-    # define these; everything else falls back to the shared observation indices.
+    # 只有选择启用特定模态历史信息的策略（目前是带 MEM 的 Pi05）
+    # 才会定义这些；其他所有策略都回退到共享的观测索引。
     explicit_image_indices = getattr(cfg, "image_observation_delta_indices", None)
     image_indices = (
         explicit_image_indices if explicit_image_indices is not None else cfg.observation_delta_indices
@@ -74,9 +74,9 @@ def resolve_delta_timestamps(
             delta_timestamps[key] = [i / ds_meta.fps for i in cfg.reward_delta_indices]
         if policy_key == ACTION and cfg.action_delta_indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in cfg.action_delta_indices]
-        # `OBS_IMAGE` matches both the `observation.image` and `observation.images.<cam>`
-        # conventions; matching `OBS_IMAGES` alone would silently give singular-key
-        # datasets no image history at all.
+        # `OBS_IMAGE` 同时匹配 `observation.image` 和 `observation.images.<cam>`
+        # 两种约定；如果只匹配 `OBS_IMAGES`，会悄无声息地让使用单数键的
+        # 数据集完全没有图像历史。
         if policy_key.startswith(OBS_IMAGE):
             indices = image_indices
             matched_image_keys.append(key)
@@ -87,8 +87,8 @@ def resolve_delta_timestamps(
         if indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in indices]
 
-    # A policy asking for an image history that no dataset key can supply would train
-    # on single frames without any error, so fail instead of degrading silently.
+    # 如果策略请求的图像历史没有任何数据集键能够提供，训练会在
+    # 单帧上进行而不会报任何错误，因此这里选择直接报错而不是静默降级。
     if explicit_image_indices is not None and len(explicit_image_indices) > 1 and not matched_image_keys:
         raise ValueError(
             f"{type(cfg).__name__} requests {len(explicit_image_indices)} history frames per camera, but no "
@@ -103,13 +103,13 @@ def resolve_delta_timestamps(
 
 
 def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDataset:
-    """Handles the logic of setting up delta timestamps and image transforms before creating a dataset.
+    """处理创建数据集之前设置 delta timestamps 和图像变换的逻辑。
 
     Args:
-        cfg (TrainPipelineConfig): A TrainPipelineConfig config which contains a DatasetConfig and a PreTrainedConfig.
+        cfg (TrainPipelineConfig): 包含 DatasetConfig 和 PreTrainedConfig 的 TrainPipelineConfig 配置。
 
     Raises:
-        NotImplementedError: The MultiLeRobotDataset is currently deactivated.
+        NotImplementedError: MultiLeRobotDataset 当前处于停用状态。
 
     Returns:
         LeRobotDataset | MultiLeRobotDataset
@@ -119,8 +119,8 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
     )
 
     if isinstance(cfg.dataset.repo_id, str):
-        # Storage-aware loader: same as LeRobotDatasetMetadata(...), plus support
-        # for datasets whose root is an object-store URI (e.g. ``hf://``).
+        # 存储感知的加载器：与 LeRobotDatasetMetadata(...) 相同，另外支持
+        # 根路径为对象存储 URI（例如 ``hf://``）的数据集。
         ds_meta = load_dataset_metadata(
             cfg.dataset.repo_id,
             root=cfg.dataset.root,
@@ -174,7 +174,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
         raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
         dataset = MultiLeRobotDataset(
             cfg.dataset.repo_id,
-            # TODO(aliberts): add proper support for multi dataset
+            # TODO(aliberts): 为多数据集添加正式支持
             # delta_timestamps=delta_timestamps,
             image_transforms=image_transforms,
             video_backend=cfg.dataset.video_backend,
@@ -187,7 +187,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
     if cfg.dataset.use_imagenet_stats:
         for key in dataset.meta.camera_keys:
             if key in dataset.meta.depth_keys:
-                continue  # Exclude depth keys from ImageNet stats
+                continue  # 将深度键排除在 ImageNet 统计量之外
             dataset.meta.stats.setdefault(key, {})
             for stats_type, stats in IMAGENET_STATS.items():
                 dataset.meta.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
@@ -198,10 +198,10 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
 def make_train_eval_datasets(
     cfg: TrainPipelineConfig,
 ) -> tuple[LeRobotDataset | MultiLeRobotDataset, LeRobotDataset | None]:
-    """Create train and optional eval datasets by splitting episodes based on eval_split.
+    """根据 eval_split 划分 episode，创建训练数据集和可选的评估数据集。
 
-    The last ceil(n_episodes * eval_split) episodes per task are held out for evaluation.
-    If eval_split == 0.0, returns (full_dataset, None).
+    每个任务的最后 ceil(n_episodes * eval_split) 个 episode 被留出用于评估。
+    如果 eval_split == 0.0，返回 (full_dataset, None)。
     """
     full_dataset = make_dataset(cfg)
 

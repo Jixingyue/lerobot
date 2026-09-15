@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class BiOpenArmLeader(BimanualMixin, Teleoperator):
     """
-    Bimanual OpenArm Leader Arms
+    双臂 OpenArm Leader 机械臂
     """
 
     config_class = BiOpenArmLeaderConfig
@@ -96,16 +96,16 @@ class BiOpenArmLeader(BimanualMixin, Teleoperator):
     def get_action(self) -> RobotAction:
         action_dict = {}
 
-        # Add "left_" prefix
+        # 添加 "left_" 前缀
         left_action = self.left_arm.get_action()
         action_dict.update({f"left_{key}": value for key, value in left_action.items()})
 
-        # Add "right_" prefix
+        # 添加 "right_" 前缀
         right_action = self.right_arm.get_action()
         action_dict.update({f"right_{key}": value for key, value in right_action.items()})
 
         return action_dict
 
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        # TODO: Implement force feedback
+        # TODO: 实现力反馈
         raise NotImplementedError

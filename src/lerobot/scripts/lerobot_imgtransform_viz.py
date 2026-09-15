@@ -13,12 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Visualize effects of image transforms for a given configuration.
+""" 可视化给定配置下图像变换的效果。
 
-This script will generate examples of transformed images as they are output by LeRobot dataset.
-Additionally, each individual transform can be visualized separately as well as examples of combined transforms
+本脚本会生成变换后图像的示例，其输出与 LeRobot 数据集的输出一致。
+此外，每个单独的变换都可以单独可视化，也可以可视化组合变换的示例
 
-Example:
+示例：
 ```bash
 lerobot-imgtransform-viz \
   --repo_id=lerobot/pusht \
@@ -69,7 +69,7 @@ def save_each_transform(cfg: ImageTransformsConfig, original_frame, output_dir, 
 
     print("Individual transforms examples saved to:")
     for tf_name, tf_cfg in cfg.tfs.items():
-        # Apply a few transformation with random value in min_max range
+        # 使用 min_max 范围内的随机值应用若干次变换
         output_dir_single = output_dir / tf_name
         output_dir_single.mkdir(parents=True, exist_ok=True)
 
@@ -78,7 +78,7 @@ def save_each_transform(cfg: ImageTransformsConfig, original_frame, output_dir, 
             transformed_frame = tf(original_frame)
             to_pil(transformed_frame).save(output_dir_single / f"{i}.png", quality=100)
 
-        # Apply min, max, average transformations
+        # 应用最小值、最大值、平均值变换
         tf_cfg_kwgs_min = deepcopy(tf_cfg.kwargs)
         tf_cfg_kwgs_max = deepcopy(tf_cfg.kwargs)
         tf_cfg_kwgs_avg = deepcopy(tf_cfg.kwargs)
@@ -116,7 +116,7 @@ def visualize_image_transforms(cfg: DatasetConfig, output_dir: Path = OUTPUT_DIR
     output_dir = output_dir / cfg.repo_id.split("/")[-1]
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get 1st frame from 1st camera of 1st episode
+    # 获取第 1 个 episode 的第 1 个相机的第 1 帧
     original_frame = dataset[0][dataset.meta.camera_keys[0]]
     to_pil(original_frame).save(output_dir / "original_frame.png", quality=100)
     print("\nOriginal frame saved to:")

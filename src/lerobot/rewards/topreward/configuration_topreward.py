@@ -20,10 +20,10 @@ from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
 from lerobot.configs.rewards import RewardModelConfig
 from lerobot.utils.constants import OBS_IMAGES
 
-# Default prompt scaffolding from the upstream TOPReward paper / reference
-# implementation (``QwenClient.compute_instruction_reward``). The prompt
-# scores the terminal ``True`` token in ``f"{instruction} ... True"``
-# given the video.
+# 来自上游 TOPReward 论文/参考实现（``QwenClient.compute_instruction_reward``）的
+# 默认提示词框架。该提示词在给定视频的条件下，
+# 对 ``f"{instruction} ... True"`` 中末尾的 ``True`` token
+# 进行评分。
 DEFAULT_PROMPT_PREFIX = (
     "The above video shows a robot manipulation trajectory that completes the following task: "
 )
@@ -35,49 +35,49 @@ DEFAULT_PROMPT_SUFFIX_TEMPLATE = (
 @RewardModelConfig.register_subclass("topreward")
 @dataclass
 class TOPRewardConfig(RewardModelConfig):
-    """Configuration for the TOPReward zero-shot reward model.
+    """TOPReward 零样本奖励模型的配置。
 
-    TOPReward is **zero-shot**: it has no learnable parameters of its own.
-    The "model" is a generic vision-language model (default
-    ``Qwen/Qwen3-VL-8B-Instruct``) used with a fixed prompt to extract
-    token log-probabilities as a reward signal. There is therefore no
-    fine-tuned checkpoint to host: ``pretrained_path`` is unused at
-    runtime — the model identity is :attr:`vlm_name` (an HF Hub id).
+    TOPReward 是**零样本**的：它自身没有可学习参数。
+    该"模型"是一个通用的视觉-语言模型（默认为
+    ``Qwen/Qwen3-VL-8B-Instruct``），配合固定提示词使用，
+    以提取 token 的对数概率作为奖励信号。因此没有
+    需要托管的微调检查点：``pretrained_path`` 在运行时
+    不会被使用——模型身份由 :attr:`vlm_name`（HF Hub id）确定。
 
     Args:
-        vlm_name: Hugging Face Hub id of the underlying VLM. Must be a
-            Qwen3-VL family model (the only client implemented in this
-            LeRobot port).
-        torch_dtype: Torch dtype name passed to the VLM loader
-            (``"auto"``, ``"bfloat16"``, ``"float16"``, ...).
-        attn_implementation: ``transformers`` attention implementation
-            (e.g. ``"flash_attention_2"``, ``"sdpa"``). Defaults to
-            ``None`` so the upstream picks the best available.
-        image_key: Observation key that holds the trajectory frames.
-        task_key: Complementary-data key that holds the task instruction.
-        default_task: Fallback instruction when ``task_key`` is absent.
-        max_frames: Cap on the number of frames fed to the VLM per
-            sample. ``None`` = use all frames.
-        fps: Frames-per-second metadata for the Qwen video processor.
-        prompt_prefix: Text shown to the VLM right after the video and
-            before the suffix template.
-        prompt_suffix_template: Suffix appended after ``prompt_prefix``.
-            Must contain ``{instruction}``; the VLM scores the
-            log-likelihood of the tokens that follow the prefix.
-        add_chat_template: If ``True``, wrap the full prompt with the
-            tokenizer's chat template before tokenisation (matches
-            upstream ``add_chat_template=True``).
-        success_threshold: Optional log-prob threshold. If finite,
-            :meth:`TOPRewardModel.compute_reward` returns
-            ``(reward > success_threshold).float()`` instead of the raw
-            log-prob.
-        max_input_length: Hard limit on the total tokenized input length;
-            samples that exceed it raise a ``ValueError``.
+        vlm_name: 底层 VLM 的 Hugging Face Hub id。必须是
+            Qwen3-VL 系列模型（这是本 LeRobot 移植版中
+            唯一实现的客户端）。
+        torch_dtype: 传递给 VLM 加载器的 Torch dtype 名称
+            （``"auto"``、``"bfloat16"``、``"float16"`` 等）。
+        attn_implementation: ``transformers`` 的注意力实现
+            （例如 ``"flash_attention_2"``、``"sdpa"``）。默认为
+            ``None``，让上游选择最佳可用实现。
+        image_key: 保存轨迹帧的观测键。
+        task_key: 保存任务指令的补充数据键。
+        default_task: 当 ``task_key`` 缺失时使用的回退指令。
+        max_frames: 每个样本送入 VLM 的帧数上限。
+            ``None`` = 使用所有帧。
+        fps: 供 Qwen 视频处理器使用的每秒帧数元数据。
+        prompt_prefix: 紧跟在视频之后、后缀模板之前
+            展示给 VLM 的文本。
+        prompt_suffix_template: 追加在 ``prompt_prefix`` 之后的后缀。
+            必须包含 ``{instruction}``；VLM 会对
+            前缀之后各 token 的对数似然进行评分。
+        add_chat_template: 若为 ``True``，在分词前用分词器的
+            chat template 包装完整提示词（与上游
+            ``add_chat_template=True`` 一致）。
+        success_threshold: 可选的 log-prob 阈值。若为有限值，
+            :meth:`TOPRewardModel.compute_reward` 将返回
+            ``(reward > success_threshold).float()`` 而不是
+            原始 log-prob。
+        max_input_length: 分词后总输入长度的硬性上限；
+            超出该限制的样本会抛出 ``ValueError``。
     """
 
-    # Path to a local LeRobot dir or HF repo that holds a ``config.json``
-    # snapshot of this TOPRewardConfig. The VLM weights themselves are
-    # always identified by ``vlm_name``.
+    # 指向本地 LeRobot 目录或 HF 仓库的路径，其中保存了本
+    # TOPRewardConfig 的 ``config.json`` 快照。VLM 权重本身
+    # 始终由 ``vlm_name`` 标识。
     pretrained_path: str | None = None
 
     vlm_name: str = "Qwen/Qwen3-VL-8B-Instruct"
@@ -97,7 +97,7 @@ class TOPRewardConfig(RewardModelConfig):
     success_threshold: float = float("-inf")
     max_input_length: int = 32768
 
-    license: str | None = "mit"  # matches upstream TOPReward
+    license: str | None = "mit"  # 与上游 TOPReward 保持一致
     tags: list[str] | None = field(
         default_factory=lambda: ["reward-model", "vision-language", "qwen3-vl", "zero-shot"]
     )

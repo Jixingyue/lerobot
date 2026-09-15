@@ -62,8 +62,8 @@ class CategorySpecificLinear(nn.Module):
         else:
             self.weight = nn.Parameter(torch.empty(num_categories, in_dim, out_dim))
             self.bias = nn.Parameter(torch.zeros(num_categories, out_dim))
-            # Initialize each per-category (in_dim, out_dim) matrix separately: xavier on the full
-            # 3D tensor would compute fan_in = in_dim * out_dim and badly under-scale the weights.
+            # 分别初始化每个类别的 (in_dim, out_dim) 矩阵：如果在整个 3D 张量上
+            # 使用 xavier，会算出 fan_in = in_dim * out_dim，导致权重缩放严重偏小。
             for category in range(num_categories):
                 nn.init.xavier_uniform_(self.weight[category])
 
@@ -288,10 +288,10 @@ class FlowmatchingActionHead(nn.Module):
         embodiment_id: torch.LongTensor | None,
         context_mask: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.LongTensor]:
-        """Normalize the VL context and embodiment ids shared by training and inference.
+        """对训练和推理共享的 VL 上下文及具身类别 id 进行归一化处理。
 
-        Returns the context tokens ``(B, S, E)``, a key_padding_mask for
-        ``nn.MultiheadAttention`` (True = ignore) or None, and the resolved embodiment ids.
+        返回上下文 token ``(B, S, E)``、用于 ``nn.MultiheadAttention`` 的
+        key_padding_mask（True = 忽略）或 None，以及解析后的具身类别 id。
         """
         batch_size = fused_tokens.size(0)
         device = fused_tokens.device
@@ -307,7 +307,7 @@ class FlowmatchingActionHead(nn.Module):
 
         context_tokens = fused_tokens
         if context_tokens.dim() == 2:
-            # A single pooled VL token (return_cls_only): give it a sequence dim of 1.
+            # 单个池化的 VL token（return_cls_only）：为其添加大小为 1 的序列维。
             context_tokens = context_tokens.unsqueeze(1)
             context_mask = None
         if state is not None and self.state_encoder is not None:
@@ -435,7 +435,7 @@ class FlowmatchingActionHead(nn.Module):
         )
 
         def predict_velocity(seq: torch.Tensor, step_time_emb: torch.Tensor) -> torch.Tensor:
-            """Predict the masked flow velocity (x1 - x0 convention) for one integration step."""
+            """预测单个积分步的带掩码流速度（x1 - x0 约定）。"""
             seq = seq * action_mask
             action_tokens = self._project_actions(seq, embodiment_id).to(dtype=target_dtype)
             x = action_tokens
@@ -453,10 +453,10 @@ class FlowmatchingActionHead(nn.Module):
             time_emb = time_emb.unsqueeze(0).repeat(batch_size, 1)
 
             if use_rtc:
-                # RTCProcessor assumes the pi0 flow convention: its `time` runs 1 -> 0 and the
-                # clean-action estimate is x1 = x_t - time * v. EVO1 integrates t: 0 -> 1 with
-                # velocity v = x1 - x0 (so x1 = x_t + (1 - t) * v); passing time = 1 - t and
-                # flipping the velocity sign in both directions maps one convention onto the other.
+                # RTCProcessor 假定的是 pi0 的流约定：其 `time` 从 1 -> 0 运行，且
+                # 干净动作估计为 x1 = x_t - time * v。而 EVO1 沿 t: 0 -> 1 积分，
+                # 速度为 v = x1 - x0（即 x1 = x_t + (1 - t) * v）；传入 time = 1 - t
+                # 并在两个方向上翻转速度符号，即可将一种约定映射到另一种。
                 guided = rtc_processor.denoise_step(
                     x_t=action_seq,
                     prev_chunk_left_over=prev_chunk_left_over,

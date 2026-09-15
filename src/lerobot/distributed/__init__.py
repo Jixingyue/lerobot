@@ -13,19 +13,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Distributed-training runtime for LeRobot.
+"""LeRobot 的分布式训练运行时。
 
-This package owns everything that turns the declarative topology in
-:class:`lerobot.configs.parallelism.ParallelismConfig` into a running engine:
-mesh math (:class:`~lerobot.distributed.parallel_dims.ParallelDims`), the
-`Accelerator` factory (:func:`~lerobot.distributed.factory.make_accelerator`),
-sharding-aware checkpoint helpers, and small rank utilities.
+本包负责将 :class:`lerobot.configs.parallelism.ParallelismConfig` 中的声明式拓扑
+转化为可运行引擎所需的一切：网格计算
+（:class:`~lerobot.distributed.parallel_dims.ParallelDims`）、
+`Accelerator` 工厂（:func:`~lerobot.distributed.factory.make_accelerator`）、
+分片感知的检查点辅助函数，以及小型 rank 工具。
 
-Setup-order contract (normative):
-CP dispatch install -> activation checkpointing -> torch.compile ->
-``fully_shard``/DDP (via ``accelerator.prepare``) -> optimizer rebind.
-Only the last two steps are active today; CP/AC/compile are configured
-placeholders wired in later rounds.
+初始化顺序约定（规范性）：
+CP dispatch 安装 -> 激活检查点 -> torch.compile ->
+``fully_shard``/DDP（通过 ``accelerator.prepare``）-> 优化器重新绑定。
+目前只有最后两步处于激活状态；CP/AC/compile 是已配置的占位符，将在后续轮次中接入。
 """
 
 from .factory import guard_against_env_interference, make_accelerator, set_fsdp_wrap_modules

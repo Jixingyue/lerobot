@@ -24,66 +24,66 @@ from lerobot.optim import AdamConfig, DiffuserSchedulerConfig
 @PreTrainedConfig.register_subclass("multi_task_dit")
 @dataclass
 class MultiTaskDiTConfig(PreTrainedConfig):
-    """Configuration for the Multi-Task Diffusion Transformer (DiT) policy.
+    """多任务扩散 Transformer（DiT）策略的配置。
 
-    A transformer-based policy that supports both diffusion and flow matching objectives
-    for multi-task robot learning with text and vision conditioning.
+    一个基于 Transformer 的策略，同时支持扩散（diffusion）和流匹配（flow matching）目标，
+    用于带文本和视觉条件的多任务机器人学习。
     """
 
-    n_obs_steps: int = 2  # Number of observation steps for temporal context
-    horizon: int = 32  # Number of action steps to predict
-    n_action_steps: int = 24  # Actions executed per policy call (~0.8s at 30Hz)
+    n_obs_steps: int = 2  # 用于时间上下文的观测步数
+    horizon: int = 32  # 要预测的动作步数
+    n_action_steps: int = 24  # 每次策略调用执行的动作数（30Hz 下约 0.8 秒）
 
-    # Objective Selection
-    objective: str = "diffusion"  # "diffusion" or "flow_matching"
+    # 目标选择
+    objective: str = "diffusion"  # "diffusion" 或 "flow_matching"
 
-    # --- Diffusion-specific (used when objective="diffusion") ---
-    noise_scheduler_type: str = "DDPM"  # "DDPM" or "DDIM"
-    num_train_timesteps: int = 100  # Number of diffusion timesteps
-    beta_schedule: str = "squaredcos_cap_v2"  # Noise schedule type
-    beta_start: float = 0.0001  # Starting noise level
-    beta_end: float = 0.02  # Ending noise level
-    prediction_type: str = "epsilon"  # "epsilon" (predict noise) or "sample" (predict clean)
-    clip_sample: bool = True  # Clip samples during denoising
-    clip_sample_range: float = 1.0  # Clipping range [-x, x]
-    num_inference_steps: int | None = None  # Denoising steps at inference (defaults to num_train_timesteps)
+    # --- 扩散专用（当 objective="diffusion" 时使用）---
+    noise_scheduler_type: str = "DDPM"  # "DDPM" 或 "DDIM"
+    num_train_timesteps: int = 100  # 扩散时间步数
+    beta_schedule: str = "squaredcos_cap_v2"  # 噪声调度类型
+    beta_start: float = 0.0001  # 起始噪声水平
+    beta_end: float = 0.02  # 终止噪声水平
+    prediction_type: str = "epsilon"  # "epsilon"（预测噪声）或 "sample"（预测干净样本）
+    clip_sample: bool = True  # 在去噪过程中钳制样本
+    clip_sample_range: float = 1.0  # 钳制范围 [-x, x]
+    num_inference_steps: int | None = None  # 推理时的去噪步数（默认为 num_train_timesteps）
 
-    # --- Flow Matching-specific (used when objective="flow_matching") ---
-    sigma_min: float = 0.0  # Minimum noise in flow interpolation path
-    num_integration_steps: int = 100  # ODE integration steps at inference
-    integration_method: str = "euler"  # ODE solver: "euler" or "rk4"
-    timestep_sampling_strategy: str = "beta"  # "uniform" or "beta"
+    # --- 流匹配专用（当 objective="flow_matching" 时使用）---
+    sigma_min: float = 0.0  # 流插值路径中的最小噪声
+    num_integration_steps: int = 100  # 推理时的 ODE 积分步数
+    integration_method: str = "euler"  # ODE 求解器："euler" 或 "rk4"
+    timestep_sampling_strategy: str = "beta"  # "uniform" 或 "beta"
 
-    timestep_sampling_s: float = 0.999  # (beta only) Max timestep threshold
-    timestep_sampling_alpha: float = 1.5  # (beta only) Beta distribution alpha
-    timestep_sampling_beta: float = 1.0  # (beta only) Beta distribution beta
+    timestep_sampling_s: float = 0.999  # （仅 beta）最大时间步阈值
+    timestep_sampling_alpha: float = 1.5  # （仅 beta）Beta 分布的 alpha
+    timestep_sampling_beta: float = 1.0  # （仅 beta）Beta 分布的 beta
 
-    # Transformer Architecture
-    hidden_dim: int = 512  # Transformer hidden dimension
-    num_layers: int = 6  # Number of transformer layers
-    num_heads: int = 8  # Number of attention heads
-    dropout: float = 0.1  # Dropout rate
-    use_positional_encoding: bool = False  # Use absolute positional encoding
-    timestep_embed_dim: int = 256  # Timestep embedding dimension
-    use_rope: bool = True  # Use Rotary Position Embedding
-    rope_base: float = 10000.0  # RoPE base frequency
+    # Transformer 架构
+    hidden_dim: int = 512  # Transformer 隐藏层维度
+    num_layers: int = 6  # Transformer 层数
+    num_heads: int = 8  # 注意力头数
+    dropout: float = 0.1  # Dropout 比率
+    use_positional_encoding: bool = False  # 使用绝对位置编码
+    timestep_embed_dim: int = 256  # 时间步嵌入维度
+    use_rope: bool = True  # 使用旋转位置嵌入（RoPE）
+    rope_base: float = 10000.0  # RoPE 基频
 
-    # Vision Encoder (CLIP)
-    vision_encoder_name: str = "openai/clip-vit-base-patch16"  # HuggingFace CLIP model
-    use_separate_rgb_encoder_per_camera: bool = False  # Separate encoder per camera view
-    vision_encoder_lr_multiplier: float = 0.1  # LR multiplier for vision encoder
-    image_resize_shape: tuple[int, int] | None = None  # Resize images before crop
-    image_crop_shape: tuple[int, int] | None = (224, 224)  # Crop shape (CLIP default)
-    image_crop_is_random: bool = True  # Random crop during training, center at inference
+    # 视觉编码器（CLIP）
+    vision_encoder_name: str = "openai/clip-vit-base-patch16"  # HuggingFace CLIP 模型
+    use_separate_rgb_encoder_per_camera: bool = False  # 每个相机视角使用独立编码器
+    vision_encoder_lr_multiplier: float = 0.1  # 视觉编码器的学习率乘数
+    image_resize_shape: tuple[int, int] | None = None  # 裁剪前先缩放图像
+    image_crop_shape: tuple[int, int] | None = (224, 224)  # 裁剪形状（CLIP 默认值）
+    image_crop_is_random: bool = True  # 训练时随机裁剪，推理时中心裁剪
 
-    # Text Encoder (CLIP)
-    text_encoder_name: str = "openai/clip-vit-base-patch16"  # HuggingFace CLIP model
-    tokenizer_max_length: int = 77  # Max length for tokenized text (CLIP default is 77)
-    tokenizer_padding: str = "max_length"  # Padding strategy: "max_length" or "longest"
-    tokenizer_padding_side: str = "right"  # Padding side: "left" or "right"
-    tokenizer_truncation: bool = True  # Whether to truncate sequences longer than max_length
+    # 文本编码器（CLIP）
+    text_encoder_name: str = "openai/clip-vit-base-patch16"  # HuggingFace CLIP 模型
+    tokenizer_max_length: int = 77  # 分词后文本的最大长度（CLIP 默认为 77）
+    tokenizer_padding: str = "max_length"  # 填充策略："max_length" 或 "longest"
+    tokenizer_padding_side: str = "right"  # 填充侧："left" 或 "right"
+    tokenizer_truncation: bool = True  # 是否截断超过 max_length 的序列
 
-    # Normalization
+    # 归一化
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
             "VISUAL": NormalizationMode.MEAN_STD,
@@ -92,7 +92,7 @@ class MultiTaskDiTConfig(PreTrainedConfig):
         }
     )
 
-    # Training/Optimizer
+    # 训练/优化器
     optimizer_lr: float = 2e-5
     optimizer_betas: tuple = (0.95, 0.999)
     optimizer_eps: float = 1e-8
@@ -101,7 +101,7 @@ class MultiTaskDiTConfig(PreTrainedConfig):
     scheduler_warmup_steps: int = 0
     do_mask_loss_for_padding: bool = False
 
-    # Auto-calculated
+    # 自动计算
     drop_n_last_frames: int | None = None
 
     def __post_init__(self):
@@ -113,12 +113,12 @@ class MultiTaskDiTConfig(PreTrainedConfig):
         self._validate()
 
     def _validate(self):
-        """Validate configuration parameters."""
-        # Objective validation
+        """校验配置参数。"""
+        # 目标校验
         if self.objective not in ["diffusion", "flow_matching"]:
             raise ValueError(f"objective must be 'diffusion' or 'flow_matching', got '{self.objective}'")
 
-        # Transformer validation
+        # Transformer 校验
         if self.hidden_dim <= 0:
             raise ValueError("hidden_dim must be positive")
         if self.num_layers <= 0:
@@ -130,7 +130,7 @@ class MultiTaskDiTConfig(PreTrainedConfig):
         if not (0.0 <= self.dropout <= 1.0):
             raise ValueError("dropout must be between 0.0 and 1.0")
 
-        # Vision encoder validation
+        # 视觉编码器校验
         if "clip" not in self.vision_encoder_name.lower():
             raise ValueError(
                 f"vision_encoder_name must be a CLIP model (contain 'clip'), got '{self.vision_encoder_name}'"
@@ -150,13 +150,13 @@ class MultiTaskDiTConfig(PreTrainedConfig):
             )
             self.image_crop_shape = None
 
-        # Text encoder validation
+        # 文本编码器校验
         if "clip" not in self.text_encoder_name.lower():
             raise ValueError(
                 f"text_encoder_name must be a CLIP model (contain 'clip'), got '{self.text_encoder_name}'"
             )
 
-        # Objective-specific validation
+        # 目标特定校验
         if self.objective == "diffusion":
             if self.noise_scheduler_type not in ["DDPM", "DDIM"]:
                 raise ValueError(
@@ -203,12 +203,12 @@ class MultiTaskDiTConfig(PreTrainedConfig):
         )
 
     def validate_features(self) -> None:
-        """Validate that required input features are present and properly configured."""
-        # If the configured crop doesn't fit, disable cropping instead of erroring.
-        # Note: if image_resize_shape is set, cropping is applied *after* resizing.
+        """校验所需的输入特征是否存在且配置正确。"""
+        # 如果配置的裁剪不合适，则禁用裁剪而不是报错。
+        # 注意：如果设置了 image_resize_shape，裁剪将在缩放*之后*应用。
         if self.image_crop_shape is not None:
             for key, image_ft in self.image_features.items():
-                # image_ft.shape is (C, H, W)
+                # image_ft.shape 为 (C, H, W)
                 effective_h, effective_w = (
                     self.image_resize_shape
                     if self.image_resize_shape is not None

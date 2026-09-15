@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MolmoAct2 pre/post processing pipeline.
+"""MolmoAct2 前/后处理流水线。
 
-Builds the multimodal prompt (images, discretised state, task text),
-tokenises it via the vendored MolmoAct2 processor, and handles quantile
-normalisation with optional per-dimension gripper masking.
+构建多模态提示（图像、离散化状态、任务文本），
+通过内置的 MolmoAct2 处理器进行分词，并处理分位数归一化，
+支持可选的按维度夹爪掩码。
 """
 
 from __future__ import annotations
@@ -76,9 +76,9 @@ MOLMOACT2_FIXED_PROMPT_TOKEN_BUDGET = 80
 MOLMOACT2_TASK_TOKEN_BUDGET = 32
 MOLMOACT2_SEQUENCE_LENGTH_MARGIN = 32
 MOLMOACT2_SEQUENCE_LENGTH_MULTIPLE = 64
-# Collapse nearby prompt/action lengths onto the same torch.compile graph while
-# adding at most seven masked tokens per batch. BOS is inserted afterward, so
-# the final model width is ``8k + 1`` rather than a tensor-core-aligned multiple.
+# 将相近的提示/动作长度归并到同一个 torch.compile 图上，
+# 同时每个批次最多增加七个被屏蔽的 token。BOS 在之后插入，
+# 因此最终的模型宽度是 ``8k + 1``，而不是张量核心对齐的倍数。
 MOLMOACT2_SEQUENCE_BUCKET_MULTIPLE = 8
 MOLMOACT2_DISCRETE_ACTION_WRAPPER_TOKENS = 4
 MOLMOACT2_MIN_DISCRETE_ACTION_TOKENS_PER_STEP = 6
@@ -97,7 +97,7 @@ def infer_molmoact2_max_sequence_length(
     action_horizon: int,
     include_discrete_action: bool,
 ) -> int:
-    """Infer the padded text/image sequence cap from MolmoAct2's fixed token layout."""
+    """根据 MolmoAct2 固定的 token 布局，推断填充后文本/图像序列的上限。"""
     if num_images < 1:
         num_images = MOLMOACT2_DEFAULT_NUM_IMAGES
     if state_dim < 0:
@@ -271,10 +271,10 @@ def _load_local_molmoact2_processor(checkpoint_location: str) -> Any:
         checkpoint_location,
         token=_hf_token(),
     )
-    # ``MolmoAct2Processor.insert_bos`` preserves padding by locating the first
-    # valid token, so its batched path requires left-padded tokenizer output.
-    # Released checkpoints do not consistently persist this tokenizer setting
-    # and Qwen2 otherwise defaults to right padding.
+    # ``MolmoAct2Processor.insert_bos`` 通过定位第一个有效 token 来保留填充，
+    # 因此其批处理路径要求分词器输出为左填充。
+    # 已发布的检查点并未一致地持久化这一分词器设置，
+    # 而 Qwen2 默认使用右填充。
     tokenizer.padding_side = "left"
 
     chat_template_path = checkpoint_path / "chat_template.jinja"
@@ -678,7 +678,7 @@ class MolmoAct2MaskedUnnormalizerProcessorStep(_MolmoAct2MaskedNormalizationMixi
 @ProcessorStepRegistry.register(name="molmoact2_clamp_normalized")
 @dataclass
 class MolmoAct2ClampNormalizedProcessorStep(ProcessorStep):
-    """Clamp q01/q99-normalized state and action to the range used by the old trainer."""
+    """将 q01/q99 归一化的状态和动作钳制到旧训练器所使用的范围。"""
 
     normalization_masks: dict[str, list[bool]] | None = None
 
@@ -891,9 +891,9 @@ class MolmoAct2PackInputsProcessorStep(ProcessorStep):
             (action.shape[0], self.max_action_dim), device=action.device, dtype=torch.bool
         )
         action_dim_is_pad[:, : action.shape[-1]] = False
-        # LeRobot clamps future actions at episode ends and marks them as padding. The
-        # original MolmoAct2 training objective keeps supervising those clamped actions
-        # for fixed-horizon fine-tuning, so the horizon mask is intentionally all false.
+        # LeRobot 会在回合末尾钳制未来动作并将其标记为填充。
+        # 原始的 MolmoAct2 训练目标在固定时间跨度微调中会继续监督这些被钳制的动作，
+        # 因此时间跨度掩码被有意设为全 false。
         action_horizon_is_pad = torch.zeros(action.shape[:2], device=action.device, dtype=torch.bool)
         return padded, action_horizon_is_pad, action_dim_is_pad
 
@@ -1020,9 +1020,9 @@ class MolmoAct2PackInputsProcessorStep(ProcessorStep):
                 f"MolmoAct2 valid sequence length {valid_sequence_length} exceeds "
                 f"max_sequence_length={max_sequence_length}."
             )
-        # The tokenizer pads before the vendored processor inserts BOS, so the
-        # final tensor width is ``8k + 1``. Bound that masked width separately
-        # from the valid-token cap to catch malformed/unbounded processor output.
+        # 分词器在内置处理器插入 BOS 之前进行填充，因此
+        # 最终张量宽度为 ``8k + 1``。将该屏蔽后的宽度与有效 token 上限
+        # 分开限制，以便捕获格式错误/无界的处理器输出。
         max_padded_sequence_length = (
             _round_up(max_sequence_length - 1, MOLMOACT2_SEQUENCE_BUCKET_MULTIPLE) + 1
         )
@@ -1033,10 +1033,10 @@ class MolmoAct2PackInputsProcessorStep(ProcessorStep):
                 f"the bounded width {max_padded_sequence_length}."
             )
 
-        # The local processor must left-pad so batched image placeholders and BOS
-        # insertion stay aligned. Native MolmoAct2 training assigns positions only
-        # across valid tokens, so keep the real prompt/image tokens at 0..N-1
-        # instead of shifting them by each row's left-padding length.
+        # 本地处理器必须左填充，这样批处理的图像占位符和 BOS
+        # 插入才能保持对齐。原生 MolmoAct2 训练只在有效 token 上
+        # 分配位置，因此将真实的提示/图像 token 保持在 0..N-1，
+        # 而不是按每行的左填充长度进行偏移。
         inputs["position_ids"] = _position_ids_from_attention_mask(inputs["attention_mask"])
 
         if build_action_labels:
@@ -1061,19 +1061,19 @@ class MolmoAct2PackInputsProcessorStep(ProcessorStep):
 @ProcessorStepRegistry.register(name="molmoact2_state_frame_transform")
 @dataclass
 class MolmoAct2StateFrameTransformStep(ProcessorStep):
-    """Convert robot state from arm frame to model frame before normalization.
+    """在归一化之前，将机器人状态从机械臂坐标系转换到模型坐标系。
 
-    Required for zero-shot deployment of MolmoAct2-SO100_101 on SO-100/101
-    arms calibrated with LeRobot >= 0.5.0 (v3.0 convention). The checkpoint
-    was trained on data using a different joint convention (sign flip on
-    shoulder_lift, 90 deg offset on shoulder_lift and elbow_flex).
+    在使用 LeRobot >= 0.5.0（v3.0 约定）标定的 SO-100/101
+    机械臂上零样本部署 MolmoAct2-SO100_101 时必需。该检查点
+    是在使用不同关节约定的数据上训练的（shoulder_lift 符号翻转，
+    shoulder_lift 和 elbow_flex 有 90 度偏移）。
 
-    No-op when joint_signs and joint_offsets are None (default), so this
-    step has no effect on fine-tuned models or other embodiments.
+    当 joint_signs 和 joint_offsets 为 None（默认值）时为空操作，
+    因此该步骤对微调模型或其他本体形态没有影响。
 
     state_model = signs * arm_state + offsets
 
-    See: https://huggingface.co/docs/lerobot/backwardcomp
+    参见：https://huggingface.co/docs/lerobot/backwardcomp
     """
 
     joint_signs: list[float] | None = None
@@ -1108,14 +1108,14 @@ class MolmoAct2StateFrameTransformStep(ProcessorStep):
 @ProcessorStepRegistry.register(name="molmoact2_action_frame_transform")
 @dataclass
 class MolmoAct2ActionFrameTransformStep(ProcessorStep):
-    """Convert model action from model frame back to arm frame after unnormalization.
+    """在反归一化之后，将模型动作从模型坐标系转换回机械臂坐标系。
 
-    Inverse of MolmoAct2StateFrameTransformStep. Required for zero-shot
-    MolmoAct2-SO100_101 on SO-100/101 arms. No-op when both fields are None.
+    是 MolmoAct2StateFrameTransformStep 的逆操作。在 SO-100/101
+    机械臂上零样本使用 MolmoAct2-SO100_101 时必需。当两个字段均为 None 时为空操作。
 
     action_arm = signs * (model_action - offsets)
 
-    See: https://huggingface.co/docs/lerobot/backwardcomp
+    参见：https://huggingface.co/docs/lerobot/backwardcomp
     """
 
     joint_signs: list[float] | None = None
@@ -1167,7 +1167,7 @@ def _translate_pretrained_processor_overrides(
     standard_name: str,
     molmoact2_name: str,
 ) -> dict[str, dict[str, Any]]:
-    """Translate LeRobot's standard normalization override to the masked step."""
+    """将 LeRobot 的标准归一化覆盖参数转换为带掩码步骤的形式。"""
     translated = {name: dict(values) for name, values in (overrides or {}).items()}
     standard_override = translated.pop(standard_name, None)
     if standard_override is not None:
@@ -1183,7 +1183,7 @@ def _prepare_pretrained_processor_overrides(
     preprocessor_overrides: dict[str, dict[str, Any]] | None,
     postprocessor_overrides: dict[str, dict[str, Any]] | None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Translate generic overrides and make fine-tuning stats mask-aware."""
+    """转换通用覆盖参数，并使微调统计量感知掩码。"""
     translated_preprocessor_overrides = _translate_pretrained_processor_overrides(
         preprocessor_overrides,
         standard_name="normalizer_processor",
@@ -1234,14 +1234,13 @@ def make_molmoact2_pre_post_processors_from_pretrained(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
-    """Load saved MolmoAct2 pipelines with LeRobot's runtime overrides.
+    """使用 LeRobot 的运行时覆盖参数加载已保存的 MolmoAct2 流水线。
 
-    LeRobot entry points use the standard normalizer registry names when
-    overriding the device, rename map, feature schema, and fine-tuning dataset
-    statistics. MolmoAct2 uses mask-aware normalization steps, so translate the
-    two names and add gripper masks before replacing saved fine-tuning stats.
-    When no stats are supplied (checkpoint resume), the serialized processor
-    stats and clamp masks remain authoritative.
+    LeRobot 入口点在覆盖设备、重命名映射、特征模式和微调数据集
+    统计量时，使用标准的归一化器注册表名称。MolmoAct2 使用感知掩码的
+    归一化步骤，因此在替换已保存的微调统计量之前，先转换这两个名称
+    并添加夹爪掩码。当未提供统计量时（从检查点恢复），序列化的处理器
+    统计量和钳制掩码仍然是权威来源。
     """
     prepared_preprocessor_overrides, prepared_postprocessor_overrides = (
         _prepare_pretrained_processor_overrides(

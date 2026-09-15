@@ -25,14 +25,14 @@ from .sarm.configuration_sarm import SARMConfig as SARMConfig
 from .topreward.configuration_topreward import TOPRewardConfig as TOPRewardConfig
 
 __all__ = [
-    # Configuration classes
+    # 配置类
     "RewardClassifierConfig",
     "RobometerConfig",
     "SARMConfig",
     "TOPRewardConfig",
-    # Base class
+    # 基类
     "PreTrainedRewardModel",
-    # Factory functions
+    # 工厂函数
     "get_reward_model_class",
     "make_reward_model",
     "make_reward_model_config",

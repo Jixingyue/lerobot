@@ -29,7 +29,7 @@ from lerobot.lerobot_types import RobotObservation
 
 from .utils import _LazyAsyncVectorEnv
 
-# ---- Load configuration data from the external JSON file ----
+# ---- 从外部 JSON 文件加载配置数据 ----
 CONFIG_PATH = Path(__file__).parent / "metaworld_config.json"
 try:
     with open(CONFIG_PATH) as f:
@@ -44,9 +44,9 @@ except json.JSONDecodeError as err:
         "Failed to decode 'metaworld_config.json'. Please ensure it is a valid JSON file."
     ) from err
 
-# ---- Process the loaded data ----
+# ---- 处理已加载的数据 ----
 
-# extract and type-check top-level dicts
+# 提取顶层字典并进行类型检查
 task_descriptions_obj = data.get("TASK_DESCRIPTIONS")
 if not isinstance(task_descriptions_obj, dict):
     raise TypeError("Expected TASK_DESCRIPTIONS to be a dict[str, str]")
@@ -57,13 +57,13 @@ if not isinstance(task_name_to_id_obj, dict):
     raise TypeError("Expected TASK_NAME_TO_ID to be a dict[str, int]")
 TASK_NAME_TO_ID: dict[str, int] = task_name_to_id_obj
 
-# difficulty -> tasks mapping
+# difficulty -> tasks 映射
 difficulty_to_tasks = data.get("DIFFICULTY_TO_TASKS")
 if not isinstance(difficulty_to_tasks, dict):
     raise TypeError("Expected 'DIFFICULTY_TO_TASKS' to be a dict[str, list[str]]")
 DIFFICULTY_TO_TASKS: dict[str, list[str]] = difficulty_to_tasks
 
-# convert policy strings -> actual policy classes
+# 将策略字符串转换为实际的策略类
 task_policy_mapping = data.get("TASK_POLICY_MAPPING")
 if not isinstance(task_policy_mapping, dict):
     raise TypeError("Expected 'TASK_POLICY_MAPPING' to be a dict[str, str]")
@@ -99,9 +99,9 @@ class MetaworldEnv(gym.Env):
         self.visualization_height = visualization_height
         self.camera_name = camera_name
 
-        self._env_name = self.task  # already stripped of "metaworld-" prefix above
-        self._env = None  # deferred — created on first reset() inside the worker subprocess
-        self._max_episode_steps = 500  # MT1 environments always have max_path_length=500
+        self._env_name = self.task  # 上面已去掉 "metaworld-" 前缀
+        self._env = None  # 延迟创建 —— 在 worker 子进程内首次 reset() 时创建
+        self._max_episode_steps = 500  # MT1 环境的 max_path_length 始终为 500
         self.task_description = TASK_DESCRIPTIONS[self.task]
 
         self.expert_policy = TASK_POLICY_MAPPING[self.task]()
@@ -140,11 +140,11 @@ class MetaworldEnv(gym.Env):
         self.action_space = spaces.Box(low=-1, high=1, shape=(ACTION_DIM,), dtype=np.float32)
 
     def _ensure_env(self) -> None:
-        """Create the underlying MetaWorld env on first use.
+        """在首次使用时创建底层的 MetaWorld 环境。
 
-        Called inside the worker subprocess after fork(), so each worker gets
-        its own clean rendering context rather than inheriting a stale one from
-        the parent process (which causes crashes with AsyncVectorEnv).
+        在 fork() 之后于 worker 子进程内调用，这样每个 worker 都能获得
+        自己干净的渲染上下文，而不是从父进程继承一个过期的上下文
+        （那会在 AsyncVectorEnv 中导致崩溃）。
         """
         if self._env is not None:
             return
@@ -154,21 +154,21 @@ class MetaworldEnv(gym.Env):
         if self.camera_name == "corner2":
             env.model.cam_pos[2] = [0.75, 0.075, 0.7]
         env.reset()
-        env._freeze_rand_vec = False  # otherwise no randomization
-        env.seeded_rand_vec = True  # use seeded RNG so reset(seed=X) controls object positions
+        env._freeze_rand_vec = False  # 否则没有随机化
+        env.seeded_rand_vec = True  # 使用带种子的 RNG，使 reset(seed=X) 能控制物体位置
         self._env = env
 
     def render(self) -> np.ndarray:
         """
-        Render the current environment frame.
+        渲染当前环境帧。
 
         Returns:
-            np.ndarray: The rendered RGB image from the environment.
+            np.ndarray: 从环境渲染出的 RGB 图像。
         """
         self._ensure_env()
         image = self._env.render()
         if self.camera_name == "corner2":
-            # Images from this camera are flipped — correct them
+            # 来自该相机的图像是翻转的 —— 进行纠正
             image = np.flip(image, (0, 1))
         return image
 
@@ -177,7 +177,7 @@ class MetaworldEnv(gym.Env):
         if self._env is not None:
             image = self._env.render()
             if self.camera_name == "corner2":
-                # NOTE: The "corner2" camera in MetaWorld environments outputs images with both axes inverted.
+                # 注意：MetaWorld 环境中的 "corner2" 相机输出的图像在两个轴上都是反转的。
                 image = np.flip(image, (0, 1))
         agent_pos = raw_obs[:4]
         if self.obs_type == "state":
@@ -209,14 +209,14 @@ class MetaworldEnv(gym.Env):
         **kwargs,
     ) -> tuple[RobotObservation, dict[str, Any]]:
         """
-        Reset the environment to its initial state.
+        将环境重置为初始状态。
 
         Args:
-            seed (Optional[int]): Random seed for environment initialization.
+            seed (Optional[int]): 用于环境初始化的随机种子。
 
         Returns:
-            observation (RobotObservation): The initial formatted observation.
-            info (Dict[str, Any]): Additional info about the reset state.
+            observation (RobotObservation): 格式化后的初始观测。
+            info (Dict[str, Any]): 关于重置状态的附加信息。
         """
         self._ensure_env()
         super().reset(seed=seed)
@@ -232,17 +232,17 @@ class MetaworldEnv(gym.Env):
 
     def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:
         """
-        Perform one environment step.
+        执行一步环境交互。
 
         Args:
-            action (np.ndarray): The action to execute, must be 1-D with shape (action_dim,).
+            action (np.ndarray): 要执行的动作，必须是形状为 (action_dim,) 的一维数组。
 
         Returns:
-            observation (RobotObservation): The formatted observation after the step.
-            reward (float): The scalar reward for this step.
-            terminated (bool): Whether the episode terminated successfully.
-            truncated (bool): Whether the episode was truncated due to a time limit.
-            info (Dict[str, Any]): Additional environment info.
+            observation (RobotObservation): 该步之后格式化后的观测。
+            reward (float): 该步的标量奖励。
+            terminated (bool): episode 是否成功终止。
+            truncated (bool): episode 是否因时间限制而被截断。
+            info (Dict[str, Any]): 附加的环境信息。
         """
         self._ensure_env()
         if action.ndim != 1:
@@ -252,7 +252,7 @@ class MetaworldEnv(gym.Env):
             )
         raw_obs, reward, done, truncated, info = self._env.step(action)
 
-        # Determine whether the task was successful
+        # 判断任务是否成功
         is_success = bool(info.get("success", 0))
         terminated = done or is_success
         info.update(
@@ -263,7 +263,7 @@ class MetaworldEnv(gym.Env):
             }
         )
 
-        # Format the raw observation into the expected structure
+        # 将原始观测格式化为期望的结构
         observation = self._format_raw_obs(raw_obs)
         if terminated:
             info["final_info"] = {
@@ -290,14 +290,14 @@ def create_metaworld_envs(
     env_cls: Callable[[Sequence[Callable[[], Any]]], Any] | None = None,
 ) -> dict[str, dict[int, Any]]:
     """
-    Create vectorized Meta-World environments with a consistent return shape.
+    创建具有统一返回结构的向量化 Meta-World 环境。
 
     Returns:
-        dict[task_group][task_id] -> vec_env (env_cls([...]) with exactly n_envs factories)
+        dict[task_group][task_id] -> vec_env（env_cls([...])，恰好包含 n_envs 个工厂）
     Notes:
-        - n_envs is the number of rollouts *per task* (episode_index = 0..n_envs-1).
-        - `task` can be a single difficulty group (e.g., "easy", "medium", "hard") or a comma-separated list.
-        - If a task name is not in DIFFICULTY_TO_TASKS, we treat it as a single custom task.
+        - n_envs 是*每个任务*的 rollout 数量（episode_index = 0..n_envs-1）。
+        - `task` 可以是单个难度组（例如 "easy"、"medium"、"hard"），也可以是以逗号分隔的列表。
+        - 如果任务名不在 DIFFICULTY_TO_TASKS 中，则将其视为单个自定义任务。
     """
     if env_cls is None or not callable(env_cls):
         raise ValueError("env_cls must be a callable that wraps a list of environment factory callables.")
@@ -318,13 +318,13 @@ def create_metaworld_envs(
     out: dict[str, dict[int, Any]] = defaultdict(dict)
 
     for group in task_groups:
-        # if not in difficulty presets, treat it as a single custom task
+        # 如果不在难度预设中，则将其视为单个自定义任务
         tasks = DIFFICULTY_TO_TASKS.get(group, [group])
 
         for tid, task_name in enumerate(tasks):
             print(f"Building vec env | group={group} | task_id={tid} | task={task_name}")
 
-            # build n_envs factories
+            # 构建 n_envs 个工厂
             fns = [(lambda tn=task_name: MetaworldEnv(task=tn, **gym_kwargs)) for _ in range(n_envs)]
 
             if is_async:
@@ -337,5 +337,5 @@ def create_metaworld_envs(
             else:
                 out[group][tid] = env_cls(fns)
 
-    # return a plain dict for consistency
+    # 为保持一致，返回普通 dict
     return {group: dict(task_map) for group, task_map in out.items()}

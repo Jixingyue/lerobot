@@ -18,7 +18,7 @@
 import io
 import json
 import logging
-import pickle  # nosec B403: Safe usage for internal serialization only
+import pickle  # nosec B403: 仅用于内部序列化的安全用法
 from multiprocessing.synchronize import Event as MpEvent
 from queue import Queue
 from typing import Any
@@ -29,7 +29,7 @@ from lerobot.utils.transition import Transition
 
 from . import services_pb2
 
-# FIX for protobuf: Assign the enum to a variable and ignore the type error once
+# 针对 protobuf 的修复：将枚举赋值给一个变量，并一次性忽略该类型错误
 TransferState = services_pb2.TransferState  # type: ignore[attr-defined]
 
 CHUNK_SIZE = 2 * 1024 * 1024  # 2 MB
@@ -112,7 +112,7 @@ def receive_bytes_in_chunks(iterator, queue: Queue | None, shutdown_event: MpEve
 
 
 def state_to_bytes(state_dict: dict[str, torch.Tensor]) -> bytes:
-    """Convert model state dict to flat array for transmission"""
+    """将模型 state dict 转换为扁平数组以便传输"""
     bytes_buffer = io.BytesIO()
 
     torch.save(state_dict, bytes_buffer)
@@ -133,8 +133,8 @@ def python_object_to_bytes(python_object: Any) -> bytes:
 def bytes_to_python_object(buffer: bytes) -> Any:
     bytes_buffer = io.BytesIO(buffer)
     bytes_buffer.seek(0)
-    obj = pickle.load(bytes_buffer)  # nosec B301: Safe usage of pickle.load
-    # Add validation checks here
+    obj = pickle.load(bytes_buffer)  # nosec B301: pickle.load 的安全用法
+    # 在此处添加校验检查
     return obj
 
 
@@ -163,16 +163,16 @@ def grpc_channel_options(
     service_config = {
         "methodConfig": [
             {
-                "name": [{}],  # Applies to ALL methods in ALL services
+                "name": [{}],  # 应用于所有服务中的所有方法
                 "retryPolicy": {
-                    "maxAttempts": max_attempts,  # Max retries (total attempts = 5)
-                    "initialBackoff": initial_backoff,  # First retry after 0.1s
-                    "maxBackoff": max_backoff,  # Max wait time between retries
-                    "backoffMultiplier": backoff_multiplier,  # Exponential backoff factor
+                    "maxAttempts": max_attempts,  # 最大重试次数（总尝试次数 = 5）
+                    "initialBackoff": initial_backoff,  # 0.1 秒后首次重试
+                    "maxBackoff": max_backoff,  # 重试之间的最大等待时间
+                    "backoffMultiplier": backoff_multiplier,  # 指数退避因子
                     "retryableStatusCodes": [
                         "UNAVAILABLE",
                         "DEADLINE_EXCEEDED",
-                    ],  # Retries on network failures
+                    ],  # 网络故障时重试
                 },
             }
         ]

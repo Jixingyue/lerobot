@@ -29,7 +29,7 @@ import torch.nn.functional as functional
 
 
 def _to_2tuple(x) -> tuple:
-    """Minimal replacement for timm.layers.to_2tuple."""
+    """timm.layers.to_2tuple 的最小替代实现。"""
     if isinstance(x, Iterable) and not isinstance(x, (str, bytes)):
         t = tuple(x)
         return (t[0], t[1]) if len(t) >= 2 else (t[0], t[0])
@@ -37,7 +37,7 @@ def _to_2tuple(x) -> tuple:
 
 
 def _has_sdp_attention() -> bool:
-    """Check if we can use PyTorch fused scaled_dot_product_attention."""
+    """检查是否可以使用 PyTorch 融合的 scaled_dot_product_attention。"""
     return hasattr(functional, "scaled_dot_product_attention")
 
 
@@ -46,9 +46,9 @@ def _has_sdp_attention() -> bool:
 
 class Mlp(nn.Module):
     """
-    MLP used in ViT-style blocks.
+    ViT 风格 block 中使用的 MLP。
 
-    Supports Linear or 1x1 Conv 'linear_layer' for token/channel mixing.
+    支持使用 Linear 或 1x1 Conv 作为 'linear_layer' 来进行 token/通道混合。
     """
 
     def __init__(
@@ -76,7 +76,7 @@ class Mlp(nn.Module):
         self.drop2 = nn.Dropout(drop_probs[1])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Expect [B, T, C] for Linear variant; caller is responsible for shapes.
+        # Linear 变体期望输入为 [B, T, C]；形状由调用方负责。
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)
@@ -91,10 +91,10 @@ class Mlp(nn.Module):
 
 class Attention(nn.Module):
     """
-    Multi-Head Self-Attention with optional fused SDPA fallback.
+    多头自注意力，可选地回退到融合的 SDPA。
 
-    If PyTorch provides `scaled_dot_product_attention`, it will be used
-    (usually faster and more stable); otherwise we use a manual implementation.
+    如果 PyTorch 提供了 `scaled_dot_product_attention`，就会使用它
+    （通常更快也更稳定）；否则使用手动实现。
     """
 
     fused_attn: Final[bool]
@@ -127,13 +127,13 @@ class Attention(nn.Module):
         """
         Parameters
         ----------
-        x : Tensor, shape [batch_size, seq_len, channels]
-            Input sequence.
+        x : Tensor，形状 [batch_size, seq_len, channels]
+            输入序列。
 
         Returns
         -------
-        Tensor, shape [batch_size, seq_len, channels]
-            Output sequence after MHSA + projection.
+        Tensor，形状 [batch_size, seq_len, channels]
+            经过 MHSA + 投影后的输出序列。
         """
         batch_size, seq_len, channels = x.shape
         qkv = (
@@ -169,10 +169,10 @@ class Attention(nn.Module):
 
 def basic_init(module: nn.Module) -> None:
     """
-    Apply a basic initialization scheme to Linear layers.
+    对 Linear 层应用一种基础的初始化方案。
 
-    - Weight: Xavier uniform initialization.
-    - Bias: Set to zero.
+    - 权重：Xavier 均匀初始化。
+    - 偏置：置零。
     """
     if isinstance(module, nn.Linear):
         nn.init.xavier_uniform_(module.weight)
@@ -182,21 +182,21 @@ def basic_init(module: nn.Module) -> None:
 
 def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 100) -> torch.Tensor:
     """
-    Create sinusoidal timestep embeddings.
+    创建正弦时间步嵌入。
 
     Parameters
     ----------
     t : torch.Tensor
-        Shape [B]. Each element is a timestep index, may be fractional.
+        形状 [B]。每个元素是一个时间步索引，可以是小数。
     dim : int
-        Dimensionality of the output embedding.
-    max_period : int, default=100
-        Controls the minimum frequency of the sinusoids.
+        输出嵌入的维度。
+    max_period : int，默认 100
+        控制正弦信号的最低频率。
 
     Returns
     -------
     torch.Tensor
-        Shape [B, dim]. Sinusoidal embeddings.
+        形状 [B, dim]。正弦嵌入。
     """
     half = dim // 2
     freqs = torch.exp(
@@ -214,9 +214,9 @@ def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 100) -> torc
 
 class DomainAwareLinear(nn.Module):
     """
-    Linear layer with domain-conditioned parameters (per-sample).
+    带域条件参数（逐样本）的 Linear 层。
 
-    Each domain has its own weight and bias vectors, stored in embeddings.
+    每个域都有自己的权重和偏置向量，以嵌入的形式存储。
     """
 
     def __init__(self, input_size: int, output_size: int, num_domains: int = 20) -> None:
@@ -233,14 +233,14 @@ class DomainAwareLinear(nn.Module):
         Parameters
         ----------
         x : Tensor
-            [B, I] or [B, T, I]
+            [B, I] 或 [B, T, I]
         domain_id : LongTensor
-            [B], domain indices.
+            [B]，域索引。
 
         Returns
         -------
         Tensor
-            [batch_size, output_size] or [batch_size, seq_len, output_size]
+            [batch_size, output_size] 或 [batch_size, seq_len, output_size]
         """
         batch_size = domain_id.shape[0]
         squeeze_seq = False
@@ -257,7 +257,7 @@ class DomainAwareLinear(nn.Module):
 
 class TransformerBlock(nn.Module):
     """
-    Standard Transformer block (pre-LN): LN → MHSA → residual, LN → MLP → residual.
+    标准 Transformer block（pre-LN）：LN → MHSA → 残差，LN → MLP → 残差。
     """
 
     def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float = 4.0) -> None:
@@ -275,11 +275,11 @@ class TransformerBlock(nn.Module):
         """
         Parameters
         ----------
-        x : Tensor, [B, T, H]
+        x : Tensor，[B, T, H]
 
         Returns
         -------
-        Tensor, [B, T, H]
+        Tensor，[B, T, H]
         """
         x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
@@ -291,9 +291,9 @@ class TransformerBlock(nn.Module):
 
 class SoftPromptedTransformer(nn.Module):
     """
-    Multi-modal, domain-aware Transformer with optional soft prompts.
+    多模态、感知域（domain-aware）的 Transformer，可选地带有 soft prompt。
 
-    See parameter and forward I/O descriptions inside the docstrings.
+    参数和 forward 输入/输出的描述见各 docstring。
     """
 
     def __init__(
@@ -356,9 +356,9 @@ class SoftPromptedTransformer(nn.Module):
         t: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Forward pass.
+        前向传播。
 
-        Inputs
+        输入
         ------
         domain_id : [B]
         vlm_features : [B, T_vlm, D]
@@ -370,18 +370,18 @@ class SoftPromptedTransformer(nn.Module):
         Returns
         -------
         Tensor
-            Predicted actions, [batch_size, num_actions, dim_action]
+            预测的动作，[batch_size, num_actions, dim_action]
         """
         batch_size, num_actions = action_with_noise.shape[:2]
 
-        # Encode (action + proprio + time) → tokens
+        # 将（action + proprio + time）编码为 token
         time_emb = timestep_embedding(t, self.dim_time)  # [batch_size, dim_time]
         time_tokens = time_emb.unsqueeze(1).expand(batch_size, num_actions, self.dim_time)
         proprio_tokens = proprio.unsqueeze(1).expand(batch_size, num_actions, proprio.shape[-1])
         action_tokens = torch.cat([action_with_noise, proprio_tokens, time_tokens], dim=-1)
         x = self.action_encoder(action_tokens, domain_id)  # [batch_size, num_actions, hidden_size]
 
-        # Project visual streams and concatenate
+        # 投影各视觉流并拼接
         if self.use_hetero_proj:
             x = torch.cat(
                 [
@@ -394,22 +394,22 @@ class SoftPromptedTransformer(nn.Module):
         else:
             x = torch.cat([x, self.vlm_proj(vlm_features), self.aux_visual_proj(aux_visual_inputs)], dim=1)
 
-        # Add positional embeddings (truncate if needed)
+        # 加上位置嵌入（必要时截断）
         seq_len = x.shape[1]
         if seq_len > self.pos_emb.shape[1]:
             raise ValueError(f"Sequence length {seq_len} exceeds max_len_seq={self.pos_emb.shape[1]}.")
         x = x + self.pos_emb[:, :seq_len, :]
 
-        # Append soft prompts
+        # 追加 soft prompt
         if self.len_soft_prompts > 0:
             soft_prompts = self.soft_prompt_hub(domain_id).view(
                 batch_size, self.len_soft_prompts, self.hidden_size
             )
             x = torch.cat([x, soft_prompts], dim=1)
 
-        # Transformer backbone
+        # Transformer 主干
         for block in self.blocks:
             x = block(x)
 
-        # Decode only the action segment
+        # 只解码动作片段
         return self.action_decoder(self.norm(x[:, :num_actions]), domain_id)

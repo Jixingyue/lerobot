@@ -41,34 +41,32 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EEReferenceAndDelta(RobotActionProcessorStep):
     """
-    Computes a target end-effector pose from a relative delta command.
+    根据相对增量命令计算末端执行器的目标位姿。
 
-    This step takes a desired change in position and orientation (`target_*`) and applies it to a
-    reference end-effector pose to calculate an absolute target pose. The reference pose is derived
-    from the current robot joint positions using forward kinematics.
+    该步骤接收期望的位置与姿态变化量（`target_*`），并将其叠加到一个参考末端位姿上，
+    从而计算出绝对目标位姿。参考位姿通过正运动学由机器人当前关节位置推导得到。
 
-    The processor can operate in two modes:
-    1.  `use_latched_reference=True`: The reference pose is "latched" or saved at the moment the action
-        is first enabled. Subsequent commands are relative to this fixed reference.
-    2.  `use_latched_reference=False`: The reference pose is updated to the robot's current pose at
-        every step.
+    该处理器可在两种模式下工作：
+    1.  `use_latched_reference=True`：在动作首次使能的瞬间“锁存”（保存）参考位姿，
+        后续命令均相对于这个固定参考。
+    2.  `use_latched_reference=False`：每一步都将参考位姿更新为机器人当前位姿。
 
-    Attributes:
-        kinematics: The robot's kinematic model for forward kinematics.
-        end_effector_step_sizes: A dictionary scaling the input delta commands.
-        motor_names: A list of motor names required for forward kinematics.
-        use_latched_reference: If True, latch the reference pose on enable; otherwise, always use the
-            current pose as the reference.
-        reference_ee_pose: Internal state storing the latched reference pose.
-        _prev_enabled: Internal state to detect the rising edge of the enable signal.
-        _command_when_disabled: Internal state to hold the last command while disabled.
+    属性:
+        kinematics: 用于正运动学计算的机器人运动学模型。
+        end_effector_step_sizes: 对输入增量命令进行缩放的字典。
+        motor_names: 正运动学计算所需的电机名称列表。
+        use_latched_reference: 为 True 时在使能时锁存参考位姿；否则始终以当前位姿
+            作为参考。
+        reference_ee_pose: 保存锁存参考位姿的内部状态。
+        _prev_enabled: 用于检测使能信号上升沿的内部状态。
+        _command_when_disabled: 未使能期间保存上一条命令的内部状态。
     """
 
     kinematics: RobotKinematics
     end_effector_step_sizes: dict
     motor_names: list[str]
     use_latched_reference: bool = (
-        True  # If True, latch reference on enable; if False, always use current pose
+        True  # 为 True 时在使能时锁存参考；为 False 时始终使用当前位姿
     )
     use_ik_solution: bool = False
 
@@ -101,7 +99,7 @@ class EEReferenceAndDelta(RobotActionProcessorStep):
         if q_raw is None:
             raise ValueError("Joints observation is require for computing robot kinematics")
 
-        # Current pose from FK on measured joints
+        # 由实测关节角通过 FK（正运动学）得到当前位姿
         t_curr = self.kinematics.forward_kinematics(q_raw)
 
         enabled = bool(action.pop("enabled"))
@@ -118,7 +116,7 @@ class EEReferenceAndDelta(RobotActionProcessorStep):
         if enabled:
             ref = t_curr
             if self.use_latched_reference:
-                # Latched reference mode: latch reference at the rising edge
+                # 锁存参考模式：在上升沿锁存参考位姿
                 if not self._prev_enabled or self.reference_ee_pose is None:
                     self.reference_ee_pose = t_curr.copy()
                 ref = self.reference_ee_pose if self.reference_ee_pose is not None else t_curr
@@ -138,13 +136,13 @@ class EEReferenceAndDelta(RobotActionProcessorStep):
 
             self._command_when_disabled = desired.copy()
         else:
-            # While disabled, keep sending the same command to avoid drift.
+            # 未使能时持续发送同一命令，以避免漂移。
             if self._command_when_disabled is None:
-                # If we've never had an enabled command yet, freeze current FK pose once.
+                # 如果还从未收到过使能命令，则先冻结当前 FK 位姿一次。
                 self._command_when_disabled = t_curr.copy()
             desired = self._command_when_disabled.copy()
 
-        # Write action fields
+        # 写入动作字段
         pos = desired[:3, 3]
         tw = Rotation.from_matrix(desired[:3, :3]).as_rotvec()
         action["ee.x"] = float(pos[0])
@@ -159,7 +157,7 @@ class EEReferenceAndDelta(RobotActionProcessorStep):
         return action
 
     def reset(self):
-        """Resets the internal state of the processor."""
+        """重置处理器的内部状态。"""
         self._prev_enabled = False
         self.reference_ee_pose = None
         self._command_when_disabled = None
@@ -191,20 +189,19 @@ class EEReferenceAndDelta(RobotActionProcessorStep):
 @dataclass
 class EEBoundsAndSafety(RobotActionProcessorStep):
     """
-    Clips the end-effector pose to predefined bounds and checks for unsafe jumps.
+    将末端执行器位姿裁剪到预定义边界内，并检查不安全的跳变。
 
-    This step ensures that the target end-effector pose remains within a safe operational workspace.
-    It also moderates the command to prevent large, sudden movements between consecutive steps.
+    该步骤确保末端执行器目标位姿始终处于安全工作空间内。它还会对命令加以缓和，
+    防止相邻步骤之间出现大幅、突然的运动。
 
-    Attributes:
-        end_effector_bounds: A dictionary with "min" and "max" keys for position clipping.
-        max_ee_step_m: The maximum allowed change in position (in meters) between steps.
-        raise_on_jump: When ``True`` (default) an over-limit per-frame step raises
-            ``ValueError`` (aborting the control loop). When ``False`` the step is
-            rate-limited to ``max_ee_step_m`` and a warning is logged instead — the
-            safer choice for live teleoperation, where a transient tracking glitch
-            should not crash the loop and leave the robot uncontrolled.
-        _last_pos: Internal state storing the last commanded position.
+    属性:
+        end_effector_bounds: 带有 "min" 和 "max" 键的字典，用于位置裁剪。
+        max_ee_step_m: 相邻步骤之间允许的最大位置变化量（单位：米）。
+        raise_on_jump: 为 ``True``（默认）时，单帧步长超限会抛出 ``ValueError``
+            （中止控制循环）。为 ``False`` 时，步长会被限速到 ``max_ee_step_m``，
+            并改为记录一条警告——对于实时遥操作，这是更安全的选择，因为瞬时的
+            跟踪故障不应导致循环崩溃而让机器人失去控制。
+        _last_pos: 保存上一次命令位置的内部状态。
     """
 
     end_effector_bounds: dict
@@ -219,7 +216,7 @@ class EEBoundsAndSafety(RobotActionProcessorStep):
         wx = action["ee.wx"]
         wy = action["ee.wy"]
         wz = action["ee.wz"]
-        # TODO(Steven): ee.gripper_vel does not need to be bounded
+        # TODO(Steven)：ee.gripper_vel 不需要设界
 
         if None in (x, y, z, wx, wy, wz):
             raise ValueError(
@@ -229,17 +226,16 @@ class EEBoundsAndSafety(RobotActionProcessorStep):
         pos = np.array([x, y, z], dtype=float)
         twist = np.array([wx, wy, wz], dtype=float)
 
-        # Clip position
+        # 裁剪位置
         pos = np.clip(pos, self.end_effector_bounds["min"], self.end_effector_bounds["max"])
 
-        # Check for jumps in position
+        # 检查位置跳变
         if self._last_pos is not None:
             dpos = pos - self._last_pos
             n = float(np.linalg.norm(dpos))
             if n > self.max_ee_step_m and n > 0:
-                # Clamp the step to the per-frame limit (rate-limit). The clamped
-                # value is computed either way; raise_on_jump only decides whether
-                # an over-limit step aborts the loop or is rate-limited + warned.
+                # 将步长钳制到单帧上限（限速）。无论如何都会计算钳制后的值；
+                # raise_on_jump 只决定超限步长是中止循环，还是被限速并发出警告。
                 pos = self._last_pos + dpos * (self.max_ee_step_m / n)
                 if self.raise_on_jump:
                     raise ValueError(f"EE jump {n:.3f}m > {self.max_ee_step_m}m")
@@ -262,7 +258,7 @@ class EEBoundsAndSafety(RobotActionProcessorStep):
         return action
 
     def reset(self):
-        """Resets the last known position and orientation."""
+        """重置上一次已知的位置和姿态。"""
         self._last_pos = None
 
     def transform_features(
@@ -275,22 +271,22 @@ class EEBoundsAndSafety(RobotActionProcessorStep):
 @dataclass
 class InverseKinematicsEEToJoints(RobotActionProcessorStep):
     """
-    Computes desired joint positions from a target end-effector pose using inverse kinematics (IK).
+    使用逆运动学（IK）根据末端执行器目标位姿计算期望关节位置。
 
-    This step translates a Cartesian command (position and orientation of the end-effector) into
-    the corresponding joint-space commands for each motor.
+    该步骤将笛卡尔空间命令（末端执行器的位置和姿态）转换为各个电机对应的
+    关节空间命令。
 
-    Attributes:
-        kinematics: The robot's kinematic model for inverse kinematics.
-        motor_names: A list of motor names for which to compute joint positions.
-        q_curr: Internal state storing the last joint positions, used as an initial guess for the IK solver.
-        initial_guess_current_joints: If True, use the robot's current joint state as the IK guess.
-            If False, use the solution from the previous step.
-        orientation_weight: Weight for the orientation constraint passed to
-            ``RobotKinematics.inverse_kinematics``. Defaults to ``0.01`` (matching the solver
-            default, so existing callers are unchanged). Set to ``0.0`` for position-only IK on
-            under-actuated arms; a small nonzero weight gives soft-orientation IK on the 5-DOF
-            SO-101, where the wrist tracks orientation only partially (position dominates).
+    属性:
+        kinematics: 用于逆运动学计算的机器人运动学模型。
+        motor_names: 需要计算关节位置的电机名称列表。
+        q_curr: 保存上一次关节位置的内部状态，用作 IK 求解器的初始猜测。
+        initial_guess_current_joints: 为 True 时，以机器人当前关节状态作为 IK
+            猜测；为 False 时，使用上一步的求解结果。
+        orientation_weight: 传递给 ``RobotKinematics.inverse_kinematics`` 的
+            姿态约束权重。默认为 ``0.01``（与求解器默认值一致，因此现有调用方
+            行为不变）。对于欠驱动机械臂，可设为 ``0.0`` 以仅对位置做 IK；
+            较小的非零权重可在 5 自由度 SO-101 上实现软姿态 IK——其手腕只能
+            部分跟踪姿态（位置占主导）。
     """
 
     kinematics: RobotKinematics
@@ -326,24 +322,24 @@ class InverseKinematicsEEToJoints(RobotActionProcessorStep):
         if q_raw is None:
             raise ValueError("Joints observation is require for computing robot kinematics")
 
-        if self.initial_guess_current_joints:  # Use current joints as initial guess
+        if self.initial_guess_current_joints:  # 以当前关节角作为初始猜测
             self.q_curr = q_raw
-        else:  # Use previous ik solution as initial guess
+        else:  # 以上一次 ik 求解结果作为初始猜测
             if self.q_curr is None:
                 self.q_curr = q_raw
 
-        # Build desired 4x4 transform from pos + rotvec (twist)
+        # 由位置 + 旋转向量（twist）构建期望的 4x4 变换矩阵
         t_des = np.eye(4, dtype=float)
         t_des[:3, :3] = Rotation.from_rotvec([wx, wy, wz]).as_matrix()
         t_des[:3, 3] = [x, y, z]
 
-        # Compute inverse kinematics
+        # 计算逆运动学
         q_target = self.kinematics.inverse_kinematics(
             self.q_curr, t_des, orientation_weight=self.orientation_weight
         )
         self.q_curr = q_target
 
-        # TODO: This is sentitive to order of motor_names = q_target mapping
+        # TODO：此处对 motor_names 与 q_target 的映射顺序很敏感
         for i, name in enumerate(self.motor_names):
             if name != "gripper":
                 action[f"{name}.pos"] = float(q_target[i])
@@ -366,7 +362,7 @@ class InverseKinematicsEEToJoints(RobotActionProcessorStep):
         return features
 
     def reset(self):
-        """Resets the initial guess for the IK solver."""
+        """重置 IK 求解器的初始猜测。"""
         self.q_curr = None
 
 
@@ -374,19 +370,18 @@ class InverseKinematicsEEToJoints(RobotActionProcessorStep):
 @dataclass
 class GripperVelocityToJoint(RobotActionProcessorStep):
     """
-    Converts a gripper velocity command into a target gripper joint position.
+    将夹爪速度命令转换为夹爪关节目标位置。
 
-    This step integrates a normalized velocity command over time to produce a position command,
-    taking the current gripper position as a starting point. It also supports a discrete mode
-    where integer actions map to open, close, or no-op.
+    该步骤以当前夹爪位置为起点，对归一化速度命令随时间进行积分以生成位置命令。
+    它还支持离散模式：整数动作分别映射为张开、闭合或无操作。
 
-    Attributes:
-        motor_names: A list of motor names, which must include 'gripper'.
-        speed_factor: A scaling factor to convert the normalized velocity command to a position change.
-        clip_min: The minimum allowed gripper joint position.
-        clip_max: The maximum allowed gripper joint position.
-        discrete_gripper: If True, interpret the input as a discrete class index
-            {0 = close, 1 = stay, 2 = open}, matching `GamepadTeleop.GripperAction`.
+    属性:
+        motor_names: 电机名称列表，其中必须包含 'gripper'。
+        speed_factor: 将归一化速度命令转换为位置变化量的缩放系数。
+        clip_min: 允许的夹爪关节最小位置。
+        clip_max: 允许的夹爪关节最大位置。
+        discrete_gripper: 为 True 时，将输入解释为离散类别索引
+            {0 = 闭合, 1 = 保持, 2 = 张开}，与 `GamepadTeleop.GripperAction` 一致。
     """
 
     speed_factor: float = 20.0
@@ -412,14 +407,14 @@ class GripperVelocityToJoint(RobotActionProcessorStep):
             raise ValueError("Joints observation is require for computing robot kinematics")
 
         if self.discrete_gripper:
-            # Map discrete command {0=close, 1=stay, 2=open} -> signed velocity.
-            # Negation accounts for SO100 sign (joint position increases on close).
-            #   0 -> +clip_max (close), 1 -> 0 (stay), 2 -> -clip_max (open)
+            # 将离散命令 {0=闭合, 1=保持, 2=张开} 映射为带符号速度。
+            # 取负以适配 SO100 的符号约定（闭合时关节位置增大）。
+            #   0 -> +clip_max（闭合），1 -> 0（保持），2 -> -clip_max（张开）
             gripper_vel = -(gripper_vel - 1) * self.clip_max
 
-        # Compute desired gripper position
+        # 计算期望夹爪位置
         delta = gripper_vel * float(self.speed_factor)
-        # TODO: This assumes gripper is the last specified joint in the robot
+        # TODO：这里假设夹爪是机器人中最后指定的关节
         gripper_pos = float(np.clip(q_raw[-1] + delta, self.clip_min, self.clip_max))
         action["ee.gripper_pos"] = gripper_pos
 
@@ -462,13 +457,13 @@ def compute_forward_kinematics_joints_to_ee(
 @dataclass
 class ForwardKinematicsJointsToEEObservation(ObservationProcessorStep):
     """
-    Computes the end-effector pose from joint positions using forward kinematics (FK).
+    使用正运动学（FK）根据关节位置计算末端执行器位姿。
 
-    This step is typically used to add the robot's Cartesian pose to the observation space,
-    which can be useful for visualization or as an input to a policy.
+    该步骤通常用于将机器人的笛卡尔位姿加入观测空间，可用于可视化或作为
+    策略的输入。
 
-    Attributes:
-        kinematics: The robot's kinematic model.
+    属性:
+        kinematics: 机器人运动学模型。
     """
 
     kinematics: RobotKinematics
@@ -480,10 +475,10 @@ class ForwardKinematicsJointsToEEObservation(ObservationProcessorStep):
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
-        # We only use the ee pose in the dataset, so we don't need the joint positions
+        # 数据集中只使用末端位姿，因此不需要关节位置
         for n in self.motor_names:
             features[PipelineFeatureType.OBSERVATION].pop(f"{n}.pos", None)
-        # We specify the dataset features of this step that we want to be stored in the dataset
+        # 指定本步骤中需要存入数据集的数据集特征
         for k in ["x", "y", "z", "wx", "wy", "wz", "gripper_pos"]:
             features[PipelineFeatureType.OBSERVATION][f"ee.{k}"] = PolicyFeature(
                 type=FeatureType.STATE, shape=(1,)
@@ -495,13 +490,13 @@ class ForwardKinematicsJointsToEEObservation(ObservationProcessorStep):
 @dataclass
 class ForwardKinematicsJointsToEEAction(RobotActionProcessorStep):
     """
-    Computes the end-effector pose from joint positions using forward kinematics (FK).
+    使用正运动学（FK）根据关节位置计算末端执行器位姿。
 
-    This step is typically used to add the robot's Cartesian pose to the observation space,
-    which can be useful for visualization or as an input to a policy.
+    该步骤通常用于将机器人的笛卡尔位姿加入观测空间，可用于可视化或作为
+    策略的输入。
 
-    Attributes:
-        kinematics: The robot's kinematic model.
+    属性:
+        kinematics: 机器人运动学模型。
     """
 
     kinematics: RobotKinematics
@@ -513,10 +508,10 @@ class ForwardKinematicsJointsToEEAction(RobotActionProcessorStep):
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
-        # We only use the ee pose in the dataset, so we don't need the joint positions
+        # 数据集中只使用末端位姿，因此不需要关节位置
         for n in self.motor_names:
             features[PipelineFeatureType.ACTION].pop(f"{n}.pos", None)
-        # Store end-effector features as actions in the dataset schema
+        # 在数据集 schema 中将末端执行器特征存为动作
         for k in ["x", "y", "z", "wx", "wy", "wz", "gripper_pos"]:
             features[PipelineFeatureType.ACTION][f"ee.{k}"] = PolicyFeature(
                 type=FeatureType.ACTION, shape=(1,)
@@ -559,9 +554,9 @@ class ForwardKinematicsJointsToEE(ProcessorStep):
 @dataclass
 class InverseKinematicsRLStep(ProcessorStep):
     """
-    Computes desired joint positions from a target end-effector pose using inverse kinematics (IK).
+    使用逆运动学（IK）根据末端执行器目标位姿计算期望关节位置。
 
-    This is modified from the InverseKinematicsEEToJoints step to be used in the RL pipeline.
+    这是在 InverseKinematicsEEToJoints 步骤的基础上修改而来，用于 RL 流水线。
     """
 
     kinematics: RobotKinematics
@@ -602,22 +597,22 @@ class InverseKinematicsRLStep(ProcessorStep):
         if q_raw is None:
             raise ValueError("Joints observation is require for computing robot kinematics")
 
-        if self.initial_guess_current_joints:  # Use current joints as initial guess
+        if self.initial_guess_current_joints:  # 以当前关节角作为初始猜测
             self.q_curr = q_raw
-        else:  # Use previous ik solution as initial guess
+        else:  # 以上一次 ik 求解结果作为初始猜测
             if self.q_curr is None:
                 self.q_curr = q_raw
 
-        # Build desired 4x4 transform from pos + rotvec (twist)
+        # 由位置 + 旋转向量（twist）构建期望的 4x4 变换矩阵
         t_des = np.eye(4, dtype=float)
         t_des[:3, :3] = Rotation.from_rotvec([wx, wy, wz]).as_matrix()
         t_des[:3, 3] = [x, y, z]
 
-        # Compute inverse kinematics
+        # 计算逆运动学
         q_target = self.kinematics.inverse_kinematics(self.q_curr, t_des)
         self.q_curr = q_target
 
-        # TODO: This is sentitive to order of motor_names = q_target mapping
+        # TODO：此处对 motor_names 与 q_target 的映射顺序很敏感
         for i, name in enumerate(self.motor_names):
             if name != "gripper":
                 action[f"{name}.pos"] = float(q_target[i])
@@ -644,5 +639,5 @@ class InverseKinematicsRLStep(ProcessorStep):
         return features
 
     def reset(self):
-        """Resets the initial guess for the IK solver."""
+        """重置 IK 求解器的初始猜测。"""
         self.q_curr = None

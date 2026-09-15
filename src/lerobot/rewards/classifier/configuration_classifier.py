@@ -22,7 +22,7 @@ from lerobot.utils.constants import OBS_IMAGE
 @RewardModelConfig.register_subclass(name="reward_classifier")
 @dataclass
 class RewardClassifierConfig(RewardModelConfig):
-    """Configuration for the Reward Classifier model."""
+    """Reward Classifier 模型的配置。"""
 
     name: str = "reward_classifier"
     num_classes: int = 2
@@ -32,7 +32,7 @@ class RewardClassifierConfig(RewardModelConfig):
     dropout_rate: float = 0.1
     model_name: str = "lerobot/resnet10"
     device: str = "cpu"
-    model_type: str = "cnn"  # "transformer" or "cnn"
+    model_type: str = "cnn"  # "transformer" 或 "cnn"
     num_cameras: int = 2
     learning_rate: float = 1e-4
     weight_decay: float = 0.01
@@ -66,7 +66,7 @@ class RewardClassifierConfig(RewardModelConfig):
         return None
 
     def validate_features(self) -> None:
-        """Validate feature configurations."""
+        """校验特征配置。"""
         has_image = any(key.startswith(OBS_IMAGE) for key in self.input_features)
         if not has_image:
             raise ValueError(

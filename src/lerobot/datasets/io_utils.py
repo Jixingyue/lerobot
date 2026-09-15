@@ -63,21 +63,21 @@ def get_hf_dataset_size_in_mb(hf_ds: Dataset) -> int:
 def load_nested_dataset(
     pq_dir: Path, features: datasets.Features | None = None, episodes: list[int] | None = None
 ) -> Dataset:
-    """Find parquet files in provided directory {pq_dir}/chunk-xxx/file-xxx.parquet
-    Convert parquet files to pyarrow memory mapped in a cache folder for efficient RAM usage
-    Concatenate all pyarrow references to return HF Dataset format
+    """在给定目录 {pq_dir}/chunk-xxx/file-xxx.parquet 中查找 parquet 文件
+    将 parquet 文件转换为缓存文件夹中的 pyarrow 内存映射，以高效使用 RAM
+    拼接所有 pyarrow 引用并返回 HF Dataset 格式
 
     Args:
-        pq_dir: Directory containing parquet files
-        features: Optional features schema to ensure consistent loading of complex types like images
-        episodes: Optional list of episode indices to filter. Uses PyArrow predicate pushdown for efficiency.
+        pq_dir: 包含 parquet 文件的目录
+        features: 可选的特征 schema，用于确保图像等复杂类型加载的一致性
+        episodes: 可选的待过滤 episode 索引列表。使用 PyArrow 谓词下推以提高效率。
     """
     paths = sorted(pq_dir.glob("*/*.parquet"))
     if len(paths) == 0:
         raise FileNotFoundError(f"Provided directory does not contain any parquet file: {pq_dir}")
 
     with SuppressProgressBars():
-        # We use .from_parquet() memory-mapped loading for efficiency
+        # 为了效率，我们使用 .from_parquet() 的内存映射加载
         filters = pa_ds.field("episode_index").isin(episodes) if episodes is not None else None
         return Dataset.from_parquet([str(path) for path in paths], filters=filters, features=features)
 
@@ -88,28 +88,28 @@ def get_parquet_num_frames(parquet_path: str | Path) -> int:
 
 
 def get_file_size_in_mb(file_path: Path) -> float:
-    """Get file size on disk in megabytes.
+    """获取文件在磁盘上的大小（以兆字节为单位）。
 
     Args:
-        file_path (Path): Path to the file.
+        file_path (Path): 文件路径。
     """
     file_size_bytes = file_path.stat().st_size
     return file_size_bytes / (1024**2)
 
 
 def embed_images(dataset: datasets.Dataset) -> datasets.Dataset:
-    """Embed image bytes into the dataset table before saving to Parquet.
+    """在保存到 Parquet 之前，将图像字节嵌入数据集表中。
 
-    This function prepares a Hugging Face dataset for serialization by converting
-    image objects into an embedded format that can be stored in Arrow/Parquet.
+    此函数通过将图像对象转换为可存储在 Arrow/Parquet 中的
+    嵌入格式，为 Hugging Face 数据集的序列化做准备。
 
     Args:
-        dataset (datasets.Dataset): The input dataset, possibly containing image features.
+        dataset (datasets.Dataset): 输入数据集，可能包含图像特征。
 
     Returns:
-        datasets.Dataset: The dataset with images embedded in the table storage.
+        datasets.Dataset: 图像已嵌入表存储的数据集。
     """
-    # Embed image bytes into the table before saving to parquet
+    # 在保存到 parquet 之前，将图像字节嵌入表中
     format = dataset.format
     dataset = dataset.with_format("arrow")
     dataset = dataset.map(embed_table_storage, batched=False)
@@ -122,52 +122,52 @@ def write_info(info: DatasetInfo, local_dir: Path) -> None:
 
 
 def load_info(local_dir: Path) -> DatasetInfo:
-    """Load dataset info metadata from its standard file path.
+    """从标准文件路径加载数据集信息元数据。
 
     Args:
-        local_dir (Path): The root directory of the dataset.
+        local_dir (Path): 数据集的根目录。
 
     Returns:
-        DatasetInfo: The typed dataset information object.
+        DatasetInfo: 带类型的数据集信息对象。
     """
     raw = load_json(local_dir / INFO_PATH)
     return DatasetInfo.from_dict(raw)
 
 
 def write_stats(stats: dict, local_dir: Path) -> None:
-    """Serialize and write dataset statistics to their standard file path.
+    """将数据集统计量序列化并写入其标准文件路径。
 
     Args:
-        stats (dict): The statistics dictionary (can contain tensors/numpy arrays).
-        local_dir (Path): The root directory of the dataset.
+        stats (dict): 统计量字典（可包含张量/numpy 数组）。
+        local_dir (Path): 数据集的根目录。
     """
     serialized_stats = serialize_dict(stats)
     write_json(serialized_stats, local_dir / STATS_PATH)
 
 
 def cast_stats_to_numpy(stats: dict) -> dict[str, dict[str, np.ndarray]]:
-    """Recursively cast numerical values in a stats dictionary to numpy arrays.
+    """递归地将统计量字典中的数值转换为 numpy 数组。
 
     Args:
-        stats (dict): The statistics dictionary.
+        stats (dict): 统计量字典。
 
     Returns:
-        dict: The statistics dictionary with values cast to numpy arrays.
+        dict: 值已转换为 numpy 数组的统计量字典。
     """
     stats = {key: np.atleast_1d(np.array(value)) for key, value in flatten_dict(stats).items()}
     return unflatten_dict(stats)
 
 
 def load_stats(local_dir: Path) -> dict[str, dict[str, np.ndarray]] | None:
-    """Load dataset statistics and cast numerical values to numpy arrays.
+    """加载数据集统计量并将数值转换为 numpy 数组。
 
-    Returns None if the stats file doesn't exist.
+    如果统计量文件不存在，则返回 None。
 
     Args:
-        local_dir (Path): The root directory of the dataset.
+        local_dir (Path): 数据集的根目录。
 
     Returns:
-        A dictionary of statistics or None if the file is not found.
+        统计量字典；如果未找到文件则返回 None。
     """
     if not (local_dir / STATS_PATH).exists():
         return None
@@ -188,13 +188,13 @@ def load_tasks(local_dir: Path) -> pandas.DataFrame:
 
 
 def write_episodes(episodes: Dataset, local_dir: Path) -> None:
-    """Write episode metadata to a parquet file in the LeRobot v3.0 format.
-    This function writes episode-level metadata to a single parquet file.
-    Used primarily during dataset conversion (v2.1 → v3.0) and in test fixtures.
+    """以 LeRobot v3.0 格式将 episode 元数据写入 parquet 文件。
+    此函数将 episode 级别的元数据写入单个 parquet 文件。
+    主要用于数据集转换（v2.1 → v3.0）和测试 fixture。
 
     Args:
-        episodes: HuggingFace Dataset containing episode metadata
-        local_dir: Root directory where the dataset will be stored
+        episodes: 包含 episode 元数据的 HuggingFace Dataset
+        local_dir: 数据集存储的根目录
     """
     episode_size_mb = get_hf_dataset_size_in_mb(episodes)
     if episode_size_mb > DEFAULT_DATA_FILE_SIZE_IN_MB:
@@ -211,9 +211,9 @@ def write_episodes(episodes: Dataset, local_dir: Path) -> None:
 
 def load_episodes(local_dir: Path) -> datasets.Dataset:
     episodes = load_nested_dataset(local_dir / EPISODES_DIR)
-    # Select episode features/columns containing references to episode data and videos
-    # (e.g. tasks, dataset_from_index, dataset_to_index, data/chunk_index, data/file_index, etc.)
-    # This is to speedup access to these data, instead of having to load episode stats.
+    # 选择包含对 episode 数据和视频引用的 episode 特征/列
+    # （例如 tasks、dataset_from_index、dataset_to_index、data/chunk_index、data/file_index 等）
+    # 这是为了加快对这些数据的访问，而不必加载 episode 统计量。
     episodes = episodes.select_columns([key for key in episodes.features if not key.startswith("stats/")])
     return episodes
 
@@ -221,21 +221,21 @@ def load_episodes(local_dir: Path) -> datasets.Dataset:
 def load_image_as_numpy(
     fpath: str | Path, dtype: np.dtype = np.float32, channel_first: bool = True
 ) -> np.ndarray:
-    """Load an image from a file into a numpy array.
+    """从文件加载图像为 numpy 数组。
 
     Args:
-        fpath (str | Path): Path to the image file.
-        dtype (np.dtype): The desired data type of the output array. If floating,
-            pixels are scaled to [0, 1]. Only used for RGB images.
-        channel_first (bool): If True, converts the image to (C, H, W) format.
-            Otherwise, it remains in (H, W, C) format.
+        fpath (str | Path): 图像文件路径。
+        dtype (np.dtype): 输出数组的期望数据类型。如果是浮点类型，
+            像素会被缩放到 [0, 1]。仅用于 RGB 图像。
+        channel_first (bool): 如果为 True，将图像转换为 (C, H, W) 格式。
+            否则保持 (H, W, C) 格式。
 
     Returns:
-        np.ndarray: The image as a numpy array.
+        np.ndarray: 以 numpy 数组表示的图像。
     """
     is_depth = fpath.endswith(".tiff") or fpath.endswith(".tif")
     if is_depth:
-        # Preserve the native depth dtype (uint16 -> "I;16", float32 -> "F").
+        # 保留原生深度 dtype（uint16 -> "I;16"，float32 -> "F"）。
         img = PILImage.open(fpath)
         img_array = np.array(img)
     else:
@@ -248,15 +248,15 @@ def load_image_as_numpy(
     return img_array
 
 
-# PIL modes for 16-bit unsigned depth maps.
+# 16 位无符号深度图的 PIL 模式。
 UINT16_PIL_MODES = {"I;16", "I;16B", "I;16L"}
 
 
 def pil_to_chw_tensor(img: PILImage.Image) -> torch.Tensor:
-    """Convert a PIL image to a channel-first tensor.
+    """将 PIL 图像转换为通道在前的张量。
 
-    ``uint16`` depth maps become ``float32 (1, H, W)`` in native units (``ToTensor``
-    would overflow them to ``int16``); all other modes use the standard ``ToTensor`` path.
+    ``uint16`` 深度图会以原生单位变为 ``float32 (1, H, W)``（``ToTensor``
+    会使其溢出为 ``int16``）；所有其他模式使用标准的 ``ToTensor`` 路径。
     """
     if img.mode in UINT16_PIL_MODES:
         return torch.from_numpy(np.array(img, dtype=np.float32))[None, ...]
@@ -264,20 +264,20 @@ def pil_to_chw_tensor(img: PILImage.Image) -> torch.Tensor:
 
 
 def hf_transform_to_torch(items_dict: dict[str, list[Any]]) -> dict[str, list[torch.Tensor | str]]:
-    """Convert a batch from a Hugging Face dataset to torch tensors.
+    """将 Hugging Face 数据集的一个批次转换为 torch 张量。
 
-    This transform function converts items from Hugging Face dataset format (pyarrow)
-    to torch tensors. RGB images are converted from PIL objects (H, W, C, uint8)
-    to a torch image representation (C, H, W, float32) in the range [0, 1]. Depth
-    maps are returned as float32 (1, H, W) in their native units. Other
-    types are converted to torch.tensor.
+    此转换函数将 Hugging Face 数据集格式（pyarrow）的条目
+    转换为 torch 张量。RGB 图像从 PIL 对象（H, W, C, uint8）
+    转换为 torch 图像表示（C, H, W, float32），范围在 [0, 1] 内。
+    深度图以原生单位返回为 float32 (1, H, W)。其他
+    类型会被转换为 torch.tensor。
 
     Args:
-        items_dict (dict): A dictionary representing a batch of data from a
-            Hugging Face dataset.
+        items_dict (dict): 表示来自 Hugging Face 数据集的
+            一个批次数据的字典。
 
     Returns:
-        dict: The batch with items converted to torch tensors.
+        dict: 条目已转换为 torch 张量的批次。
     """
     for key in items_dict:
         if key in LANGUAGE_COLUMNS:
@@ -293,18 +293,18 @@ def hf_transform_to_torch(items_dict: dict[str, list[Any]]) -> dict[str, list[to
 
 
 def write_table_one_row_group_per_episode(table: pa.Table, path: Path) -> None:
-    """Write ``table`` with one parquet row group per episode (in episode order).
+    """写入 ``table``，每个 episode 对应一个 parquet 行组（按 episode 顺序）。
 
-    Keeps shards random-access friendly (``read_row_group(i)`` fetches episode i),
-    mirroring the recording writer. ``table`` must carry a contiguous
-    ``episode_index`` column.
+    使分片保持对随机访问友好（``read_row_group(i)`` 获取 episode i），
+    与录制写入器保持一致。``table`` 必须携带连续的
+    ``episode_index`` 列。
     """
     episode_index = table.column("episode_index").to_numpy(zero_copy_only=False)
     starts = np.concatenate(([0], np.nonzero(np.diff(episode_index))[0] + 1))
     writer = pq.ParquetWriter(str(path), table.schema, compression="snappy", use_dictionary=True)
     try:
         for start, stop in zip(starts, np.append(starts[1:], len(episode_index)), strict=True):
-            writer.write_table(table.slice(start, stop - start))  # one episode -> one row group
+            writer.write_table(table.slice(start, stop - start))  # 一个 episode -> 一个行组
     finally:
         writer.close()
 
@@ -312,11 +312,11 @@ def write_table_one_row_group_per_episode(table: pa.Table, path: Path) -> None:
 def to_parquet_with_hf_images(
     df: pandas.DataFrame, path: Path, features: datasets.Features | None = None
 ) -> None:
-    """Write a DataFrame with HF-encoded images to parquet, one row group per episode.
+    """将带 HF 编码图像的 DataFrame 写入 parquet，每个 episode 对应一个行组。
 
-    Images are embedded into the arrow table first (``ParquetWriter.write_table``
-    does not embed external image files like ``Dataset.to_parquet`` does).
-    ``features`` types image columns as ``Image()`` in the parquet schema.
+    图像会先嵌入 arrow 表中（``ParquetWriter.write_table``
+    不像 ``Dataset.to_parquet`` 那样嵌入外部图像文件）。
+    ``features`` 在 parquet schema 中将图像列的类型设为 ``Image()``。
     """
     ds = datasets.Dataset.from_dict(df.to_dict(orient="list"), features=features)
     ds = embed_images(ds)
@@ -324,12 +324,12 @@ def to_parquet_with_hf_images(
     if "episode_index" in table.column_names:
         write_table_one_row_group_per_episode(table, path)
     else:
-        # No episode boundaries to align row groups to — keep a single write.
+        # 没有 episode 边界可供行组对齐——保持单次写入。
         pq.write_table(table, str(path))
 
 
 def to_parquet_one_row_group_per_episode(df: pandas.DataFrame, path: Path) -> None:
-    """Write a (non-image) DataFrame to parquet with one row group per episode."""
+    """将（非图像的）DataFrame 写入 parquet，每个 episode 对应一个行组。"""
     table = pa.Table.from_pandas(df, preserve_index=False)
     if "episode_index" in table.column_names:
         write_table_one_row_group_per_episode(table, path)
@@ -338,15 +338,15 @@ def to_parquet_one_row_group_per_episode(df: pandas.DataFrame, path: Path) -> No
 
 
 def item_to_torch(item: dict) -> dict:
-    """Convert all items in a dictionary to PyTorch tensors where appropriate.
+    """在合适的情况下将字典中的所有条目转换为 PyTorch 张量。
 
-    This function is used to convert an item from a streaming dataset to PyTorch tensors.
+    此函数用于将流式数据集中的条目转换为 PyTorch 张量。
 
     Args:
-        item (dict): Dictionary of items from a dataset.
+        item (dict): 来自数据集的条目字典。
 
     Returns:
-        dict: Dictionary with all tensor-like items converted to torch.Tensor.
+        dict: 所有类张量条目已转换为 torch.Tensor 的字典。
     """
     skip_keys = {"task", *LANGUAGE_COLUMNS}
     for key, val in item.items():
@@ -355,6 +355,6 @@ def item_to_torch(item: dict) -> dict:
         if isinstance(val, PILImage.Image):
             item[key] = pil_to_chw_tensor(val)
         elif isinstance(val, (np.ndarray | list)):
-            # Convert numpy arrays and lists to torch tensors
+            # 将 numpy 数组和列表转换为 torch 张量
             item[key] = torch.tensor(val)
     return item

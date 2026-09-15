@@ -15,11 +15,10 @@
 # limitations under the License.
 
 """
-Groot Policy Wrapper for LeRobot Integration
+用于 LeRobot 集成的 Groot 策略封装
 
-Minimal integration that delegates to Isaac-GR00T N1.7 components where
-possible without porting their code. Dataset loading and training
-orchestration are handled by LeRobot's standard training stack.
+这是一个最小化集成，尽可能委托给 Isaac-GR00T N1.7 的组件，而不移植其代码。
+数据集加载和训练编排由 LeRobot 的标准训练栈处理。
 """
 
 import builtins
@@ -63,7 +62,7 @@ T = TypeVar("T", bound="GrootPolicy")
 
 
 class GrootPolicy(PreTrainedPolicy):
-    """Wrapper around external Groot model for LeRobot integration."""
+    """对外部 Groot 模型的封装，用于 LeRobot 集成。"""
 
     name = "groot"
     config_class = GrootConfig
@@ -72,13 +71,13 @@ class GrootPolicy(PreTrainedPolicy):
         return True
 
     def __init__(self, config: GrootConfig, **kwargs):
-        """Initialize Groot policy wrapper."""
+        """初始化 Groot 策略封装。"""
         require_package("transformers", extra="groot")
         super().__init__(config)
         config.validate_features()
         self.config = config
 
-        # Initialize GR00T model using ported components
+        # 使用移植过来的组件初始化 GR00T 模型
         self._groot_model = self._create_groot_model()
         self._action_queue_steps = self._resolve_action_queue_steps()
         self._warned_native_relative_rtc_prefix_disabled = False
@@ -86,19 +85,19 @@ class GrootPolicy(PreTrainedPolicy):
         self.reset()
 
     def _create_groot_model(self):
-        """Create and initialize the GR00T N1.7 model using the ported components."""
+        """使用移植过来的组件创建并初始化 GR00T N1.7 模型。"""
         model_kwargs = {
             "pretrained_model_name_or_path": self.config.base_model_path,
             "tune_llm": self.config.tune_llm,
             "tune_visual": self.config.tune_visual,
             "tune_projector": self.config.tune_projector,
             "tune_diffusion_model": self.config.tune_diffusion_model,
-            # Forwarded as a GR00TN17Config override; read back by set_trainable_parameters.
+            # 作为 GR00TN17Config 的覆写项传入；由 set_trainable_parameters 读回。
             "tune_top_llm_layers": self.config.tune_top_llm_layers,
             "use_flash_attention": self.config.use_flash_attention,
         }
-        # Surface the inference-time knobs onto the model config only when the user set them; None
-        # leaves the value baked into the checkpoint untouched.
+        # 仅当用户显式设置时，才把推理时的调节项透传到模型配置；
+        # None 表示保留检查点中固化的值不动。
         if self.config.num_inference_timesteps is not None:
             model_kwargs["num_inference_timesteps"] = self.config.num_inference_timesteps
         if self.config.rtc_ramp_rate is not None:
@@ -149,7 +148,7 @@ class GrootPolicy(PreTrainedPolicy):
         ]
 
     def reset(self):
-        """Reset policy state when environment resets."""
+        """在环境重置时重置策略状态。"""
         self._action_queue = deque([], maxlen=self._action_queue_steps)
 
     @classmethod
@@ -168,27 +167,27 @@ class GrootPolicy(PreTrainedPolicy):
         strict: bool = True,
         **kwargs,
     ) -> T:
-        """Load Groot policy from pretrained model.
+        """从预训练模型加载 Groot 策略。
 
-        Handles two cases:
-        1. Base GR00T N1.7 models - loads the raw model
-        2. Fine-tuned LeRobot checkpoints - loads config and weights from safetensors
+        处理两种情况：
+        1. 基础 GR00T N1.7 模型——直接加载原始模型
+        2. 微调过的 LeRobot 检查点——从 safetensors 加载配置和权重
 
         Args:
-            pretrained_name_or_path: Path to the GR00T model or fine-tuned checkpoint
-            config: Optional GrootConfig. If None, loads from checkpoint or creates default
-            force_download: Force download even if cached
-            resume_download: Resume interrupted download
-            proxies: Proxy settings
-            token: HuggingFace authentication token
-            cache_dir: Cache directory path
-            local_files_only: Only use local files
-            revision: Specific model revision
-            strict: Strict state dict loading
-            **kwargs: Additional arguments (passed to config)
+            pretrained_name_or_path: GR00T 模型或微调检查点的路径
+            config: 可选的 GrootConfig。若为 None，则从检查点加载或创建默认配置
+            force_download: 即使已有缓存也强制下载
+            resume_download: 恢复被中断的下载
+            proxies: 代理设置
+            token: HuggingFace 认证令牌
+            cache_dir: 缓存目录路径
+            local_files_only: 仅使用本地文件
+            revision: 指定的模型版本
+            strict: 是否严格加载 state dict
+            **kwargs: 附加参数（传递给 config）
 
         Returns:
-            Initialized GrootPolicy instance with loaded model
+            已加载模型的、初始化完成的 GrootPolicy 实例
         """
         requested_version = infer_groot_model_version(str(pretrained_name_or_path)) or GROOT_N1_7
         logger.info(
@@ -200,19 +199,19 @@ class GrootPolicy(PreTrainedPolicy):
         model_id = str(pretrained_name_or_path)
         is_finetuned_checkpoint = False
 
-        # Check if this is a fine-tuned LeRobot checkpoint (has model.safetensors)
+        # 检查这是否是一个微调过的 LeRobot 检查点（包含 model.safetensors）
         try:
             if os.path.isdir(model_id):
                 is_finetuned_checkpoint = os.path.exists(os.path.join(model_id, SAFETENSORS_SINGLE_FILE))
             else:
-                # Try to download the safetensors file to check if it exists
+                # 尝试下载 safetensors 文件以检查它是否存在
                 try:
                     hf_hub_download(
                         repo_id=model_id,
                         filename=SAFETENSORS_SINGLE_FILE,
                         revision=revision,
                         cache_dir=cache_dir,
-                        force_download=False,  # Just check, don't force download
+                        force_download=False,  # 仅检查是否存在，不强制下载
                         proxies=proxies,
                         token=token,
                         local_files_only=local_files_only,
@@ -224,7 +223,7 @@ class GrootPolicy(PreTrainedPolicy):
             is_finetuned_checkpoint = False
 
         if is_finetuned_checkpoint:
-            # This is a fine-tuned LeRobot checkpoint - use parent class loading
+            # 这是一个微调过的 LeRobot 检查点——使用父类的加载逻辑
             logger.info("Detected fine-tuned LeRobot checkpoint, loading with state dict...")
             return super().from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,
@@ -240,30 +239,30 @@ class GrootPolicy(PreTrainedPolicy):
                 **kwargs,
             )
 
-        # This is a base GR00T model - load it fresh
+        # 这是一个基础 GR00T 模型——全新加载
         logger.info("Detected base GR00T model, loading from HuggingFace...")
 
         if config is None:
-            # Create default config with the pretrained path
+            # 用预训练路径创建默认配置
             config = GrootConfig(
                 base_model_path=str(pretrained_name_or_path),
             )
 
-            # Add minimal visual feature required for validation
-            # validate_features() will automatically add state and action features
-            # These are placeholders - actual robot features come from the preprocessor
+            # 添加校验所需的最小视觉特征
+            # validate_features() 会自动添加 state 和 action 特征
+            # 这些只是占位符——实际的机器人特征来自预处理器
             if not config.input_features:
                 config.input_features = {
                     f"{OBS_IMAGES}.camera": PolicyFeature(
                         type=FeatureType.VISUAL,
-                        shape=(3, 224, 224),  # Default image size from config
+                        shape=(3, 224, 224),  # 配置中的默认图像尺寸
                     ),
                 }
         else:
-            # Override the base_model_path with the provided path
+            # 用给定的路径覆写 base_model_path
             config.base_model_path = str(pretrained_name_or_path)
 
-        # Pass through any additional config overrides from kwargs
+        # 透传 kwargs 中任何额外的配置覆写项
         for key, value in kwargs.items():
             if hasattr(config, key):
                 setattr(config, key, value)
@@ -277,15 +276,15 @@ class GrootPolicy(PreTrainedPolicy):
             if inferred_version == GROOT_N1_5:
                 message = f"{message} {GROOT_N1_5_REMOVAL_GUIDANCE}"
             raise ValueError(message)
-        # Create a fresh policy instance - this will automatically load the GR00T model
-        # in __init__ via _create_groot_model()
+        # 创建一个全新的策略实例——这会在 __init__ 中通过 _create_groot_model()
+        # 自动加载 GR00T 模型
         policy = cls(config)
 
         policy.eval()
         return policy
 
     def get_optim_params(self):  # type: ignore[override]
-        """Isaac-GR00T excludes biases and normalization parameters from weight decay."""
+        """Isaac-GR00T 将偏置和归一化参数排除在权重衰减之外。"""
         return self._build_weight_decay_parameter_groups(self)
 
     def _resolve_action_queue_steps(self) -> int:
@@ -306,7 +305,7 @@ class GrootPolicy(PreTrainedPolicy):
         return min(horizons)
 
     def _resolve_prediction_horizon(self, actions: Tensor) -> int:
-        """Return the policy-facing action horizon for a native GR00T prediction."""
+        """针对原生 GR00T 预测结果，返回面向策略的动作时域（action horizon）。"""
 
         horizons = [actions.shape[1]]
         checkpoint_action_horizon = infer_groot_n1_7_action_horizon(
@@ -354,12 +353,10 @@ class GrootPolicy(PreTrainedPolicy):
         if prev_chunk_left_over is None:
             return inputs, None
         if getattr(self.config, "use_relative_actions", False):
-            # Generic RTC only provides normalized leftovers from the previous chunk. For
-            # native relative-action N1.7 checkpoints those rows are tied to the old
-            # observation state and old per-horizon stats row, so using them as the next
-            # prefix can push the policy in the wrong direction. Run without native RTC
-            # overlap guidance until a GROOT-specific RTC path can pass re-anchored
-            # absolute leftovers through.
+            # 通用 RTC 只能提供上一分块归一化后的剩余动作。对于使用原生相对动作的
+            # N1.7 检查点，这些行与旧的观测状态以及旧的逐时域统计量行绑定，因此将其
+            # 作为下一个前缀可能会把策略引向错误方向。在 GR00T 专属的 RTC 路径能够
+            # 传递重新锚定后的绝对剩余动作之前，先不使用原生 RTC 重叠引导来运行。
             if not getattr(self, "_warned_native_relative_rtc_prefix_disabled", False):
                 logger.info("Disabling native GR00T RTC prefix for relative-action policy")
                 self._warned_native_relative_rtc_prefix_disabled = True
@@ -384,10 +381,9 @@ class GrootPolicy(PreTrainedPolicy):
         elif prev_actions.shape[0] != batch_size:
             raise ValueError("prev_chunk_left_over batch size must match the current GR00T N1.7 batch size.")
 
-        # The generic LeRobot RTC engine pads short leftovers with exact zero
-        # rows for fixed-shape policy calls. Native GR00T N1.7 RTC treats every
-        # provided prefix row as a real action constraint, so strip that padding
-        # before constructing the native overlap options.
+        # 通用的 LeRobot RTC 引擎为了定长形状的策略调用，会用全零行填充较短的剩余
+        # 动作。原生 GR00T N1.7 RTC 会把提供的每个前缀行都当作真实的动作约束，因此
+        # 在构造原生 overlap 选项之前要先去除这些填充。
         valid_prefix_rows = prev_actions.detach().abs().sum(dim=(0, 2)) > 0
         if valid_prefix_rows.any():
             valid_prefix_steps = int(valid_prefix_rows.nonzero()[-1].item()) + 1
@@ -444,21 +440,21 @@ class GrootPolicy(PreTrainedPolicy):
         return inputs, options
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict]:
-        """Training forward pass.
+        """训练前向传播。
 
-        Delegates to Isaac-GR00T model.forward when inputs are compatible.
+        当输入兼容时，委托给 Isaac-GR00T 的 model.forward。
         """
         groot_inputs = self._filter_groot_inputs(batch, include_action=True)
 
-        # Get device from model parameters
+        # 从模型参数获取设备
         device = get_device_from_parameters(self)
 
-        # Run GR00T forward under bf16 autocast when enabled to reduce activation memory
-        # Rationale: Matches original GR00T finetuning (bf16 compute, fp32 params) and avoids fp32 upcasts.
+        # 在启用时于 bf16 autocast 下运行 GR00T 前向，以降低激活值内存占用
+        # 理由：与原始 GR00T 微调一致（bf16 计算、fp32 参数），并避免上转为 fp32。
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=self.config.use_bf16):
             outputs = self._groot_model.forward(groot_inputs)
 
-        # Isaac-GR00T returns a BatchFeature; loss key is typically 'loss'
+        # Isaac-GR00T 返回一个 BatchFeature；loss 的键通常是 'loss'
         loss = outputs.get("loss")
         if loss is None:
             raise RuntimeError(
@@ -472,18 +468,18 @@ class GrootPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **kwargs: object) -> Tensor:
-        """Predict a chunk of actions for inference by delegating to Isaac-GR00T.
+        """通过委托给 Isaac-GR00T 预测推理用的一个动作分块。
 
-        Returns a tensor of shape (B, n_action_steps, action_dim).
+        返回形状为 (B, n_action_steps, action_dim) 的张量。
 
-        For N1.7, LeRobot's RTC leftovers are converted into the native GR00T
-        action-overlap options before calling the underlying model.
+        对于 N1.7，在调用底层模型之前，LeRobot 的 RTC 剩余动作会被转换为
+        原生 GR00T 的动作重叠（action-overlap）选项。
         """
         self.eval()
 
-        # Preprocessing is handled by the processor pipeline, so we just filter the batch.
-        # During inference, we do not pass action because it is predicted.
-        # N1.7 still carries a 2-D action horizon mask from its checkpoint processor.
+        # 预处理由处理器流水线完成，因此这里只需对 batch 做过滤。
+        # 推理时不传 action，因为 action 是要被预测出来的。
+        # N1.7 仍会携带来自其检查点处理器的二维动作时域掩码。
         groot_inputs = self._filter_groot_inputs(batch, include_action=False)
         groot_inputs, groot_options = self._prepare_n1_7_rtc_inputs(
             groot_inputs,
@@ -491,10 +487,10 @@ class GrootPolicy(PreTrainedPolicy):
             prev_chunk_left_over=kwargs.get("prev_chunk_left_over"),
         )
 
-        # Get device from model parameters
+        # 从模型参数获取设备
         device = get_device_from_parameters(self)
 
-        # Use bf16 autocast for inference to keep memory low and match backbone dtype
+        # 推理时使用 bf16 autocast，以保持较低内存占用并与主干网络的 dtype 一致
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=self.config.use_bf16):
             if groot_options is not None:
                 outputs = self._groot_model.get_action(groot_inputs, options=groot_options)
@@ -513,7 +509,7 @@ class GrootPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select single action from action queue."""
+        """从动作队列中选取单个动作。"""
         if getattr(self.config, "use_relative_actions", False):
             raise NotImplementedError(
                 "GrootPolicy.select_action does not support relative-action policies because cached "

@@ -25,12 +25,12 @@ from ..rebot_b601_follower import RebotB601FollowerConfig
 @RobotConfig.register_subclass("bi_rebot_b601_follower")
 @dataclass
 class BiRebotB601FollowerConfig(RobotConfig):
-    """Configuration class for the bimanual reBot B601-DM follower robot."""
+    """双臂 reBot B601-DM follower 机器人的配置类。"""
 
     left_arm_config: RebotB601FollowerConfig
     right_arm_config: RebotB601FollowerConfig
 
-    # Top-level cameras not attached to a specific side. Keys are kept as-is in
-    # observations (no `left_`/`right_` prefix). Per-arm cameras (declared on
-    # `{left,right}_arm_config.cameras`) are prefixed.
+    # 不归属于特定一侧的顶层相机。其键在观测中保持原样
+    # （不加 `left_`/`right_` 前缀）。每条手臂上的相机（在
+    # `{left,right}_arm_config.cameras` 中声明）会加前缀。
     cameras: dict[str, CameraConfig] = field(default_factory=dict)

@@ -38,9 +38,9 @@ else:
 
 logger = logging.getLogger(__name__)
 
-# Joint controlled in FORCE_POS mode; every other joint runs in POS_VEL mode.
+# 该关节以 FORCE_POS 模式控制；其他所有关节以 POS_VEL 模式运行。
 GRIPPER_MOTOR = "gripper"
-# Per-joint Damiao motor models for the B601-DM (passed to motorbridge).
+# B601-DM 各关节对应的达妙（Damiao）电机型号（传递给 motorbridge）。
 MOTOR_MODELS = {
     "shoulder_pan": "4340P",
     "shoulder_lift": "4340P",
@@ -56,10 +56,10 @@ _ZERO_SETTLE_SEC = 0.1
 
 
 class RebotB601Follower(Robot):
-    """Seeed Studio reBot B601-DM follower arm (6-DOF + gripper, Damiao CAN motors).
+    """Seeed Studio reBot B601-DM 从动机械臂（6 自由度 + 夹爪，达妙 CAN 电机）。
 
-    Motor communication is handled by the ``motorbridge`` package over a CAN bus,
-    reached either through a Damiao serial bridge or a SocketCAN adapter.
+    电机通信由 ``motorbridge`` 包通过 CAN 总线处理，可经由达妙串口桥或
+    SocketCAN 适配器连接。
     """
 
     config_class = RebotB601FollowerRobotConfig
@@ -205,12 +205,12 @@ class RebotB601Follower(Robot):
 
     @check_if_not_connected
     def disable_torque(self) -> None:
-        """Disable motor torque so the arm can be moved by hand (read-only debugging)."""
+        """关闭电机力矩，以便用手移动机械臂（只读调试）。"""
         self.bus.disable_all()
         logger.info(f"{self} torque disabled.")
 
     def _present_pos(self) -> dict[str, float]:
-        """Read present joint positions in degrees."""
+        """读取当前关节位置（单位：度）。"""
         for motor in self.motors.values():
             motor.request_feedback()
         try:
@@ -248,15 +248,14 @@ class RebotB601Follower(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
-        """Command the arm to a target joint configuration.
+        """控制机械臂运动到目标关节构型。
 
-        Positions are expressed in degrees. The relative action magnitude may be
-        clipped depending on `max_relative_target`, so the action actually sent is
-        always returned.
+        位置以度为单位。根据 `max_relative_target` 的设置，相对动作幅度可能会被
+        裁剪，因此始终返回实际发送出去的动作。
         """
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Clip against soft joint limits.
+        # 依据关节软限位进行裁剪。
         for motor_name in list(goal_pos):
             if motor_name in self.config.joint_limits:
                 min_limit, max_limit = self.config.joint_limits[motor_name]
@@ -265,14 +264,14 @@ class RebotB601Follower(Robot):
                     logger.debug(f"Clipped {motor_name} from {goal_pos[motor_name]:.2f} to {clipped:.2f}")
                 goal_pos[motor_name] = clipped
 
-        # Tolerate 6-DOF leaders that have no wrist_yaw joint by holding it at zero.
-        # This is intentional: it lets a 6-DOF leader such as the SO-100 / SO-101
-        # (so100_leader / so101_leader) teleoperate this 7-DOF follower — the missing
-        # wrist_yaw command is simply treated as 0.0 instead of raising.
+        # 兼容没有 wrist_yaw 关节的 6 自由度主臂：将该关节保持在零位。
+        # 这是有意为之：让 SO-100 / SO-101（so100_leader / so101_leader）等
+        # 6 自由度主臂能够遥操作这个 7 自由度从动臂——缺失的 wrist_yaw 命令
+        # 直接按 0.0 处理，而不是抛出异常。
         if "wrist_yaw" not in goal_pos:
             goal_pos["wrist_yaw"] = 0.0
 
-        # Cap relative target when too far from the present position.
+        # 当相对目标距当前位置过远时，对其加以限制。
         if self.config.max_relative_target is not None:
             present_pos = self._present_pos()
             goal_present_pos = {key: (g, present_pos.get(key, g)) for key, g in goal_pos.items()}

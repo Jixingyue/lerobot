@@ -15,32 +15,32 @@
 # limitations under the License.
 
 """
-This script will help you convert any LeRobot dataset already pushed to the hub from codebase version 2.1 to
-3.0. It will:
+此脚本用于将任何已经推送到 hub 的 LeRobot 数据集从代码库版本 2.1 转换为
+3.0。它将：
 
-- Generate per-episodes stats and writes them in `episodes_stats.jsonl`
-- Check consistency between these new stats and the old ones.
-- Remove the deprecated `stats.json`.
-- Update codebase_version in `info.json`.
-- Push this new version to the hub on the 'main' branch and tags it with "v3.0".
+- 生成按 episode 统计的信息，并将其写入 `episodes_stats.jsonl`
+- 检查这些新统计信息与旧统计信息之间的一致性。
+- 移除已弃用的 `stats.json`。
+- 更新 `info.json` 中的 codebase_version。
+- 将这一新版本推送到 hub 的 'main' 分支，并打上 "v3.0" 标签。
 
-Usage:
+用法：
 
-Convert a dataset from the hub:
+转换来自 hub 的数据集：
 ```bash
 python src/lerobot/scripts/convert_dataset_v21_to_v30.py \
     --repo-id=lerobot/pusht
 ```
 
-Convert a local dataset (works in place):
+转换本地数据集（就地生效）：
 ```bash
 python src/lerobot/scripts/convert_dataset_v21_to_v30.py \
     --repo-id=lerobot/pusht \
     --root=/path/to/local/dataset/directory \
     --push-to-hub=false
 
-N.B. Path semantics (v2): --root is the exact dataset folder containing
-meta/, data/, videos/. When omitted, defaults to $HF_LEROBOT_HOME/{repo_id}.
+注意：路径语义（v2）：--root 是包含
+meta/、data/、videos/ 的确切数据集文件夹。省略时默认为 $HF_LEROBOT_HOME/{repo_id}。
 ```
 
 """
@@ -169,7 +169,7 @@ def legacy_load_tasks(local_dir: Path) -> tuple[dict, dict]:
 
 
 def validate_local_dataset_version(local_path: Path) -> None:
-    """Validate that the local dataset has the expected v2.1 version."""
+    """校验本地数据集具有所期望的 v2.1 版本。"""
     info = load_info(local_path)
     dataset_version = info.codebase_version or "unknown"
     if dataset_version != V21:
@@ -189,9 +189,9 @@ def convert_tasks(root, new_root):
 
 
 def concat_data_files(paths_to_cat, new_root, chunk_idx, file_idx, image_keys):
-    # TODO(rcadene): to save RAM use Dataset.from_parquet(file) and concatenate_datasets
+    # TODO(rcadene)：为节省内存，使用 Dataset.from_parquet(file) 和 concatenate_datasets
     dataframes = [pd.read_parquet(file) for file in paths_to_cat]
-    # Concatenate all DataFrames along rows
+    # 沿行方向拼接所有 DataFrame
     concatenated_df = pd.concat(dataframes, ignore_index=True)
 
     path = new_root / DEFAULT_DATA_PATH.format(chunk_index=chunk_idx, file_index=file_idx)
@@ -228,19 +228,19 @@ def convert_data(root: Path, new_root: Path, data_file_size_in_mb: int):
         ep_size_in_mb = get_parquet_file_size_in_mb(ep_path)
         ep_num_frames = get_parquet_num_frames(ep_path)
 
-        # Check if we need to start a new file BEFORE creating metadata
+        # 在创建元数据之前，先检查是否需要开启新文件
         if size_in_mb + ep_size_in_mb >= data_file_size_in_mb and len(paths_to_cat) > 0:
-            # Write the accumulated data files
+            # 写入此前累积的数据文件
             concat_data_files(paths_to_cat, new_root, chunk_idx, file_idx, image_keys)
 
-            # Move to next file
+            # 移动到下一个文件
             chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, DEFAULT_CHUNK_SIZE)
 
-            # Reset for the next file
+            # 为下一个文件重置状态
             size_in_mb = 0
             paths_to_cat = []
 
-        # Now create metadata with correct chunk/file indices
+        # 此时使用正确的 chunk/file 索引创建元数据
         ep_metadata = {
             "episode_index": ep_idx,
             "data/chunk_index": chunk_idx,
@@ -253,7 +253,7 @@ def convert_data(root: Path, new_root: Path, data_file_size_in_mb: int):
         episodes_metadata.append(ep_metadata)
         paths_to_cat.append(ep_path)
 
-    # Write remaining data if any
+    # 若还有剩余数据，则写入
     if paths_to_cat:
         concat_data_files(paths_to_cat, new_root, chunk_idx, file_idx, image_keys)
 
@@ -296,7 +296,7 @@ def convert_videos(root: Path, new_root: Path, video_file_size_in_mb: int):
     num_cameras = len(video_keys)
     num_episodes = num_eps_per_cam[0]
     for ep_idx in tqdm.tqdm(range(num_episodes), desc="convert videos"):
-        # Sanity check
+        # 健全性检查
         ep_ids = [eps_metadata_per_cam[cam_idx][ep_idx]["episode_index"] for cam_idx in range(num_cameras)]
         ep_ids += [ep_idx]
         if len(set(ep_ids)) != 1:
@@ -311,7 +311,7 @@ def convert_videos(root: Path, new_root: Path, video_file_size_in_mb: int):
 
 
 def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_file_size_in_mb: int):
-    # Access old paths to mp4
+    # 获取旧的 mp4 文件路径
     videos_dir = root / "videos"
     ep_paths = sorted(videos_dir.glob(f"*/{video_key}/*.mp4"))
 
@@ -327,44 +327,44 @@ def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_f
         ep_size_in_mb = get_file_size_in_mb(ep_path)
         ep_duration_in_s = get_video_duration_in_s(ep_path)
 
-        # Check if adding this episode would exceed the limit
+        # 检查加入该 episode 是否会超过限制
         if size_in_mb + ep_size_in_mb >= video_file_size_in_mb and len(paths_to_cat) > 0:
-            # Size limit would be exceeded, save current accumulation WITHOUT this episode
+            # 将超过大小限制，先保存当前已累积的内容（不包含当前 episode）
             concatenate_video_files(
                 paths_to_cat,
                 new_root
                 / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
             )
 
-            # Update episodes metadata for the file we just saved
+            # 为刚保存的文件更新 episodes 元数据
             for i, _ in enumerate(paths_to_cat):
                 past_ep_idx = ep_idx - len(paths_to_cat) + i
                 episodes_metadata[past_ep_idx][f"videos/{video_key}/chunk_index"] = chunk_idx
                 episodes_metadata[past_ep_idx][f"videos/{video_key}/file_index"] = file_idx
 
-            # Move to next file and start fresh with current episode
+            # 移动到下一个文件，并从当前 episode 开始重新累积
             chunk_idx, file_idx = update_chunk_file_indices(chunk_idx, file_idx, DEFAULT_CHUNK_SIZE)
             size_in_mb = 0
             duration_in_s = 0.0
             paths_to_cat = []
 
-        # Add current episode metadata
+        # 添加当前 episode 的元数据
         ep_metadata = {
             "episode_index": ep_idx,
-            f"videos/{video_key}/chunk_index": chunk_idx,  # Will be updated when file is saved
-            f"videos/{video_key}/file_index": file_idx,  # Will be updated when file is saved
+            f"videos/{video_key}/chunk_index": chunk_idx,  # 将在文件保存时更新
+            f"videos/{video_key}/file_index": file_idx,  # 将在文件保存时更新
             f"videos/{video_key}/from_timestamp": duration_in_s,
             f"videos/{video_key}/to_timestamp": duration_in_s + ep_duration_in_s,
         }
         episodes_metadata.append(ep_metadata)
 
-        # Add current episode to accumulation
+        # 将当前 episode 添加到累积列表
         paths_to_cat.append(ep_path)
         size_in_mb += ep_size_in_mb
         duration_in_s += ep_duration_in_s
         ep_idx += 1
 
-    # Write remaining videos if any
+    # 若还有剩余视频，则写入
     if paths_to_cat:
         concatenate_video_files(
             paths_to_cat,
@@ -372,7 +372,7 @@ def convert_videos_of_camera(root: Path, new_root: Path, video_key: str, video_f
             / DEFAULT_VIDEO_PATH.format(video_key=video_key, chunk_index=chunk_idx, file_index=file_idx),
         )
 
-        # Update episodes metadata for the final file
+        # 为最后一个文件更新 episodes 元数据
         for i, _ in enumerate(paths_to_cat):
             past_ep_idx = ep_idx - len(paths_to_cat) + i
             episodes_metadata[past_ep_idx][f"videos/{video_key}/chunk_index"] = chunk_idx
@@ -440,7 +440,7 @@ def convert_episodes_metadata(root, new_root, episodes_metadata, episodes_video_
 
 
 def convert_info(root, new_root, data_file_size_in_mb, video_file_size_in_mb):
-    # Load as raw dict to remove legacy v2.1 fields before constructing DatasetInfo.
+    # 以原始字典形式加载，以便在构造 DatasetInfo 之前移除旧版 v2.1 字段。
     info = load_json(root / INFO_PATH)
     info["codebase_version"] = V30
     del info["total_chunks"]
@@ -453,10 +453,10 @@ def convert_info(root, new_root, data_file_size_in_mb, video_file_size_in_mb):
     logging.info(f"Converting info from {root} to {new_root}")
     for key in info["features"]:
         if info["features"][key]["dtype"] == "video":
-            # already has fps in video_info
+            # video_info 中已经包含 fps
             continue
         info["features"][key]["fps"] = info["fps"]
-    # Convert raw dict to typed DatasetInfo before writing
+    # 在写入之前，将原始字典转换为带类型的 DatasetInfo
     dataset_info = DatasetInfo.from_dict(info)
     write_info(dataset_info, new_root)
 
@@ -475,7 +475,7 @@ def convert_dataset(
     if video_file_size_in_mb is None:
         video_file_size_in_mb = DEFAULT_VIDEO_FILE_SIZE_IN_MB
 
-    # First check if the dataset already has a v3.0 version
+    # 首先检查数据集是否已经存在 v3.0 版本
     if root is None and not force_conversion:
         try:
             logger.info("Trying to download v3.0 version of the dataset from the hub...")
@@ -484,7 +484,7 @@ def convert_dataset(
         except Exception:
             logger.info("Dataset does not have an uploaded v3.0 version. Continuing with conversion.")
 
-    # Set root based on whether local dataset path is provided
+    # 根据是否提供本地数据集路径来设置 root
     use_local_dataset = False
     root = HF_LEROBOT_HOME / repo_id if root is None else Path(root)
     if root.exists():
@@ -495,7 +495,7 @@ def convert_dataset(
     old_root = root.parent / f"{root.name}_old"
     new_root = root.parent / f"{root.name}_v30"
 
-    # Handle old_root cleanup if both old_root and root exist
+    # 如果 old_root 和 root 同时存在，则处理 old_root 的清理
     if old_root.is_dir() and root.is_dir():
         shutil.rmtree(str(root))
         shutil.move(str(old_root), str(root))

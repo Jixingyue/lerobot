@@ -29,10 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 class BiRebotB601Follower(BimanualMixin, Robot):
-    """Bimanual Seeed Studio reBot B601-DM follower.
+    """双臂 Seeed Studio reBot B601-DM 从动机器人。
 
-    Composes two single-arm :class:`RebotB601Follower` instances. Observation and
-    action keys of each arm are namespaced with a ``left_`` / ``right_`` prefix.
+    由两个单臂 :class:`RebotB601Follower` 实例组合而成。每个手臂的观测和
+    动作键都使用 ``left_`` / ``right_`` 前缀进行命名空间区分。
     """
 
     config_class = BiRebotB601FollowerConfig
@@ -42,8 +42,8 @@ class BiRebotB601Follower(BimanualMixin, Robot):
         super().__init__(config)
         self.config = config
 
-        # Top-level cameras are opened by `left_arm` for convenience, but their
-        # keys stay unprefixed in observations (tracked via `_top_level_cam_keys`).
+        # 顶层相机由 `left_arm` 打开以方便使用，但它们的键在观测中
+        # 保持无前缀（通过 `_top_level_cam_keys` 跟踪）。
         self._top_level_cam_keys = set(config.cameras)
         _collisions = self._top_level_cam_keys & set(
             config.left_arm_config.cameras
@@ -99,7 +99,7 @@ class BiRebotB601Follower(BimanualMixin, Robot):
         self.left_arm = RebotB601Follower(left_arm_config)
         self.right_arm = RebotB601Follower(right_arm_config)
 
-        # Only for compatibility with parts of the codebase that expect `robot.cameras`.
+        # 仅用于兼容代码库中期望存在 `robot.cameras` 属性的部分。
         self.cameras = {**self.left_arm.cameras, **self.right_arm.cameras}
 
     @property

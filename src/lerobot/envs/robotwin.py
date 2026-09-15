@@ -33,8 +33,8 @@ from lerobot.utils.import_utils import _scipy_available
 
 from .utils import _LazyAsyncVectorEnv
 
-# scipy is only used for end-effector-pose composition (``--env.action_mode=ee``); guard it so this
-# module (and its base-env unit tests, which mock the RoboTwin runtime) imports without scipy installed.
+# scipy 仅用于末端位姿合成（``--env.action_mode=ee``）；对其加以保护，
+# 以便在未安装 scipy 时也能导入本模块（以及模拟 RoboTwin 运行时的基础环境单元测试）。
 if _scipy_available:
     from scipy.spatial.transform import Rotation
 else:
@@ -42,17 +42,17 @@ else:
 
 logger = logging.getLogger(__name__)
 
-# Camera names as used by RoboTwin 2.0. The wrapper appends "_rgb" when looking
-# up keys in get_obs() output (e.g. "head_camera" → "head_camera_rgb").
+# RoboTwin 2.0 使用的相机名称。包装器在查找
+# get_obs() 输出中的键时会追加 "_rgb"（例如 "head_camera" → "head_camera_rgb"）。
 ROBOTWIN_CAMERA_NAMES: tuple[str, ...] = (
     "head_camera",
     "left_camera",
     "right_camera",
 )
 
-ACTION_DIM = 14  # 7 DOF × 2 arms (joint-space control mode)
-# End-effector-pose control mode: per arm [x, y, z, qx, qy, qz, qw, gripper] = 8, dual-arm = 16.
-# Used by world-model policies (e.g. LingBot-VA) that predict eef-pose deltas executed via CuRobo IK.
+ACTION_DIM = 14  # 7 自由度 × 2 条手臂（关节空间控制模式）
+# 末端位姿控制模式：每条手臂 [x, y, z, qx, qy, qz, qw, gripper] = 8，双臂 = 16。
+# 供世界模型策略（例如 LingBot-VA）使用，这类策略预测末端位姿增量，并通过 CuRobo IK 执行。
 EEF_ACTION_DIM = 16
 ACTION_LOW = -1.0
 ACTION_HIGH = 1.0
@@ -63,11 +63,13 @@ OFFICIAL_INSTRUCTION_MAX_ENV = "LEROBOT_ROBOTWIN_INSTRUCTION_MAX"
 
 
 def _compose_eef_pose(new_pose: np.ndarray, init_pose: np.ndarray) -> np.ndarray:
-    """Compose a single-arm predicted delta pose onto the initial pose.
+    """将单臂预测的增量位姿合成到初始位姿上。
 
-    ``new_pose`` / ``init_pose`` are 8-vectors ``[x, y, z, qx, qy, qz, qw, gripper]``. Translation
-    is added, rotation is composed (``init_R * new_R``), and the gripper is taken from the
-    prediction. Mirrors ``add_eef_pose`` in the upstream LingBot-VA RoboTwin client.
+    ``new_pose`` / ``init_pose`` 是 8 维向量
+    ``[x, y, z, qx, qy, qz, qw, gripper]``。平移部分
+    相加，旋转部分进行合成（``init_R * new_R``），夹爪取值来自
+    预测结果。与上游 LingBot-VA RoboTwin 客户端中的
+    ``add_eef_pose`` 保持一致。
     """
     new_r = Rotation.from_quat(new_pose[3:7])
     init_r = Rotation.from_quat(init_pose[3:7])
@@ -77,11 +79,11 @@ def _compose_eef_pose(new_pose: np.ndarray, init_pose: np.ndarray) -> np.ndarray
 
 
 def _add_init_eef_pose(delta_pose: np.ndarray, init_pose: np.ndarray) -> np.ndarray:
-    """Compose a dual-arm (16-d) predicted delta pose onto the initial eef pose, normalizing quats."""
+    """将双臂（16 维）预测的增量位姿合成到初始末端位姿上，并对四元数归一化。"""
     left = _compose_eef_pose(delta_pose[:8], init_pose[:8])
     right = _compose_eef_pose(delta_pose[8:], init_pose[8:])
     out = np.concatenate([left, right])
-    # Normalize the two quaternions (indices 3:7 and 11:15) as the upstream client does.
+    # 按上游客户端的做法对两个四元数（索引 3:7 和 11:15）进行归一化。
     out[3:7] = out[3:7] / (np.linalg.norm(out[3:7]) + 1e-8)
     out[11:15] = out[11:15] / (np.linalg.norm(out[11:15]) + 1e-8)
     return out
@@ -99,7 +101,7 @@ def _arm_for_block(block: Any) -> str:
 
 
 def _robotwin_blocks_episode_info(task_name: str, env: Any) -> dict[str, str] | None:
-    """Infer the episode-info dict used by RoboTwin's official instruction generator for block ranking."""
+    """推断 RoboTwin 官方指令生成器用于积木排序任务的 episode-info 字典。"""
     if task_name == "blocks_ranking_rgb":
         return {
             "{A}": "red block",
@@ -122,7 +124,7 @@ def _robotwin_blocks_episode_info(task_name: str, env: Any) -> dict[str, str] | 
 
 
 def _generate_robotwin_official_instruction(task_name: str, env: Any) -> str:
-    """Generate language with RoboTwin's official task templates, matching its eval client."""
+    """使用 RoboTwin 官方任务模板生成语言，与其评估客户端保持一致。"""
     fallback = task_name.replace("_", " ")
     episode_info = _robotwin_blocks_episode_info(task_name, env)
     if episode_info is None:
@@ -132,9 +134,9 @@ def _generate_robotwin_official_instruction(task_name: str, env: Any) -> str:
         return fallback
 
     try:
-        # Part of the robotwin simulator repo, this is being pulled by the docker image running robotwin
-        # see https://github.com/RoboTwin-Platform/RoboTwin/tree/main/description
-        # Used to generate the official instructions
+        # 属于 robotwin 模拟器仓库的一部分，由运行 robotwin 的 docker 镜像拉取
+        # 见 https://github.com/RoboTwin-Platform/RoboTwin/tree/main/description
+        # 用于生成官方指令
         from description.utils.generate_episode_instructions import generate_episode_descriptions
     except Exception:
         logger.warning(
@@ -168,13 +170,13 @@ def _generate_robotwin_official_instruction(task_name: str, env: Any) -> str:
     return str(np.random.choice(options))
 
 
-# D435 dims from task_config/_camera_config.yml (what demo_clean.yml selects).
+# D435 尺寸来自 task_config/_camera_config.yml（demo_clean.yml 选用的配置）。
 DEFAULT_CAMERA_H = 240
 DEFAULT_CAMERA_W = 320
 
-# Task list from RoboTwin 2.0's `envs/` directory — mirrors upstream exactly
-# (50 tasks as of main; earlier revisions had 60 with a different split).
-# Keep this in sync with:
+# 任务列表来自 RoboTwin 2.0 的 `envs/` 目录——与上游完全一致
+# （截至 main 分支为 50 个任务；更早的版本为 60 个，划分方式不同）。
+# 请使用以下命令保持同步：
 #   gh api /repos/RoboTwin-Platform/RoboTwin/contents/envs --paginate \
 #     | jq -r '.[].name' | grep -E '\.py$' | grep -v '^_' | sed 's/\.py$//'
 ROBOTWIN_TASKS: tuple[str, ...] = (
@@ -235,15 +237,15 @@ _ROBOTWIN_SETUP_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _load_robotwin_setup_kwargs(task_name: str) -> dict[str, Any]:
-    """Build the kwargs dict RoboTwin's setup_demo expects.
+    """构建 RoboTwin 的 setup_demo 所需的 kwargs 字典。
 
-    Mirrors the config loading done by RoboTwin's ``script/eval_policy.py``:
-    reads ``task_config/demo_clean.yml``, resolves the embodiment file from
-    ``_embodiment_config.yml``, loads the robot's own ``config.yml``, and
-    reads camera dimensions from ``_camera_config.yml``.
+    复刻 RoboTwin 的 ``script/eval_policy.py`` 所做的配置加载：
+    读取 ``task_config/demo_clean.yml``，从
+    ``_embodiment_config.yml`` 解析具身文件，加载机器人自己的
+    ``config.yml``，并从 ``_camera_config.yml`` 读取相机尺寸。
 
-    Uses ``aloha-agilex`` single-robot dual-arm by default (the only embodiment
-    used by beat_block_hammer and most smoke-test tasks).
+    默认使用 ``aloha-agilex`` 单机器人双臂（这是 beat_block_hammer
+    和大多数冒烟测试任务唯一使用的具身）。
     """
     if task_name in _ROBOTWIN_SETUP_CACHE:
         return dict(_ROBOTWIN_SETUP_CACHE[task_name])
@@ -257,7 +259,7 @@ def _load_robotwin_setup_kwargs(task_name: str) -> dict[str, Any]:
     with open(os.path.join(CONFIGS_PATH, f"{task_config}.yml"), encoding="utf-8") as f:
         args = yaml.safe_load(f)
 
-    # Resolve embodiment — demo_clean.yml uses [aloha-agilex] (dual-arm single robot)
+    # 解析具身——demo_clean.yml 使用 [aloha-agilex]（双臂单机器人）
     with open(os.path.join(CONFIGS_PATH, "_embodiment_config.yml"), encoding="utf-8") as f:
         embodiment_types = yaml.safe_load(f)
     embodiment = args.get("embodiment", ["aloha-agilex"])
@@ -279,14 +281,14 @@ def _load_robotwin_setup_kwargs(task_name: str) -> dict[str, Any]:
     with open(os.path.join(args["right_robot_file"], "config.yml"), encoding="utf-8") as f:
         args["right_embodiment_config"] = yaml.safe_load(f)
 
-    # Camera dimensions
+    # 相机尺寸
     with open(os.path.join(CONFIGS_PATH, "_camera_config.yml"), encoding="utf-8") as f:
         camera_config = yaml.safe_load(f)
     head_cam = args["camera"]["head_camera_type"]
     args["head_camera_h"] = camera_config[head_cam]["h"]
     args["head_camera_w"] = camera_config[head_cam]["w"]
 
-    # Headless overrides
+    # 无头模式覆盖
     args["render_freq"] = 0
     args["task_name"] = task_name
     args["task_config"] = task_config
@@ -296,10 +298,10 @@ def _load_robotwin_setup_kwargs(task_name: str) -> dict[str, Any]:
 
 
 def _load_robotwin_task(task_name: str) -> type:
-    """Dynamically import and return a RoboTwin 2.0 task class.
+    """动态导入并返回一个 RoboTwin 2.0 任务类。
 
-    RoboTwin tasks live in ``envs/<task_name>.py`` relative to the repository
-    root and are expected to be on ``sys.path`` after installation.
+    RoboTwin 任务位于仓库根目录下的 ``envs/<task_name>.py``，
+    安装后应位于 ``sys.path`` 上。
     """
     try:
         module = importlib.import_module(f"envs.{task_name}")
@@ -316,33 +318,34 @@ def _load_robotwin_task(task_name: str) -> type:
 
 
 class RoboTwinEnv(gym.Env):
-    """Gymnasium wrapper around a single RoboTwin 2.0 task.
+    """围绕单个 RoboTwin 2.0 任务的 Gymnasium 包装器。
 
-    RoboTwin uses a custom SAPIEN-based API (``setup_demo`` / ``get_obs`` /
-    ``take_action`` / ``check_success``) rather than the standard gym interface.
-    This class bridges that API to Gymnasium so that ``lerobot-eval`` can drive
-    RoboTwin exactly like LIBERO or Meta-World.
+    RoboTwin 使用基于 SAPIEN 的自定义 API（``setup_demo`` / ``get_obs`` /
+    ``take_action`` / ``check_success``），而非标准 gym 接口。
+    本类将该 API 桥接到 Gymnasium，使 ``lerobot-eval`` 能够像驱动
+    LIBERO 或 Meta-World 一样驱动 RoboTwin。
 
-    The underlying SAPIEN environment is created lazily on the first ``reset()``
-    call *inside the worker process*.  This is required for
-    ``gym.vector.AsyncVectorEnv`` compatibility: SAPIEN allocates EGL/GPU
-    contexts that must not be forked from the parent process.
+    底层 SAPIEN 环境在*工作进程内*第一次调用 ``reset()`` 时
+    惰性创建。这是兼容
+    ``gym.vector.AsyncVectorEnv`` 的必要条件：SAPIEN 分配的
+    EGL/GPU 上下文不能从父进程 fork。
 
-    Observations
+    观测
     ------------
-    The ``pixels`` dict uses the raw RoboTwin camera names as keys (e.g.
-    ``"head_camera"``, ``"left_camera"``). ``preprocess_observation`` in
-    ``envs/utils.py`` then converts these to ``observation.images.<cam>``.
+    ``pixels`` 字典使用原始 RoboTwin 相机名作为键（例如
+    ``"head_camera"``、``"left_camera"``）。``envs/utils.py`` 中的
+    ``preprocess_observation`` 随后会将它们转换为
+    ``observation.images.<cam>``。
 
-    Actions
+    动作
     -------
-    14-dim float32 array in ``[-1, 1]`` (joint-space, 7 DOF per arm).
+    处于 ``[-1, 1]`` 的 14 维 float32 数组（关节空间，每条手臂 7 自由度）。
 
-    Autograd
+    自动求导
     --------
-    ``setup_demo`` and ``take_action`` drive CuRobo's Newton trajectory
-    optimizer, which calls ``cost.backward()`` internally. lerobot_eval wraps
-    the rollout in ``torch.no_grad()``, so both call sites re-enable grad.
+    ``setup_demo`` 和 ``take_action`` 会驱动 CuRobo 的 Newton 轨迹
+    优化器，其内部会调用 ``cost.backward()``。lerobot_eval 使用
+    ``torch.no_grad()`` 包裹 rollout，因此这两个调用点会重新启用梯度。
     """
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 25}
@@ -361,28 +364,28 @@ class RoboTwinEnv(gym.Env):
     ):
         super().__init__()
         self.task_name = task_name
-        self.task = task_name  # used by add_envs_task() in utils.py
+        self.task = task_name  # 供 utils.py 中的 add_envs_task() 使用
         self.task_description = task_name.replace("_", " ")
         self.episode_index = episode_index
         self._reset_stride = n_envs
-        # "joint": 14-d joint-space actions via take_action(action). "ee": 16-d end-effector-pose
-        # deltas (added onto the episode's initial eef pose) executed via take_action(.., "ee") + IK.
+        # "joint"：通过 take_action(action) 执行 14 维关节空间动作。"ee"：16 维末端位姿
+        # 增量（叠加到 episode 的初始末端位姿上），通过 take_action(.., "ee") + IK 执行。
         if action_mode not in ("joint", "ee"):
             raise ValueError(f"action_mode must be 'joint' or 'ee'; got {action_mode!r}")
         self.action_mode = action_mode
         self._action_dim = EEF_ACTION_DIM if action_mode == "ee" else ACTION_DIM
         self._init_eef_pose: np.ndarray | None = None
         self.camera_names = list(camera_names)
-        # Default to D435 dims (the camera type baked into task_config/demo_clean.yml).
-        # The YAML-driven lookup is deferred to reset() so construction doesn't
-        # import RoboTwin's `envs` module — fast-tests run without RoboTwin installed.
+        # 默认为 D435 尺寸（task_config/demo_clean.yml 内置的相机类型）。
+        # 基于 YAML 的查找推迟到 reset()，以免构造时
+        # 导入 RoboTwin 的 `envs` 模块——快速测试无需安装 RoboTwin。
         self.observation_height = observation_height or DEFAULT_CAMERA_H
         self.observation_width = observation_width or DEFAULT_CAMERA_W
         self.episode_length = episode_length
-        self._max_episode_steps = episode_length  # lerobot_eval.rollout reads this
+        self._max_episode_steps = episode_length  # lerobot_eval.rollout 会读取该值
         self.render_mode = render_mode
 
-        self._env: Any | None = None  # deferred — created on first reset() inside worker
+        self._env: Any | None = None  # 延迟创建——在 worker 内第一次 reset() 时创建
         self._step_count: int = 0
         self._black_frame: np.ndarray = np.zeros(
             (self.observation_height, self.observation_width, 3), dtype=np.uint8
@@ -408,11 +411,11 @@ class RoboTwinEnv(gym.Env):
         )
 
     def _ensure_env(self) -> None:
-        """Create the SAPIEN environment on first use.
+        """首次使用时创建 SAPIEN 环境。
 
-        Called inside the worker subprocess after fork(), so each worker gets
-        its own EGL/GPU context rather than inheriting a stale one from the
-        parent process (which causes crashes with AsyncVectorEnv).
+        在 fork() 之后的 worker 子进程内调用，因此每个 worker 都有
+        自己的 EGL/GPU 上下文，而不是从父进程继承失效的
+        上下文（继承会导致 AsyncVectorEnv 崩溃）。
         """
         if self._env is not None:
             return
@@ -451,7 +454,7 @@ class RoboTwinEnv(gym.Env):
         return {"pixels": images, "agent_pos": joint_state}
 
     def _read_eef_pose(self) -> np.ndarray:
-        """Read the current 16-d dual-arm eef pose [left(xyz+quat)+grip, right(xyz+quat)+grip]."""
+        """读取当前 16 维双臂末端位姿 [左臂(xyz+quat)+grip，右臂(xyz+quat)+grip]。"""
         assert self._env is not None, "_read_eef_pose called before _ensure_env()"
         ep = self._env.get_obs()["endpose"]
         pose = (
@@ -484,7 +487,7 @@ class RoboTwinEnv(gym.Env):
         else:
             self.task_description = self.task_name.replace("_", " ")
 
-        # In eef mode the policy predicts pose deltas relative to the initial eef pose.
+        # 在 ee 模式下，策略预测相对于初始末端位姿的位姿增量。
         if self.action_mode == "ee":
             self._init_eef_pose = self._read_eef_pose()
 
@@ -533,7 +536,7 @@ class RoboTwinEnv(gym.Env):
     def render(self) -> np.ndarray:
         self._ensure_env()
         obs = self._get_obs()
-        # Prefer head camera for rendering; fall back to first available.
+        # 渲染时优先使用头部相机；不可用时回退到第一个可用相机。
         if "head_camera" in obs["pixels"]:
             return obs["pixels"]["head_camera"]
         return next(iter(obs["pixels"].values()))
@@ -548,7 +551,7 @@ class RoboTwinEnv(gym.Env):
             self._env = None
 
 
-# ---- Multi-task factory --------------------------------------------------------
+# ---- 多任务工厂 --------------------------------------------------------
 
 
 def _make_env_fns(
@@ -561,7 +564,7 @@ def _make_env_fns(
     episode_length: int,
     action_mode: str = "joint",
 ) -> list[Callable[[], RoboTwinEnv]]:
-    """Return n_envs factory callables for a single task."""
+    """返回单个任务的 n_envs 个工厂可调用对象。"""
 
     def _make_one(episode_index: int) -> RoboTwinEnv:
         return RoboTwinEnv(
@@ -588,21 +591,21 @@ def create_robotwin_envs(
     episode_length: int = DEFAULT_EPISODE_LENGTH,
     action_mode: str = "joint",
 ) -> dict[str, dict[int, Any]]:
-    """Create vectorized RoboTwin 2.0 environments.
+    """创建向量化的 RoboTwin 2.0 环境。
 
     Returns:
-        ``dict[task_name][0] -> VectorEnv`` — one entry per task, each wrapping
-        ``n_envs`` parallel rollouts.
+        ``dict[task_name][0] -> VectorEnv``——每个任务一个条目，每个
+        条目包装 ``n_envs`` 个并行 rollout。
 
     Args:
-        task: Comma-separated list of task names (e.g. ``"beat_block_hammer"``
-            or ``"beat_block_hammer,click_bell"``).
-        n_envs: Number of parallel rollouts per task.
-        env_cls: Vector env constructor (e.g. ``gym.vector.AsyncVectorEnv``).
-        camera_names: Cameras to include in observations.
-        observation_height: Pixel height for all cameras.
-        observation_width: Pixel width for all cameras.
-        episode_length: Max steps before truncation.
+        task: 逗号分隔的任务名列表（例如 ``"beat_block_hammer"``
+            或 ``"beat_block_hammer,click_bell"``）。
+        n_envs: 每个任务的并行 rollout 数量。
+        env_cls: 向量环境构造函数（例如 ``gym.vector.AsyncVectorEnv``）。
+        camera_names: 要包含在观测中的相机。
+        observation_height: 所有相机的像素高度。
+        observation_width: 所有相机的像素宽度。
+        episode_length: 截断前的最大步数。
     """
     if env_cls is None or not callable(env_cls):
         raise ValueError("env_cls must be callable (e.g. gym.vector.AsyncVectorEnv).")

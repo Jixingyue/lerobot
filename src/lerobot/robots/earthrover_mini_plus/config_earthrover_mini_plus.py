@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Configuration for EarthRover Mini Plus robot."""
+"""EarthRover Mini Plus 机器人的配置。"""
 
 from dataclasses import dataclass
 
@@ -23,13 +23,13 @@ from ..config import RobotConfig
 @RobotConfig.register_subclass("earthrover_mini_plus")
 @dataclass
 class EarthRoverMiniPlusConfig(RobotConfig):
-    """Configuration for EarthRover Mini Plus robot using Frodobots SDK.
+    """使用 Frodobots SDK 的 EarthRover Mini Plus 机器人配置。
 
-    This robot uses cloud-based control via the Frodobots SDK HTTP API.
-    Camera frames are accessed directly through SDK HTTP endpoints.
+    该机器人通过 Frodobots SDK HTTP API 进行云端控制。
+    相机帧直接通过 SDK HTTP 端点访问。
 
     Attributes:
-        sdk_url: URL of the Frodobots SDK server (default: http://localhost:8000)
+        sdk_url: Frodobots SDK 服务器的 URL（默认：http://localhost:8000）
     """
 
     sdk_url: str = "http://localhost:8000"

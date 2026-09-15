@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Note: We subclass str so that serialization is straightforward
+# 注意：我们继承 str，这样序列化就很直接了
 # https://stackoverflow.com/questions/24481852/serialising-an-enum-member-to-json
 
-"""Video encoder configurations."""
+"""视频编码器配置。"""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from lerobot.utils.import_utils import require_package
 
 logger = logging.getLogger(__name__)
 
-# List of hardware encoders to probe for auto-selection. Availability depends on the platform and the chosen video backend.
-# Determines the order of preference for auto-selection when vcodec="auto" is used.
+# 自动选择时要探测的硬件编码器列表。可用性取决于平台和所选的视频后端。
+# 当使用 vcodec="auto" 时，决定自动选择的优先顺序。
 HW_VIDEO_CODECS = [
     "h264_videotoolbox",  # macOS
     "hevc_videotoolbox",  # macOS
@@ -41,13 +41,13 @@ HW_VIDEO_CODECS = [
 VALID_VIDEO_CODECS: frozenset[str] = frozenset(
     {"h264", "hevc", "libsvtav1", "libaom-av1", "auto", *HW_VIDEO_CODECS}
 )
-# Aliases for legacy video codec names.
+# 旧版视频编解码器名称的别名。
 VIDEO_CODECS_ALIASES: dict[str, str] = {"av1": "libsvtav1"}
 
 LIBSVTAV1_DEFAULT_PRESET: int = 12
 
-# Keys persisted under ``features[*]["info"]`` as ``video.<name>`` (from :class:`VideoEncoderConfig`).
-# ``vcodec``` and ``pix_fmt`` are derived from the video stream directly.
+# 以 ``video.<name>`` 形式持久化到 ``features[*]["info"]`` 下的键（来自 :class:`VideoEncoderConfig`）。
+# ``vcodec``` 和 ``pix_fmt`` 直接从视频流中推导。
 VIDEO_ENCODER_INFO_FIELD_NAMES: frozenset[str] = frozenset(
     {"g", "crf", "preset", "fast_decode", "extra_options", "video_backend"}
 )
@@ -55,7 +55,7 @@ VIDEO_ENCODER_INFO_KEYS: frozenset[str] = frozenset(
     f"video.{name}" for name in VIDEO_ENCODER_INFO_FIELD_NAMES
 )
 
-# Default depth quantization and encoding parameters.
+# 默认的量化和编码参数。
 DEPTH_QUANT_BITS: int = 12
 DEPTH_QMAX: int = (1 << DEPTH_QUANT_BITS) - 1  # 4095
 
@@ -71,49 +71,49 @@ DEFAULT_DEPTH_UNIT: str = DEPTH_MILLIMETER_UNIT
 
 
 def infer_depth_unit(dtype: np.dtype | type) -> str:
-    """Infer the physical unit of raw depth frames from their dtype.
+    """根据原始帧的 dtype 推断其物理单位。
 
-    Floating-point frames are assumed to be in metres, integer frames in millimetres.
+    浮点帧假定为米，整数帧假定为毫米。
     """
     return DEPTH_METER_UNIT if np.issubdtype(np.dtype(dtype), np.floating) else DEPTH_MILLIMETER_UNIT
 
 
-# Depth-specific tuning fields persisted under ``features[*]["info"]`` as ``video.<name>``.
+# 深度专用的调优字段，以 ``video.<name>`` 形式持久化到 ``features[*]["info"]`` 下。
 DEPTH_ENCODER_INFO_FIELD_NAMES: frozenset[str] = frozenset({"depth_min", "depth_max", "shift", "use_log"})
 
 
 @dataclass
 class VideoEncoderConfig:
-    """Video encoder configuration."""
+    """视频编码器配置。"""
 
-    vcodec: str = "libsvtav1"  # Video codec name. "auto" picks a hardware codec if available, else libsvtav1.
-    pix_fmt: str = "yuv420p"  # Pixel format (e.g. yuv420p).
-    g: int | None = 2  # GOP size (keyframe interval).
-    crf: int | float | None = 30  # Quality level. Lower means better quality and larger files.
-    preset: int | str | None = None  # Speed/quality preset. Accepted values are codec-specific.
-    fast_decode: int = 0  # Fast-decode tuning. Accepted values are codec-specific, 0 disables it.
-    # TODO(CarolinePascal): add torchcodec support + find a way to unify the
-    # two backends (encoding and decoding).
-    video_backend: str = "pyav"  # Encoding backend. Only "pyav" is currently supported.
-    # Extra codec options merged last, e.g. {"tune": "film"}.
+    vcodec: str = "libsvtav1"  # 视频编解码器名称。"auto" 会在可用时选择硬件编解码器，否则使用 libsvtav1。
+    pix_fmt: str = "yuv420p"  # 像素格式（例如 yuv420p）。
+    g: int | None = 2  # GOP 大小（关键帧间隔）。
+    crf: int | float | None = 30  # 质量级别。越低表示质量越好、文件越大。
+    preset: int | str | None = None  # 速度/质量预设。可接受的值取决于具体编解码器。
+    fast_decode: int = 0  # 快速解码调优。可接受的值取决于具体编解码器，0 表示禁用。
+    # TODO(CarolinePascal): 添加 torchcodec 支持 + 找到统一两个后端
+    # （编码和解码）的方法。
+    video_backend: str = "pyav"  # 编码后端。目前仅支持 "pyav"。
+    # 最后合并的额外编解码器选项，例如 {"tune": "film"}。
     extra_options: dict[str, Any] = field(default_factory=dict)
 
-    # Source-data channel count this encoder is expected to handle. ``None``
-    # disables the pix_fmt channel-count check; concrete subclasses set it
-    # (3 for RGB, 1 for depth, etc.).
+    # 该编码器预期处理的源数据通道数。``None`` 会禁用
+    # pix_fmt 的通道数检查；具体子类会设置它
+    # （RGB 为 3，深度为 1，等等）。
     _DEFAULT_CHANNELS: ClassVar[int | None] = None
 
     def __post_init__(self) -> None:
         self.resolve_vcodec()
-        # Empty-constructor ergonomics: ``VideoEncoderConfig()`` must "just work".
+        # 空构造函数的易用性：``VideoEncoderConfig()`` 必须"开箱即用"。
         if self.preset is None and self.vcodec == "libsvtav1":
             self.preset = LIBSVTAV1_DEFAULT_PRESET
         self.validate()
 
     @classmethod
     def _kwargs_from_video_info(cls, video_info: dict | None) -> dict[str, Any]:
-        """Parse the ``video.*`` keys of a feature ``info`` block into
-        constructor kwargs.
+        """将特征 ``info`` 块中的 ``video.*`` 键解析为
+        构造函数 kwargs。
         """
         video_info = video_info or {}
         kwargs: dict[str, Any] = {}
@@ -127,7 +127,7 @@ class VideoEncoderConfig:
             value = video_info.get(f"video.{field_name}")
             if value is None:
                 continue
-            # Persisted as ``{}`` after merges with disagreeing sources — treat as default.
+            # 与来源不一致合并后持久化为 ``{}`` —— 按默认值处理。
             if field_name == "extra_options" and not value:
                 continue
             kwargs[field_name] = value
@@ -136,19 +136,19 @@ class VideoEncoderConfig:
 
     @classmethod
     def from_video_info(cls, video_info: dict | None) -> Self:
-        """Reconstruct an encoder config from a video feature's ``info`` block.
+        """从视频特征的 ``info`` 块重建编码器配置。
 
-        Missing or ``None`` values fall back to the class defaults.
+        缺失或为 ``None`` 的值回退到类的默认值。
         """
         return cls(**cls._kwargs_from_video_info(video_info))
 
     def detect_available_encoders(self, encoders: list[str] | str) -> list[str]:
-        """Return the subset of available encoders based on the specified video backend.
+        """根据指定的视频后端返回可用编码器的子集。
 
         Args:
-            encoders: List of encoder names to detect. If a string, it is converted to a list.
+            encoders: 要检测的编码器名称列表。如果是字符串，会被转换为列表。
         Returns:
-            List of available encoder names. If the video backend is not "pyav", returns an empty list.
+            可用编码器名称的列表。如果视频后端不是 "pyav"，返回空列表。
         """
         if self.video_backend == "pyav":
             require_package("av", extra="dataset")
@@ -158,7 +158,7 @@ class VideoEncoderConfig:
         return []
 
     def validate(self) -> None:
-        """Validate the video encoder configuration."""
+        """验证视频编码器配置。"""
         if self.video_backend == "pyav":
             require_package("av", extra="dataset")
             from lerobot.datasets import check_video_encoder_parameters_pyav
@@ -168,13 +168,12 @@ class VideoEncoderConfig:
             )
 
     def resolve_vcodec(self) -> None:
-        """Check ``vcodec`` and, when it is ``"auto"``, pick a concrete encoder.
+        """检查 ``vcodec``，当其值为 ``"auto"`` 时选择一个具体的编码器。
 
-        For ``"auto"``, the first hardware encoder in the preference list that is available is chosen; if none are available, ``libsvtav1`` is used. If the
-        resolved codec (explicit or after auto-selection) is not available, raises ``ValueError``.
+        对于 ``"auto"``，会选择优先列表中第一个可用的硬件编码器；如果没有可用的，则使用 ``libsvtav1``。如果解析出的编解码器（显式指定或自动选择后）不可用，则抛出 ``ValueError``。
 
-        Stream-derived canonical codec names listed in :data:`VIDEO_CODECS_ALIASES` are
-        rewritten to their corresponding encoder name (e.g. ``"av1"`` → ``"libsvtav1"``).
+        :data:`VIDEO_CODECS_ALIASES` 中列出的从视频流推导的规范编解码器名称
+        会被重写为对应的编码器名称（例如 ``"av1"`` → ``"libsvtav1"``）。
         """
         self.vcodec = VIDEO_CODECS_ALIASES.get(self.vcodec, self.vcodec)
         if self.vcodec not in VALID_VIDEO_CODECS:
@@ -197,16 +196,16 @@ class VideoEncoderConfig:
     def get_codec_options(
         self, encoder_threads: int | None = None, as_strings: bool = False
     ) -> dict[str, Any]:
-        """Translate the tuning fields to codec-specific options.
+        """将调优字段转换为特定编解码器的选项。
 
-        ``VideoEncoderConfig.extra_options`` are merged last but never override a structured field.
+        ``VideoEncoderConfig.extra_options`` 最后合并，但不会覆盖结构化字段。
 
         Args:
-            encoder_threads: Number of encoder threads set globally for all VideoEncoderConfigs.
-                For libsvtav1, this is mapped to ``lp`` via ``svtav1-params``.
-                For h264/hevc, this is mapped to ``threads``.
-                Hardware encoders ignore this parameter.
-            as_strings: If ``True``, casts values to strings.
+            encoder_threads: 为所有 VideoEncoderConfig 全局设置的编码器线程数。
+                对于 libsvtav1，通过 ``svtav1-params`` 映射为 ``lp``。
+                对于 h264/hevc，映射为 ``threads``。
+                硬件编码器忽略此参数。
+            as_strings: 如果为 ``True``，将值转换为字符串。
         """
         opts: dict[str, Any] = {}
 
@@ -214,7 +213,7 @@ class VideoEncoderConfig:
             if value is not None:
                 opts[key] = value if not as_strings else str(value)
 
-        # GOP size is not a codec-specific option, so it is always set.
+        # GOP 大小不是编解码器特定的选项，因此始终设置。
         set_if("g", self.g)
 
         if self.vcodec == "libsvtav1":
@@ -255,7 +254,7 @@ class VideoEncoderConfig:
             set_if("crf", self.crf)
             set_if("preset", self.preset)
 
-        # Extra options are merged last but never override structured fields (values are kept as given).
+        # 额外选项最后合并，但不会覆盖结构化字段（值按给定保留）。
         for k, v in self.extra_options.items():
             if k not in opts:
                 set_if(k, v)
@@ -265,46 +264,45 @@ class VideoEncoderConfig:
 
 @dataclass
 class RGBEncoderConfig(VideoEncoderConfig):
-    """Encoder configuration for RGB camera streams.
+    """RGB 相机流的编码器配置。
 
-    Identical to :class:`VideoEncoderConfig` but declares the 3-channel
-    source-data layout so ``pix_fmt`` is validated against RGB inputs.
+    与 :class:`VideoEncoderConfig` 相同，但声明了 3 通道的
+    源数据布局，因此 ``pix_fmt`` 会针对 RGB 输入进行验证。
     """
 
     _DEFAULT_CHANNELS: ClassVar[int] = 3
 
 
 def rgb_encoder_defaults() -> RGBEncoderConfig:
-    """Return a :class:`RGBEncoderConfig` with RGB-camera defaults."""
+    """返回带有 RGB 相机默认值的 :class:`RGBEncoderConfig`。"""
     return RGBEncoderConfig()
 
 
 @dataclass
 class DepthEncoderConfig(VideoEncoderConfig):
-    """Encoder configuration for depth-map streams.
+    """深度图流的编码器配置。
 
-    Inherits the full :class:`VideoEncoderConfig` surface (codec, GOP, CRF,
-    preset, ``extra_options``…) and adds the parameters of the depth quantizer.
-    Defaults flip ``vcodec`` to ``"hevc"`` (Main 12 profile) and ``pix_fmt`` to
-    ``"gray12le"``.
+    继承完整的 :class:`VideoEncoderConfig` 接口（编解码器、GOP、CRF、
+    preset、``extra_options``…），并添加量化器的参数。
+    默认值将 ``vcodec`` 切换为 ``"hevc"``（Main 12 profile），将 ``pix_fmt`` 切换为
+    ``"gray12le"``。
     """
 
-    vcodec: str = "hevc"  # Video codec name. Defaults to HEVC Main 12 (a 12-bit-capable codec).
-    pix_fmt: str = "gray12le"  # Pixel format. Defaults to 12-bit grayscale.
+    vcodec: str = "hevc"  # 视频编解码器名称。默认为 HEVC Main 12（支持 12 位的编解码器）。
+    pix_fmt: str = "gray12le"  # 像素格式。默认为 12 位灰度。
     extra_options: dict[str, Any] = field(default_factory=lambda: {"x265-params": "lossless=1"})
 
-    depth_min: float = DEFAULT_DEPTH_MIN  # Minimum depth in meters, mapped to the lowest quantum.
-    depth_max: float = DEFAULT_DEPTH_MAX  # Maximum depth in meters, mapped to the highest quantum.
-    shift: float = DEFAULT_DEPTH_SHIFT  # Pre-log offset in meters for numerical stability near zero.
-    use_log: bool = DEFAULT_DEPTH_USE_LOG  # Use logarithmic quantization (True) or linear (False).
+    depth_min: float = DEFAULT_DEPTH_MIN  # 最小深度（米），映射到最低量化值。
+    depth_max: float = DEFAULT_DEPTH_MAX  # 最大深度（米），映射到最高量化值。
+    shift: float = DEFAULT_DEPTH_SHIFT  # 接近零时为保证数值稳定的对数前偏移（米）。
+    use_log: bool = DEFAULT_DEPTH_USE_LOG  # 使用对数量化（True）还是线性量化（False）。
 
     _DEFAULT_CHANNELS: ClassVar[int] = 1
 
     @classmethod
     def _kwargs_from_video_info(cls, video_info: dict | None) -> dict[str, Any]:
-        """Layer the depth-specific tuning (``depth_min`` / ``depth_max`` /
-        ``shift`` / ``use_log``) on top of the base parser. Missing keys
-        fall back to the class defaults.
+        """在基础解析器之上叠加深度专用调优（``depth_min`` / ``depth_max`` /
+        ``shift`` / ``use_log``）。缺失的键回退到类的默认值。
         """
         kwargs = super()._kwargs_from_video_info(video_info)
         video_info = video_info or {}
@@ -316,16 +314,16 @@ class DepthEncoderConfig(VideoEncoderConfig):
 
 
 def depth_encoder_defaults() -> DepthEncoderConfig:
-    """Return a :class:`DepthEncoderConfig` with depth-camera defaults."""
+    """返回带有相机默认值的 :class:`DepthEncoderConfig`。"""
     return DepthEncoderConfig()
 
 
 def is_depth_map(feature: dict | None) -> bool:
-    """Return whether a feature is flagged as a depth map.
+    """返回一个特征是否被标记为深度图。
 
-    Depth maps are flagged canonically via ``feature['info']['is_depth_map']`` or through the
-    legacy ``video.is_depth_map`` key, which may live in ``feature['info']`` or in a separate
-    ``feature['video_info']`` dict.
+    深度图通过 ``feature['info']['is_depth_map']`` 进行规范标记，或通过
+    旧版的 ``video.is_depth_map`` 键标记，后者可能位于 ``feature['info']`` 中，
+    也可能位于单独的 ``feature['video_info']`` 字典中。
     """
     feature = feature or {}
     info = feature.get("info") or {}
@@ -338,19 +336,18 @@ def is_depth_map(feature: dict | None) -> bool:
 
 
 def encoder_config_from_video_info(video_info: dict | None) -> VideoEncoderConfig:
-    """Build the appropriate encoder config from a feature's ``info`` block.
+    """根据特征的 ``info`` 块构建合适的编码器配置。
 
-    Dispatches to :class:`DepthEncoderConfig` when the dict marks the feature
-    as a depth map and to :class:`RGBEncoderConfig`
-    otherwise.
+    当字典将特征标记为深度图时分派到 :class:`DepthEncoderConfig`，
+    否则分派到 :class:`RGBEncoderConfig`。
 
     Args:
-        video_info: A feature's ``info`` dict as persisted in ``info.json``,
-            or ``None`` (treated as an empty dict).
+        video_info: 持久化在 ``info.json`` 中的特征 ``info`` 字典，
+            或 ``None``（视为空字典）。
 
     Returns:
-        A :class:`DepthEncoderConfig` for depth features, otherwise a
-        :class:`RGBEncoderConfig`.
+        深度特征返回 :class:`DepthEncoderConfig`，否则返回
+        :class:`RGBEncoderConfig`。
     """
     video_info = video_info or {}
     cls: type[VideoEncoderConfig] = (

@@ -32,17 +32,14 @@ from lerobot.utils.constants import OBS_STATE
 @ProcessorStepRegistry.register("joint_velocity_processor")
 class JointVelocityProcessorStep(ObservationProcessorStep):
     """
-    Calculates and appends joint velocity information to the observation state.
+    计算关节速度信息并将其追加到观测状态中。
 
-    This step computes the velocity of each joint by calculating the finite
-    difference between the current and the last observed joint positions. The
-    resulting velocity vector is then concatenated to the original state vector.
+    该步骤通过计算当前关节位置与上一次观测到的关节位置之间的有限差分
+    来得到每个关节的速度。然后将得到的速度向量拼接到原始状态向量上。
 
     Attributes:
-        dt: The time step (delta time) in seconds between observations, used for
-            calculating velocity.
-        last_joint_positions: Stores the joint positions from the previous step
-                              to enable velocity calculation.
+        dt: 两次观测之间的时间步长（增量时间，单位：秒），用于计算速度。
+        last_joint_positions: 存储上一步的关节位置，以便进行速度计算。
     """
 
     dt: float = 0.1
@@ -51,38 +48,37 @@ class JointVelocityProcessorStep(ObservationProcessorStep):
 
     def observation(self, observation: dict) -> dict:
         """
-        Computes joint velocities and adds them to the observation state.
+        计算关节速度并将其添加到观测状态中。
 
         Args:
-            observation: The input observation dictionary, expected to contain
-                         an `observation.state` key with joint positions.
+            observation: 输入观测字典，预期包含一个带有
+                         关节位置的 `observation.state` 键。
 
         Returns:
-            A new observation dictionary with the `observation.state` tensor
-            extended to include joint velocities.
+            一个新的观测字典，其中 `observation.state` 张量被扩展以包含关节速度。
 
         Raises:
-            ValueError: If `observation.state` is not found in the observation.
+            ValueError: 如果观测中未找到 `observation.state`。
         """
-        # Get current joint positions (assuming they're in observation.state)
+        # 获取当前关节位置（假设它们位于 observation.state 中）
         current_positions = observation.get(OBS_STATE)
         if current_positions is None:
             raise ValueError(f"{OBS_STATE} is not in observation")
 
-        # Initialize last joint positions if not already set
+        # 如果尚未设置，则初始化上一次的关节位置
         if self.last_joint_positions is None:
             self.last_joint_positions = current_positions.clone()
             joint_velocities = torch.zeros_like(current_positions)
         else:
-            # Compute velocities
+            # 计算速度
             joint_velocities = (current_positions - self.last_joint_positions) / self.dt
 
         self.last_joint_positions = current_positions.clone()
 
-        # Extend observation with velocities
+        # 用速度扩展观测
         extended_state = torch.cat([current_positions, joint_velocities], dim=-1)
 
-        # Create new observation dict
+        # 创建新的观测字典
         new_observation = dict(observation)
         new_observation[OBS_STATE] = extended_state
 
@@ -90,37 +86,37 @@ class JointVelocityProcessorStep(ObservationProcessorStep):
 
     def get_config(self) -> dict[str, Any]:
         """
-        Returns the configuration of the step for serialization.
+        返回该步骤的配置，用于序列化。
 
         Returns:
-            A dictionary containing the time step `dt`.
+            包含时间步长 `dt` 的字典。
         """
         return {
             "dt": self.dt,
         }
 
     def reset(self) -> None:
-        """Resets the internal state, clearing the last known joint positions."""
+        """重置内部状态，清除最后已知的关节位置。"""
         self.last_joint_positions = None
 
     def transform_features(
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        Updates the `observation.state` feature to reflect the added velocities.
+        更新 `observation.state` 特征，以反映所添加的速度。
 
-        This method doubles the size of the first dimension of the `observation.state`
-        shape to account for the concatenation of position and velocity vectors.
+        该方法将 `observation.state` 形状的第一维大小翻倍，
+        以对应位置向量和速度向量的拼接。
 
         Args:
-            features: The policy features dictionary.
+            features: 策略特征字典。
 
         Returns:
-            The updated policy features dictionary.
+            更新后的策略特征字典。
         """
         if OBS_STATE in features[PipelineFeatureType.OBSERVATION]:
             original_feature = features[PipelineFeatureType.OBSERVATION][OBS_STATE]
-            # Double the shape to account for positions + velocities
+            # 将形状翻倍，以对应位置 + 速度
             new_shape = (original_feature.shape[0] * 2,) + original_feature.shape[1:]
 
             features[PipelineFeatureType.OBSERVATION][OBS_STATE] = PolicyFeature(
@@ -133,33 +129,31 @@ class JointVelocityProcessorStep(ObservationProcessorStep):
 @ProcessorStepRegistry.register("current_processor")
 class MotorCurrentProcessorStep(ObservationProcessorStep):
     """
-    Reads motor currents from a robot and appends them to the observation state.
+    从机器人读取电机电流并将其追加到观测状态中。
 
-    This step queries the robot's hardware interface to get the present current
-    for each motor and concatenates this information to the existing state vector.
+    该步骤查询机器人的硬件接口，获取每个电机的当前电流，
+    并将这些信息拼接到现有的状态向量上。
 
     Attributes:
-        robot: An instance of a `lerobot` Robot class that provides access to
-               the hardware bus.
+        robot: `lerobot` Robot 类的实例，提供对硬件总线的访问。
     """
 
     robot: Robot | None = None
 
     def observation(self, observation: dict) -> dict:
         """
-        Fetches motor currents and adds them to the observation state.
+        获取电机电流并将其添加到观测状态中。
 
         Args:
-            observation: The input observation dictionary.
+            observation: 输入观测字典。
 
         Returns:
-            A new observation dictionary with the `observation.state` tensor
-            extended to include motor currents.
+            一个新的观测字典，其中 `observation.state` 张量被扩展以包含电机电流。
 
         Raises:
-            ValueError: If the `robot` attribute has not been set.
+            ValueError: 如果未设置 `robot` 属性。
         """
-        # Get current values from robot state
+        # 从机器人状态获取电流值
         if self.robot is None:
             raise ValueError("Robot is not set")
 
@@ -175,7 +169,7 @@ class MotorCurrentProcessorStep(ObservationProcessorStep):
 
         extended_state = torch.cat([current_state, motor_currents], dim=-1)
 
-        # Create new observation dict
+        # 创建新的观测字典
         new_observation = dict(observation)
         new_observation[OBS_STATE] = extended_state
 
@@ -185,20 +179,19 @@ class MotorCurrentProcessorStep(ObservationProcessorStep):
         self, features: dict[PipelineFeatureType, dict[str, PolicyFeature]]
     ) -> dict[PipelineFeatureType, dict[str, PolicyFeature]]:
         """
-        Updates the `observation.state` feature to reflect the added motor currents.
+        更新 `observation.state` 特征，以反映所添加的电机电流。
 
-        This method increases the size of the first dimension of the `observation.state`
-        shape by the number of motors in the robot.
+        该方法将 `observation.state` 形状的第一维大小增加机器人中电机的数量。
 
         Args:
-            features: The policy features dictionary.
+            features: 策略特征字典。
 
         Returns:
-            The updated policy features dictionary.
+            更新后的策略特征字典。
         """
         if OBS_STATE in features[PipelineFeatureType.OBSERVATION] and self.robot is not None:
             original_feature = features[PipelineFeatureType.OBSERVATION][OBS_STATE]
-            # Add motor current dimensions to the original state shape
+            # 在原始状态形状上添加电机电流维度
             num_motors = 0
             if hasattr(self.robot, "bus") and hasattr(self.robot.bus, "motors"):  # type: ignore[attr-defined]
                 num_motors = len(self.robot.bus.motors)  # type: ignore[attr-defined]

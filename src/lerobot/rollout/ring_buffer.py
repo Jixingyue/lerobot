@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Memory-bounded ring buffer for the Highlight Reel rollout strategy."""
+"""用于 Highlight Reel rollout 策略的内存受限环形缓冲区。"""
 
 from __future__ import annotations
 
@@ -23,28 +23,28 @@ import torch
 
 
 class RolloutRingBuffer:
-    """Fixed-capacity circular buffer for observation/action frames.
+    """用于观测/动作帧的固定容量环形缓冲区。
 
-    Stores the last *N* seconds of telemetry in memory, bounded by both
-    time (``max_frames``) and memory (``max_memory_bytes``).  When either
-    limit is reached the oldest frames are evicted.
+    在内存中保存最近 *N* 秒的遥测数据，同时受时间
+    （``max_frames``）和内存（``max_memory_bytes``）限制。
+    当任一限制达到时，最旧的帧会被逐出。
 
     .. note::
-       This class is **single-threaded**.  ``append``/``drain``/``clear``
-       must all be called from the same thread (the rollout main loop).
-       Concurrent access from a background thread will corrupt
-       ``_current_bytes`` accounting.
+       此类是**单线程**的。``append``/``drain``/``clear``
+       必须全部从同一线程（rollout 主循环）调用。
+       后台线程的并发访问会破坏 ``_current_bytes`` 的
+       记账统计。
 
     Parameters
     ----------
     max_seconds:
-        Maximum duration of buffered telemetry.
+        缓冲遥测数据的最大时长。
     max_memory_mb:
-        Hard memory cap in MiB.  Frames are evicted when the estimated
-        total size exceeds this.
+        硬性内存上限（MiB）。当估计的总大小超过
+        此值时帧会被逐出。
     fps:
-        Frames per second — used to convert ``max_seconds`` to a frame
-        count.
+        每秒帧数——用于将 ``max_seconds`` 换算为
+        帧数。
     """
 
     def __init__(self, max_seconds: float = 30.0, max_memory_mb: int = 2048, fps: float = 30.0) -> None:
@@ -54,14 +54,14 @@ class RolloutRingBuffer:
         self._current_bytes: int = 0
 
     # ------------------------------------------------------------------
-    # Public API
+    # 公共 API
     # ------------------------------------------------------------------
 
     def append(self, frame: dict) -> None:
-        """Add *frame* to the buffer, evicting the oldest if at capacity."""
+        """将 *frame* 加入缓冲区，若已满则逐出最旧的帧。"""
         frame_bytes = _estimate_frame_bytes(frame)
 
-        # Evict oldest frames until we are under the memory cap
+        # 逐出最旧的帧，直到低于内存上限
         while self._current_bytes + frame_bytes > self._max_bytes and self._buffer:
             evicted = self._buffer.popleft()
             self._current_bytes -= _estimate_frame_bytes(evicted)
@@ -70,14 +70,14 @@ class RolloutRingBuffer:
         self._current_bytes += frame_bytes
 
     def drain(self) -> list[dict]:
-        """Return all buffered frames and clear the buffer."""
+        """返回所有缓冲的帧并清空缓冲区。"""
         frames = list(self._buffer)
         self._buffer.clear()
         self._current_bytes = 0
         return frames
 
     def clear(self) -> None:
-        """Discard all buffered frames."""
+        """丢弃所有缓冲的帧。"""
         self._buffer.clear()
         self._current_bytes = 0
 
@@ -86,22 +86,22 @@ class RolloutRingBuffer:
 
     @property
     def estimated_bytes(self) -> int:
-        """Estimated total byte size of all buffered frames."""
+        """所有缓冲帧的估计总字节数。"""
         return self._current_bytes
 
 
 # ------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ------------------------------------------------------------------
 
 
 def _estimate_frame_bytes(frame: dict) -> int:
-    """Rough byte estimate for a single frame dictionary."""
+    """对单个帧字典的字节数粗略估算。"""
     total = 0
     for v in frame.values():
         if isinstance(v, torch.Tensor):
-            # ``torch.Tensor`` has no ``nbytes``; compute it explicitly so the
-            # memory cap is honoured even when frames hold unconverted tensors.
+            # ``torch.Tensor`` 没有 ``nbytes``；显式计算它，
+            # 以便即使帧中保存未转换的张量也能遵守内存上限。
             total += v.nelement() * v.element_size()
         elif isinstance(v, np.ndarray) or hasattr(v, "nbytes"):
             total += v.nbytes
@@ -109,4 +109,4 @@ def _estimate_frame_bytes(frame: dict) -> int:
             total += 8
         elif isinstance(v, (str, bytes)):
             total += len(v)
-    return max(total, 1)  # avoid zero-size frames
+    return max(total, 1)  # 避免零大小的帧

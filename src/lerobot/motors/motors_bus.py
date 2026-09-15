@@ -15,8 +15,8 @@
 # limitations under the License.
 
 # ruff: noqa: N802
-# This noqa is for the Protocols classes: PortHandler, PacketHandler GroupSyncRead/Write
-# TODO(aliberts): Add block noqa when feature below is available
+# 这个 noqa 是为 Protocols 类准备的：PortHandler、PacketHandler、GroupSyncRead/Write
+# TODO(aliberts): 当以下功能可用时，添加块级 noqa
 # https://github.com/astral-sh/ruff/issues/3711
 
 from __future__ import annotations
@@ -57,10 +57,10 @@ logger = logging.getLogger(__name__)
 
 class MotorsBusBase(abc.ABC):
     """
-    Base class for all motor bus implementations.
+    所有电机总线实现的基类。
 
-    This is a minimal interface that all motor buses must implement, regardless of their
-    communication protocol (serial, CAN, etc.).
+    这是所有电机总线必须实现的最小接口，
+    无论其通信协议如何（serial、CAN 等）。
     """
 
     def __init__(
@@ -75,58 +75,58 @@ class MotorsBusBase(abc.ABC):
 
     @abc.abstractmethod
     def connect(self, handshake: bool = True) -> None:
-        """Establish connection to the motors."""
+        """建立与电机的连接。"""
         pass
 
     @abc.abstractmethod
     def disconnect(self, disable_torque: bool = True) -> None:
-        """Disconnect from the motors."""
+        """断开与电机的连接。"""
         pass
 
     @property
     @abc.abstractmethod
     def is_connected(self) -> bool:
-        """Check if connected to the motors."""
+        """检查是否已连接到电机。"""
         pass
 
     @abc.abstractmethod
     def read(self, data_name: str, motor: str) -> Value:
-        """Read a value from a single motor."""
+        """从单个电机读取一个值。"""
         pass
 
     @abc.abstractmethod
     def write(self, data_name: str, motor: str, value: Value) -> None:
-        """Write a value to a single motor."""
+        """向单个电机写入一个值。"""
         pass
 
     @abc.abstractmethod
     def sync_read(self, data_name: str, motors: str | list[str] | None = None) -> dict[str, Value]:
-        """Read a value from multiple motors."""
+        """从多个电机读取一个值。"""
         pass
 
     @abc.abstractmethod
     def sync_write(self, data_name: str, values: dict[str, Value]) -> None:
-        """Write values to multiple motors."""
+        """向多个电机写入值。"""
         pass
 
     @abc.abstractmethod
     def enable_torque(self, motors: str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Enable torque on selected motors."""
+        """启用所选电机的力矩。"""
         pass
 
     @abc.abstractmethod
     def disable_torque(self, motors: str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Disable torque on selected motors."""
+        """禁用所选电机的力矩。"""
         pass
 
     @abc.abstractmethod
     def read_calibration(self) -> dict[str, MotorCalibration]:
-        """Read calibration parameters from the motors."""
+        """从电机读取校准参数。"""
         pass
 
     @abc.abstractmethod
     def write_calibration(self, calibration_dict: dict[str, MotorCalibration], cache: bool = True) -> None:
-        """Write calibration parameters to the motors."""
+        """向电机写入校准参数。"""
         pass
 
 
@@ -302,16 +302,16 @@ class GroupSyncWrite(Protocol):
 
 class SerialMotorsBus(MotorsBusBase):
     """
-    A SerialMotorsBus allows to efficiently read and write to motors connected via serial communication.
-    It represents several motors daisy-chained together and connected through a serial port.
-    There are currently two implementations of this class:
+    SerialMotorsBus 可以高效地读写通过串行通信连接的电机。
+    它表示多个菊花链连接并通过串口接入的电机。
+    目前该类有两个实现：
         - DynamixelMotorsBus
         - FeetechMotorsBus
 
-    This class is specifically for serial-based motor protocols (Dynamixel, Feetech, etc.).
+    该类专门用于基于串行的电机协议（Dynamixel、Feetech 等）。
 
-    A MotorsBus subclass instance requires a port (e.g. `FeetechMotorsBus(port="/dev/tty.usbmodem575E0031751"`)).
-    To find the port, you can run our utility script:
+    MotorsBus 子类的实例需要一个端口（例如 `FeetechMotorsBus(port="/dev/tty.usbmodem575E0031751"`））。
+    要找到端口，可以运行我们的实用脚本：
     ```bash
     lerobot-find-port.py
     >>> Finding all available ports for the MotorsBus.
@@ -321,7 +321,7 @@ class SerialMotorsBus(MotorsBusBase):
     >>> Reconnect the usb cable.
     ```
 
-    Example of usage for 1 Feetech sts3215 motor connected to the bus:
+    总线上连接 1 个 Feetech sts3215 电机的使用示例：
     ```python
     bus = FeetechMotorsBus(
         port="/dev/tty.usbmodem575E0031751",
@@ -331,11 +331,11 @@ class SerialMotorsBus(MotorsBusBase):
 
     position = bus.read("Present_Position", "my_motor", normalize=False)
 
-    # Move from a few motor steps as an example
+    # 以几个电机步长为例移动
     few_steps = 30
     bus.write("Goal_Position", "my_motor", position + few_steps, normalize=False)
 
-    # When done, properly disconnect the port using
+    # 完成后，使用以下方式正确断开端口
     bus.disconnect()
     ```
     """
@@ -452,7 +452,7 @@ class SerialMotorsBus(MotorsBusBase):
         if len(self.ids) != len(set(self.ids)):
             raise ValueError(f"Some motors have the same id!\n{self}")
 
-        # Ensure ctrl table available for all models
+        # 确保所有型号都有可用的控制表
         for model in self.models:
             get_ctrl_table(self.model_ctrl_table, model)
 
@@ -507,20 +507,20 @@ class SerialMotorsBus(MotorsBusBase):
 
     @property
     def is_connected(self) -> bool:
-        """bool: `True` if the underlying serial port is open."""
+        """bool: 如果底层串口已打开则为 `True`。"""
         return self.port_handler.is_open
 
     @check_if_already_connected
     def connect(self, handshake: bool = True) -> None:
-        """Open the serial port and initialise communication.
+        """打开串口并初始化通信。
 
         Args:
-            handshake (bool, optional): Pings every expected motor and performs additional
-                integrity checks specific to the implementation. Defaults to `True`.
+            handshake (bool, optional): ping 每个预期的电机，并执行该实现特有的
+                额外完整性检查。默认为 `True`。
 
         Raises:
-            DeviceAlreadyConnectedError: The port is already open.
-            ConnectionError: The underlying SDK failed to open the port or the handshake did not succeed.
+            DeviceAlreadyConnectedError: 端口已经打开。
+            ConnectionError: 底层 SDK 打开端口失败，或握手未成功。
         """
 
         self._connect(handshake)
@@ -545,12 +545,11 @@ class SerialMotorsBus(MotorsBusBase):
 
     @check_if_not_connected
     def disconnect(self, disable_torque: bool = True) -> None:
-        """Close the serial port (optionally disabling torque first).
+        """关闭串口（可选先禁用力矩）。
 
         Args:
-            disable_torque (bool, optional): If `True` (default) torque is disabled on every motor before
-                closing the port. This can prevent damaging motors if they are left applying resisting torque
-                after disconnect.
+            disable_torque (bool, optional): 如果为 `True`（默认），在关闭端口前会禁用
+                每个电机的力矩。这可以防止断开连接后电机持续施加保持力矩而损坏电机。
         """
 
         if disable_torque:
@@ -563,15 +562,15 @@ class SerialMotorsBus(MotorsBusBase):
 
     @classmethod
     def scan_port(cls, port: str, *args, **kwargs) -> dict[int, list[int]]:
-        """Probe *port* at every supported baud-rate and list responding IDs.
+        """以所有支持的波特率探测 *port*，并列出响应的 ID。
 
         Args:
-            port (str): Serial/USB port to scan (e.g. ``"/dev/ttyUSB0"``).
-            *args, **kwargs: Forwarded to the subclass constructor.
+            port (str): 要扫描的串口/USB 端口（例如 ``"/dev/ttyUSB0"``）。
+            *args, **kwargs: 转发给子类的构造函数。
 
         Returns:
-            dict[int, list[int]]: Mapping *baud-rate → list of motor IDs*
-            for every baud-rate that produced at least one response.
+            dict[int, list[int]]: 对于每个至少有一个响应的波特率，
+            映射 *波特率 → 电机 ID 列表*。
         """
         bus = cls(port, {}, *args, **kwargs)
         bus._connect(handshake=False)
@@ -589,21 +588,21 @@ class SerialMotorsBus(MotorsBusBase):
     def setup_motor(
         self, motor: str, initial_baudrate: int | None = None, initial_id: int | None = None
     ) -> None:
-        """Assign the correct ID and baud-rate to a single motor.
+        """为单个电机设置正确的 ID 和波特率。
 
-        This helper temporarily switches to the motor's current settings, disables torque, sets the desired
-        ID, and finally programs the bus' default baud-rate.
+        该辅助方法会临时切换到电机当前的设置，禁用力矩，设置期望的
+        ID，最后写入总线默认的波特率。
 
         Args:
-            motor (str): Key of the motor in :pyattr:`motors`.
-            initial_baudrate (int | None, optional): Current baud-rate (skips scanning when provided).
-                Defaults to None.
-            initial_id (int | None, optional): Current ID (skips scanning when provided). Defaults to None.
+            motor (str): 电机在 :pyattr:`motors` 中的键。
+            initial_baudrate (int | None, optional): 当前波特率（提供时跳过扫描）。
+                默认为 None。
+            initial_id (int | None, optional): 当前 ID（提供时跳过扫描）。默认为 None。
 
         Raises:
-            RuntimeError: The motor could not be found or its model number
-                does not match the expected one.
-            ConnectionError: Communication with the motor failed.
+            RuntimeError: 找不到该电机，或其型号编号
+                与预期不符。
+            ConnectionError: 与电机通信失败。
         """
         if not self.is_connected:
             self._connect(handshake=False)
@@ -619,11 +618,11 @@ class SerialMotorsBus(MotorsBusBase):
         self.set_baudrate(initial_baudrate)
         self._disable_torque(initial_id, model)
 
-        # Set ID
+        # 设置 ID
         addr, length = get_address(self.model_ctrl_table, model, "ID")
         self._write(addr, length, initial_id, target_id)
 
-        # Set Baudrate
+        # 设置波特率
         addr, length = get_address(self.model_ctrl_table, model, "Baud_Rate")
         baudrate_value = self.model_baudrate_table[model][self.default_baudrate]
         self._write(addr, length, target_id, baudrate_value)
@@ -636,24 +635,24 @@ class SerialMotorsBus(MotorsBusBase):
 
     @abc.abstractmethod
     def configure_motors(self) -> None:
-        """Write implementation-specific recommended settings to every motor.
+        """向每个电机写入实现特定的推荐设置。
 
-        Typical changes include shortening the return delay, increasing
-        acceleration limits or disabling safety locks.
+        典型的修改包括缩短返回延迟、提高
+        加速度限制或禁用安全锁。
         """
         pass
 
     @abc.abstractmethod
     def disable_torque(self, motors: str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Disable torque on selected motors.
+        """禁用所选电机的力矩。
 
-        Disabling Torque allows to write to the motors' permanent memory area (EPROM/EEPROM).
+        禁用力矩后才能写入电机的永久存储区（EPROM/EEPROM）。
 
         Args:
-            motors ( str | list[str] | None, optional): Target motors.  Accepts a motor name, an ID, a
-                list of names or `None` to affect every registered motor.  Defaults to `None`.
-            num_retry (int, optional): Number of additional retry attempts on communication failure.
-                Defaults to 0.
+            motors ( str | list[str] | None, optional): 目标电机。接受电机名称、ID、
+                名称列表，或 `None` 表示作用于所有已注册的电机。默认为 `None`。
+            num_retry (int, optional): 通信失败时的额外重试次数。
+                默认为 0。
         """
         pass
 
@@ -663,25 +662,25 @@ class SerialMotorsBus(MotorsBusBase):
 
     @abc.abstractmethod
     def enable_torque(self, motors: int | str | list[str] | None = None, num_retry: int = 0) -> None:
-        """Enable torque on selected motors.
+        """启用所选电机的力矩。
 
         Args:
-            motors (int | str | list[str] | None, optional): Same semantics as :pymeth:`disable_torque`.
-                Defaults to `None`.
-            num_retry (int, optional): Number of additional retry attempts on communication failure.
-                Defaults to 0.
+            motors (int | str | list[str] | None, optional): 与 :pymeth:`disable_torque` 语义相同。
+                默认为 `None`。
+            num_retry (int, optional): 通信失败时的额外重试次数。
+                默认为 0。
         """
         pass
 
     @contextmanager
     def torque_disabled(self, motors: str | list[str] | None = None):
-        """Context-manager that guarantees torque is re-enabled.
+        """保证力矩会被重新启用的上下文管理器。
 
-        This helper is useful to temporarily disable torque when configuring motors.
+        此辅助方法在临时禁用力矩以配置电机时很有用。
 
         Examples:
             >>> with bus.torque_disabled():
-            ...     # Safe operations here
+            ...     # 在此处执行安全操作
             ...     pass
         """
         self.disable_torque(motors)
@@ -691,31 +690,31 @@ class SerialMotorsBus(MotorsBusBase):
             self.enable_torque(motors)
 
     def set_timeout(self, timeout_ms: int | None = None):
-        """Change the packet timeout used by the SDK.
+        """更改 SDK 使用的数据包超时时间。
 
         Args:
-            timeout_ms (int | None, optional): Timeout in *milliseconds*. If `None` (default) the method falls
-                back to :pyattr:`default_timeout`.
+            timeout_ms (int | None, optional): 超时时间，单位*毫秒*。如果为 `None`（默认），
+                该方法回退到 :pyattr:`default_timeout`。
         """
         timeout_ms = timeout_ms if timeout_ms is not None else self.default_timeout
         self.port_handler.setPacketTimeoutMillis(timeout_ms)
 
     def get_baudrate(self) -> int:
-        """Return the current baud-rate configured on the port.
+        """返回端口当前配置的波特率。
 
         Returns:
-            int: Baud-rate in bits / second.
+            int: 波特率，单位 比特/秒。
         """
         return self.port_handler.getBaudRate()
 
     def set_baudrate(self, baudrate: int) -> None:
-        """Set a new UART baud-rate on the port.
+        """在端口上设置新的 UART 波特率。
 
         Args:
-            baudrate (int): Desired baud-rate in bits / second.
+            baudrate (int): 期望的波特率，单位 比特/秒。
 
         Raises:
-            RuntimeError: The SDK failed to apply the change.
+            RuntimeError: SDK 应用该更改失败。
         """
         present_bus_baudrate = self.port_handler.getBaudRate()
         if present_bus_baudrate != baudrate:
@@ -728,38 +727,38 @@ class SerialMotorsBus(MotorsBusBase):
     @property
     @abc.abstractmethod
     def is_calibrated(self) -> bool:
-        """bool: ``True`` if the cached calibration matches the motors."""
+        """bool: 如果缓存的校准与电机一致则为 ``True``。"""
         pass
 
     @abc.abstractmethod
     def read_calibration(self) -> dict[str, MotorCalibration]:
-        """Read calibration parameters from the motors.
+        """从电机读取校准参数。
 
         Returns:
-            dict[str, MotorCalibration]: Mapping *motor name → calibration*.
+            dict[str, MotorCalibration]: 映射 *电机名称 → 校准数据*。
         """
         pass
 
     @abc.abstractmethod
     def write_calibration(self, calibration_dict: dict[str, MotorCalibration], cache: bool = True) -> None:
-        """Write calibration parameters to the motors and optionally cache them.
+        """向电机写入校准参数，并可选择将其缓存。
 
         Args:
-            calibration_dict (dict[str, MotorCalibration]): Calibration obtained from
-                :pymeth:`read_calibration` or crafted by the user.
-            cache (bool, optional): Save the calibration to :pyattr:`calibration`. Defaults to True.
+            calibration_dict (dict[str, MotorCalibration]): 来自
+                :pymeth:`read_calibration` 或由用户构造的校准数据。
+            cache (bool, optional): 将校准数据保存到 :pyattr:`calibration`。默认为 True。
         """
         pass
 
     def reset_calibration(self, motors: NameOrID | Sequence[NameOrID] | None = None) -> None:
-        """Restore factory calibration for the selected motors.
+        """恢复所选电机的出厂校准。
 
-        Homing offset is set to ``0`` and min/max position limits are set to the full usable range.
-        The in-memory :pyattr:`calibration` is cleared.
+        Homing offset 设为 ``0``，最小/最大位置限制设为完整可用范围。
+        内存中的 :pyattr:`calibration` 会被清空。
 
         Args:
-            motors (NameOrID | Sequence[NameOrID] | None, optional): Selection of motors. `None` (default)
-                resets every motor.
+            motors (NameOrID | Sequence[NameOrID] | None, optional): 电机选择。`None`（默认）
+                重置所有电机。
         """
         motor_names = self._get_motors_list(motors)
 
@@ -775,16 +774,16 @@ class SerialMotorsBus(MotorsBusBase):
     def set_half_turn_homings(
         self, motors: NameOrID | Sequence[NameOrID] | None = None
     ) -> dict[NameOrID, Value]:
-        """Centre each motor range around its current position.
+        """将每个电机的范围居中到其当前位置。
 
-        The function computes and writes a homing offset such that the present position becomes exactly one
-        half-turn (e.g. `2047` on a 12-bit encoder).
+        该函数计算并写入一个 homing offset，使得当前位置恰好为
+        半圈（例如 12 位编码器上的 `2047`）。
 
         Args:
-            motors (NameOrID | list[NameOrID] | None, optional): Motors to adjust. Defaults to all motors (`None`).
+            motors (NameOrID | list[NameOrID] | None, optional): 要调整的电机。默认为所有电机（`None`）。
 
         Returns:
-            dict[str, Value]: Mapping *motor name → written homing offset*.
+            dict[str, Value]: 映射 *电机名称 → 写入的 homing offset*。
         """
         motor_names = self._get_motors_list(motors)
 
@@ -803,19 +802,19 @@ class SerialMotorsBus(MotorsBusBase):
     def record_ranges_of_motion(
         self, motors: NameOrID | Sequence[NameOrID] | None = None, display_values: bool = True
     ) -> tuple[dict[str, Value], dict[str, Value]]:
-        """Interactively record the min/max encoder values of each motor.
+        """以交互方式记录每个电机的最小/最大编码器值。
 
-        Move the joints by hand (with torque disabled) while the method streams live positions. Press
-        :kbd:`Enter` to finish.
+        在力矩禁用的状态下手动移动关节，该方法会实时显示当前位置。按
+        :kbd:`Enter` 键结束。
 
         Args:
-            motors (NameOrID | list[NameOrID] | None, optional): Motors to record.
-                Defaults to every motor (`None`).
-            display_values (bool, optional): When `True` (default) a live table is printed to the console.
+            motors (NameOrID | list[NameOrID] | None, optional): 要记录的电机。
+                默认为所有电机（`None`）。
+            display_values (bool, optional): 为 `True`（默认）时，会在控制台打印实时表格。
 
         Returns:
-            tuple[dict[str, Value], dict[str, Value]]: Two dictionaries *mins* and *maxes* with the
-                extreme values observed for each motor.
+            tuple[dict[str, Value], dict[str, Value]]: 两个字典 *mins* 和 *maxes*，
+                包含每个电机观察到的极值。
         """
         motor_names = self._get_motors_list(motors)
 
@@ -840,9 +839,9 @@ class SerialMotorsBus(MotorsBusBase):
 
             if not user_pressed_enter:
                 if display_values:
-                    # Move cursor up to overwrite the previous output
+                    # 将光标上移以覆盖之前的输出
                     move_cursor_up(len(motor_names) + 3)
-                # Throttle reads even when the live table is disabled.
+                # 即使禁用了实时表格，也要限制读取频率。
                 time.sleep(0.02)
 
         same_min_max = [motor for motor in motor_names if mins[motor] == maxes[motor]]
@@ -920,13 +919,13 @@ class SerialMotorsBus(MotorsBusBase):
 
     def _serialize_data(self, value: int, length: int) -> list[int]:
         """
-        Converts an unsigned integer value into a list of byte-sized integers to be sent via a communication
-        protocol. Depending on the protocol, split values can be in big-endian or little-endian order.
+        将无符号整数值转换为字节大小的整数列表，以便通过通信协议发送。
+        根据协议不同，拆分后的值可以是大端序或小端序。
 
-        Supported data length for both Feetech and Dynamixel:
-            - 1 (for values 0 to 255)
-            - 2 (for values 0 to 65,535)
-            - 4 (for values 0 to 4,294,967,295)
+        Feetech 和 Dynamixel 共同支持的数据长度：
+            - 1（用于 0 到 255 的值）
+            - 2（用于 0 到 65,535 的值）
+            - 4（用于 0 到 4,294,967,295 的值）
         """
         if value < 0:
             raise ValueError(f"Negative values are not allowed: {value}")
@@ -942,20 +941,20 @@ class SerialMotorsBus(MotorsBusBase):
 
     @abc.abstractmethod
     def _split_into_byte_chunks(self, value: int, length: int) -> list[int]:
-        """Convert an integer into a list of byte-sized integers."""
+        """将整数转换为字节大小的整数列表。"""
         pass
 
     def ping(self, motor: NameOrID, num_retry: int = 0, raise_on_error: bool = False) -> int | None:
-        """Ping a single motor and return its model number.
+        """ping 单个电机并返回其型号编号。
 
         Args:
-            motor (NameOrID): Target motor (name or ID).
-            num_retry (int, optional): Extra attempts before giving up. Defaults to `0`.
-            raise_on_error (bool, optional): If `True` communication errors raise exceptions instead of
-                returning `None`. Defaults to `False`.
+            motor (NameOrID): 目标电机（名称或 ID）。
+            num_retry (int, optional): 放弃前的额外尝试次数。默认为 `0`。
+            raise_on_error (bool, optional): 如果为 `True`，通信错误会抛出异常而不是
+                返回 `None`。默认为 `False`。
 
         Returns:
-            int | None: Motor model number or `None` on failure.
+            int | None: 电机型号编号，失败时为 `None`。
         """
         id_ = self._get_motor_id(motor)
         for n_try in range(1 + num_retry):
@@ -979,15 +978,15 @@ class SerialMotorsBus(MotorsBusBase):
 
     @abc.abstractmethod
     def broadcast_ping(self, num_retry: int = 0, raise_on_error: bool = False) -> dict[int, int] | None:
-        """Ping every ID on the bus using the broadcast address.
+        """使用广播地址 ping 总线上的所有 ID。
 
         Args:
-            num_retry (int, optional): Retry attempts.  Defaults to `0`.
-            raise_on_error (bool, optional): When `True` failures raise an exception instead of returning
-                `None`. Defaults to `False`.
+            num_retry (int, optional): 重试次数。默认为 `0`。
+            raise_on_error (bool, optional): 为 `True` 时，失败会抛出异常而不是返回
+                `None`。默认为 `False`。
 
         Returns:
-            dict[int, int] | None: Mapping *id → model number* or `None` if the call failed.
+            dict[int, int] | None: 映射 *id → 型号编号*，调用失败时为 `None`。
         """
         pass
 
@@ -1000,17 +999,17 @@ class SerialMotorsBus(MotorsBusBase):
         normalize: bool = True,
         num_retry: int = 0,
     ) -> Value:
-        """Read a register from a motor.
+        """从电机读取一个寄存器。
 
         Args:
-            data_name (str): Control-table key (e.g. `"Present_Position"`).
-            motor (str): Motor name.
-            normalize (bool, optional): When `True` (default) scale the value to a user-friendly range as
-                defined by the calibration.
-            num_retry (int, optional): Retry attempts.  Defaults to `0`.
+            data_name (str): 控制表键（例如 `"Present_Position"`）。
+            motor (str): 电机名称。
+            normalize (bool, optional): 为 `True`（默认）时，按校准定义
+                将值缩放到用户友好的范围。
+            num_retry (int, optional): 重试次数。默认为 `0`。
 
         Returns:
-            Value: Raw or normalised value depending on *normalize*.
+            Value: 根据 *normalize* 返回原始值或归一化值。
         """
 
         id_ = self.motors[motor].id
@@ -1067,20 +1066,19 @@ class SerialMotorsBus(MotorsBusBase):
     def write(
         self, data_name: str, motor: str, value: Value, *, normalize: bool = True, num_retry: int = 0
     ) -> None:
-        """Write a value to a single motor's register.
+        """向单个电机的寄存器写入一个值。
 
-        Contrary to :pymeth:`sync_write`, this expects a response status packet emitted by the motor, which
-        provides a guarantee that the value was written to the register successfully. In consequence, it is
-        slower than :pymeth:`sync_write` but it is more reliable. It should typically be used when configuring
-        motors.
+        与 :pymeth:`sync_write` 不同，该方法期望电机发出响应状态包，
+        这保证了值已成功写入寄存器。因此，它比 :pymeth:`sync_write` 慢，
+        但更可靠。通常应在配置电机时使用。
 
         Args:
-            data_name (str): Register name.
-            motor (str): Motor name.
-            value (Value): Value to write.  If *normalize* is `True` the value is first converted to raw
-                units.
-            normalize (bool, optional): Enable or disable normalisation. Defaults to `True`.
-            num_retry (int, optional): Retry attempts.  Defaults to `0`.
+            data_name (str): 寄存器名称。
+            motor (str): 电机名称。
+            value (Value): 要写入的值。如果 *normalize* 为 `True`，该值会先转换为
+                原始单位。
+            normalize (bool, optional): 启用或禁用归一化。默认为 `True`。
+            num_retry (int, optional): 重试次数。默认为 `0`。
         """
 
         id_ = self.motors[motor].id
@@ -1133,16 +1131,16 @@ class SerialMotorsBus(MotorsBusBase):
         normalize: bool = True,
         num_retry: int = 0,
     ) -> dict[str, Value]:
-        """Read the same register from several motors at once.
+        """一次从多个电机读取同一个寄存器。
 
         Args:
-            data_name (str): Register name.
-            motors (NameOrID | Sequence[NameOrID] | None, optional): Motors to query. `None` (default) reads every motor.
-            normalize (bool, optional): Normalisation flag.  Defaults to `True`.
-            num_retry (int, optional): Retry attempts.  Defaults to `0`.
+            data_name (str): 寄存器名称。
+            motors (NameOrID | Sequence[NameOrID] | None, optional): 要查询的电机。`None`（默认）读取所有电机。
+            normalize (bool, optional): 归一化标志。默认为 `True`。
+            num_retry (int, optional): 重试次数。默认为 `0`。
 
         Returns:
-            dict[str, Value]: Mapping *motor name → value*.
+            dict[str, Value]: 映射 *电机名称 → 值*。
         """
 
         self._assert_protocol_is_compatible("sync_read")
@@ -1203,10 +1201,9 @@ class SerialMotorsBus(MotorsBusBase):
         for id_ in motor_ids:
             self.sync_reader.addParam(id_)
 
-    # TODO(aliberts, pkooij): Implementing something like this could get even much faster read times if need be.
-    # Would have to handle the logic of checking if a packet has been sent previously though but doable.
-    # This could be at the cost of increase latency between the moment the data is produced by the motors and
-    # the moment it is used by a policy.
+    # TODO(aliberts, pkooij): 如有需要，实现类似下面的逻辑可以获得更快的读取速度。
+    # 不过需要处理检查数据包是否已发送过的逻辑，但这是可行的。
+    # 这样做的代价是会增加从电机产生数据到策略使用数据之间的延迟。
     # def _async_read(self, motor_ids: list[int], address: int, length: int):
     #     if self.sync_reader.start_address != address or self.sync_reader.data_length != length or ...:
     #         self._setup_sync_reader(motor_ids, address, length)
@@ -1226,18 +1223,18 @@ class SerialMotorsBus(MotorsBusBase):
         normalize: bool = True,
         num_retry: int = 0,
     ) -> None:
-        """Write the same register on multiple motors.
+        """向多个电机写入同一个寄存器。
 
-        Contrary to :pymeth:`write`, this *does not* expects a response status packet emitted by the motor, which
-        can allow for lost packets. It is faster than :pymeth:`write` and should typically be used when
-        frequency matters and losing some packets is acceptable (e.g. teleoperation loops).
+        与 :pymeth:`write` 不同，该方法*不*期望电机发出响应状态包，
+        因此可能丢包。它比 :pymeth:`write` 更快，通常应在频率重要且
+        丢失一些数据包可以接受的场景使用（例如遥操作循环）。
 
         Args:
-            data_name (str): Register name.
-            values (Value | dict[str, Value]): Either a single value (applied to every motor) or a mapping
-                *motor name → value*.
-            normalize (bool, optional): If `True` (default) convert values from the user range to raw units.
-            num_retry (int, optional): Retry attempts.  Defaults to `0`.
+            data_name (str): 寄存器名称。
+            values (Value | dict[str, Value]): 单个值（应用于所有电机）或映射
+                *电机名称 → 值*。
+            normalize (bool, optional): 如果为 `True`（默认），将值从用户范围转换为原始单位。
+            num_retry (int, optional): 重试次数。默认为 `0`。
         """
 
         raw_ids_values = self._get_ids_values_dict(values)
@@ -1292,5 +1289,5 @@ class SerialMotorsBus(MotorsBusBase):
             self.sync_writer.addParam(id_, data)
 
 
-# Backward compatibility alias
+# 向后兼容别名
 MotorsBus = SerialMotorsBus

@@ -14,18 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wall-X Mixture-of-Experts additions on top of the native transformers Qwen2.5-VL model.
+"""在 transformers 原生 Qwen2.5-VL 模型之上的 Wall-X 混合专家（Mixture-of-Experts）扩展。
 
-It is rebased on the native ``transformers.models.qwen2_5_vl`` classes and only keeps what Wall-X genuinely adds:
+它基于原生的 ``transformers.models.qwen2_5_vl`` 类进行重构，只保留 Wall-X 真正新增的内容：
 
-- ``BlockSparseMLP`` / ``SparseMoeBlock``: hard-routed (token-type indexed) expert MLPs.
-- ``Qwen2_5_VLDecoderLayer_with_MoE``: native decoder layer whose MLP is replaced by the sparse MoE
-  block and whose forward casts activations to the parameter dtypes (Wall-X keeps the layernorms in
-  float32 while the projections run in bfloat16, see ``to_bfloat16_for_selected_params``).
-- ``Qwen2_5_VLMoEModel``: native text model with MoE decoder layers and a ``moe_token_types``-aware
-  causal-mask override (tokens of type 1 — the action tokens — attend to each other bidirectionally,
-  everything else stays causal).
-- ``Qwen2_5_VLACausalLMOutputWithPast``: output dataclass with the extra Wall-X loss fields.
+- ``BlockSparseMLP`` / ``SparseMoeBlock``：硬路由（按 token 类型索引）的专家 MLP。
+- ``Qwen2_5_VLDecoderLayer_with_MoE``：原生 decoder 层，其 MLP 被替换为稀疏 MoE
+  块，且 forward 会把激活值转换为参数 dtype（Wall-X 将 layernorm 保持在 float32，
+  而投影层在 bfloat16 下运行，参见 ``to_bfloat16_for_selected_params``）。
+- ``Qwen2_5_VLMoEModel``：带有 MoE decoder 层的原生文本模型，以及一个感知
+  ``moe_token_types`` 的因果掩码覆盖（类型为 1 的 token——即动作 token——彼此之间
+  进行双向注意力，其他所有 token 仍保持因果注意力）。
+- ``Qwen2_5_VLACausalLMOutputWithPast``：带有 Wall-X 额外损失字段的输出 dataclass。
 """
 
 from __future__ import annotations
@@ -114,15 +114,15 @@ class SparseMoeBlock(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, experts_indices: torch.Tensor) -> torch.Tensor:
         """
-        Route different hidden_states to corresponding experts for processing.
+        将不同的 hidden_states 路由到相应的专家进行处理。
 
         Args:
-            hidden_states (torch.Tensor): Tensor of shape (batch_size, seq_length, hidden_dim).
-            experts_indices (torch.Tensor): Tensor of shape (batch_size, seq_length),
-                indicating the expert index assigned to each token.
+            hidden_states (torch.Tensor): 形状为 (batch_size, seq_length, hidden_dim) 的张量。
+            experts_indices (torch.Tensor): 形状为 (batch_size, seq_length) 的张量，
+                表示分配给每个 token 的专家索引。
 
         Returns:
-            output (torch.Tensor): Tensor of shape (batch_size, seq_length, hidden_dim).
+            output (torch.Tensor): 形状为 (batch_size, seq_length, hidden_dim) 的张量。
         """
         batch_size, seq_length, hidden_dim = hidden_states.size()
         output = torch.zeros_like(hidden_states)
@@ -143,13 +143,13 @@ class SparseMoeBlock(nn.Module):
 
 
 class Qwen2_5_VLDecoderLayer_with_MoE(Qwen2_5_VLDecoderLayer):  # noqa: N801
-    """Native Qwen2.5-VL decoder layer with an optional hard-routed sparse-MoE MLP.
+    """带可选硬路由稀疏 MoE MLP 的原生 Qwen2.5-VL decoder 层。
 
-    Differences from the native layer forward:
-    - routes the post-attention hidden states through ``SparseMoeBlock`` keyed on ``token_types``
-      when ``config.mlp_moe`` is set;
-    - casts activations to the parameter dtype before each block, since Wall-X runs with float32
-      layernorms and bfloat16 projections in the same module.
+    与原生层 forward 的不同之处：
+    - 当设置了 ``config.mlp_moe`` 时，将注意力后的隐藏状态以 ``token_types`` 为键
+      路由通过 ``SparseMoeBlock``；
+    - 在每个 block 之前将激活值转换为参数 dtype，因为 Wall-X 在同一模块中使用
+      float32 的 layernorm 和 bfloat16 的投影层。
     """
 
     def __init__(self, config: Qwen2_5_VLConfig, layer_idx: int, num_experts: int):
@@ -175,7 +175,7 @@ class Qwen2_5_VLDecoderLayer_with_MoE(Qwen2_5_VLDecoderLayer):  # noqa: N801
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states = hidden_states.to(self.self_attn.q_proj.weight.dtype)
 
-        # Self Attention
+        # 自注意力（Self Attention）
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -187,11 +187,11 @@ class Qwen2_5_VLDecoderLayer_with_MoE(Qwen2_5_VLDecoderLayer):  # noqa: N801
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
+        # 全连接层（Fully Connected）
         residual = hidden_states
         hidden_states = hidden_states.to(self.post_attention_layernorm.weight.dtype)
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.mlp is None:  # using moe mlp
+        if self.mlp is None:  # 使用 moe mlp
             hidden_states = hidden_states.to(self.moe.experts[0].down_proj.weight.dtype)
             hidden_states = self.moe(hidden_states, token_types)
         else:
@@ -203,11 +203,11 @@ class Qwen2_5_VLDecoderLayer_with_MoE(Qwen2_5_VLDecoderLayer):  # noqa: N801
 
 
 class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
-    """Qwen2.5-VL text model with Mixture of Experts (MoE) decoder layers.
+    """带混合专家（MoE）decoder 层的 Qwen2.5-VL 文本模型。
 
-    Extends the native ``Qwen2_5_VLTextModel`` with per-token-type expert routing and a causal-mask
-    override that gives action-token blocks (``moe_token_types == 1``) bidirectional attention among
-    themselves while keeping causal attention everywhere else.
+    在原生 ``Qwen2_5_VLTextModel`` 之上扩展了按 token 类型的专家路由，以及一个因果掩码
+    覆盖：让动作 token 块（``moe_token_types == 1``）内部彼此进行双向注意力，
+    同时其他所有位置仍保持因果注意力。
     """
 
     config_class = Qwen2_5_VLTextConfig
@@ -216,12 +216,11 @@ class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
     def __init__(self, config: Qwen2_5_VLConfig | Qwen2_5_VLTextConfig):
         text_config = config.text_config if isinstance(config, Qwen2_5_VLConfig) else config
         self._require_eager_attention(text_config._attn_implementation)
-        # Transformers selects SDPA automatically when no implementation is
-        # requested. Wall-X's action-token islands require an explicit 4D
-        # mask, so opt into eager before PreTrainedModel performs that choice.
+        # 当未指定实现时，Transformers 会自动选择 SDPA。Wall-X 的动作 token 岛
+        # 需要显式的 4D 掩码，因此在 PreTrainedModel 做出该选择之前先指定 eager。
         text_config._attn_implementation = "eager"
         super().__init__(text_config)
-        # Free the parent-allocated dense layers before replacing them (pi_gemma.py precedent).
+        # 在替换父类分配的稠密层之前先释放它们（pi_gemma.py 的先例）。
         del self.layers
         self.layers = nn.ModuleList(
             [
@@ -229,7 +228,7 @@ class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
                 for layer_idx in range(text_config.num_hidden_layers)
             ]
         )
-        # Initialize weights and apply final processing
+        # 初始化权重并执行最终处理
         self.post_init()
 
     @staticmethod
@@ -248,8 +247,8 @@ class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
         self.embed_tokens = value
 
     @merge_with_config_defaults
-    # ``capture_outputs`` reads output_hidden_states/output_attentions from kwargs and populates
-    # BaseModelOutputWithPast via hooks on the decoder layers and attention modules.
+    # ``capture_outputs`` 会从 kwargs 中读取 output_hidden_states/output_attentions，
+    # 并通过 decoder 层和注意力模块上的 hook 来填充 BaseModelOutputWithPast。
     @capture_outputs
     def forward(
         self,
@@ -292,9 +291,8 @@ class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        # Native Qwen uses a fourth, text-only position-id row to describe
-        # packed sequences. Keep the three multimodal rows for RoPE and pass
-        # the text row to both masking and decoder attention.
+        # 原生 Qwen 使用第四个仅用于文本的位置 ID 行来描述 packed 序列。
+        # 保留三行多模态行用于 RoPE，并把文本行同时传给掩码和 decoder 注意力。
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
@@ -360,11 +358,11 @@ class Qwen2_5_VLMoEModel(Qwen2_5_VLTextModel):  # noqa: N801
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
-        """Align current-step token types with absolute mask indices.
+        """将当前步的 token 类型与绝对掩码索引对齐。
 
-        Generation passes token types only for the new query tokens, while the
-        native mask callbacks receive absolute query/key indices. Cached tokens
-        default to type 0; callers may instead pass full-history token types.
+        生成时只为新的 query token 传入 token 类型，而原生掩码回调接收的是
+        绝对的 query/key 索引。被缓存的 token 默认为类型 0；调用方也可以改为
+        传入完整历史的 token 类型。
         """
         query_length = inputs_embeds.shape[1]
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0

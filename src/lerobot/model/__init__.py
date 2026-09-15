@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Kinematics utilities for robot modeling.
+# 用于机器人建模的运动学工具。
 
 from .kinematics import RobotKinematics as RobotKinematics
 

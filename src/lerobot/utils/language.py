@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dependency-light helpers for the semantic message contract shared by policies."""
+"""供策略共享的语义消息契约的轻量级依赖辅助函数。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from typing import Any
 
 
 def semantic_message_content_text(content: Any) -> str:
-    """Return the text payload from plain or HF-style multimodal message content."""
+    """从纯文本或 HF 风格的多模态消息内容中提取文本载荷。"""
     if isinstance(content, str):
         return content
     if isinstance(content, Sequence) and not isinstance(content, str | bytes):
@@ -43,7 +43,7 @@ def normalize_semantic_messages(
     policy_name: str,
     batch_size: int | None = None,
 ) -> list[list[Mapping[str, Any]]]:
-    """Normalize one conversation or a batch of conversations and validate its shape."""
+    """规范化单个对话或一批对话，并校验其形状。"""
     if not isinstance(messages, Sequence) or isinstance(messages, str | bytes) or not messages:
         raise ValueError(f"{policy_name} text generation requires preprocessed `messages_rendered`.")
 
@@ -71,7 +71,7 @@ def require_single_semantic_conversation(
     *,
     policy_name: str,
 ) -> list[Mapping[str, Any]]:
-    """Return the only semantic conversation expected by the interactive runtime."""
+    """返回交互式运行时所期望的唯一语义对话。"""
     conversations = normalize_semantic_messages(messages, policy_name=policy_name)
     if len(conversations) != 1:
         raise ValueError(
@@ -86,7 +86,7 @@ def join_semantic_message_text(
     role: str | None = None,
     separator: str = "\n",
 ) -> str:
-    """Join non-empty text payloads, optionally selecting one message role."""
+    """拼接非空的文本载荷，可选择只取某一消息角色。"""
     texts = [
         semantic_message_content_text(message.get("content"))
         for message in messages
@@ -100,7 +100,7 @@ def last_semantic_message_text(
     *,
     role: str | None = None,
 ) -> str:
-    """Return the last non-empty semantic-message text for the selected role."""
+    """返回所选角色最后一条非空的语义消息文本。"""
     for message in reversed(messages):
         if role is not None and message.get("role") != role:
             continue
@@ -112,7 +112,7 @@ def last_semantic_message_text(
 
 
 def require_single_text_output(outputs: Sequence[str], *, policy_name: str) -> str:
-    """Validate the single-output interactive contract and strip decoder whitespace."""
+    """校验单输出交互式契约，并去除解码器产生的空白字符。"""
     if len(outputs) != 1:
         raise ValueError(
             f"The interactive runtime expected one {policy_name} text output, got {len(outputs)}."

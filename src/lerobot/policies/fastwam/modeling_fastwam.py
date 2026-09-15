@@ -38,24 +38,24 @@ from .wan import (
 
 
 class FastWAMPolicy(PreTrainedPolicy):
-    """LeRobot policy wrapper for FastWAM.
+    """FastWAM 的 LeRobot 策略封装。
 
-    Attention backend: FastWAM's DiT uses ``torch.nn.functional.scaled_dot_product_attention``
-    (SDPA) for all attention. It does not use FlashAttention, because MoT routing requires
-    arbitrary boolean ``[query, key]`` masks that the FlashAttention varlen API cannot express;
-    installing ``flash-attn`` has no effect on the FastWAM path. (SDPA may still dispatch to
-    PyTorch's own flash/mem-efficient/math kernel internally, unrelated to the ``flash-attn`` package.)
+    注意力后端：FastWAM 的 DiT 对所有注意力均使用
+    ``torch.nn.functional.scaled_dot_product_attention``（SDPA）。它不使用 FlashAttention，
+    因为 MoT 路由需要任意的布尔 ``[query, key]`` 掩码，而 FlashAttention 的 varlen API
+    无法表达；安装 ``flash-attn`` 对 FastWAM 路径没有影响。（SDPA 在内部仍可能调度到
+    PyTorch 自带的 flash/mem-efficient/math 内核，与 ``flash-attn`` 包无关。）
 
     Args:
-        config (FastWAMConfig): FastWAM policy configuration.
-        dataset_stats (dict[str, dict[str, Tensor]] | None): Optional LeRobot
-            dataset statistics passed by the training/evaluation stack.
+        config (FastWAMConfig): FastWAM 策略配置。
+        dataset_stats (dict[str, dict[str, Tensor]] | None): 可选的、由训练/评估
+            栈传入的 LeRobot 数据集统计信息。
     """
 
     config_class = FastWAMConfig
     name = "fastwam"
-    # FSDP2 wrap units: MoTLayer is the single FSDP owner of each layer's expert blocks
-    # (the blocks are re-parented onto it precisely so sharding has one boundary to hook).
+    # FSDP2 包装单元：MoTLayer 是每一层专家块的唯一 FSDP 持有者
+    # （这些块被重新挂到它下面，正是为了让分片只有一个可挂钩的边界）。
     _fsdp_wrap_modules = ["MoTLayer"]
 
     def __init__(
@@ -64,25 +64,25 @@ class FastWAMPolicy(PreTrainedPolicy):
         dataset_stats: dict[str, dict[str, Tensor]] | None = None,
         **kwargs: Any,
     ):
-        # FastWAM's Wan2.2 backbone needs transformers (UMT5 text encoder/tokenizer) and
-        # diffusers (Wan VAE), both behind the `fastwam` extra. Fail fast with an actionable
-        # message in base installs rather than deep in Wan component construction.
+        # FastWAM 的 Wan2.2 主干需要 transformers（UMT5 文本编码器/分词器）和
+        # diffusers（Wan VAE），两者都位于 `fastwam` extra 之后。在基础安装中
+        # 应尽早失败并给出可操作的提示，而不是在 Wan 组件构建深处才报错。
         require_package("transformers", extra="fastwam")
         require_package("diffusers", extra="fastwam")
-        # `make_policy`/`from_pretrained` forward extra kwargs (e.g. `dataset_meta`); the
-        # dataset feature metadata is already applied to `config` by make_policy upstream,
-        # so we accept and ignore them, matching the other LeRobot policies.
+        # `make_policy`/`from_pretrained` 会转发额外的 kwargs（例如 `dataset_meta`）；
+        # 数据集特征元数据已经由上游的 make_policy 应用到 `config` 上，
+        # 因此这里接收并忽略它们，与其他 LeRobot 策略保持一致。
         super().__init__(config, dataset_stats)
         config.validate_features()
         self.config = config
         self.dataset_stats = dataset_stats
         self.model = self._build_core_model(config)
         if config.freeze_video_expert and getattr(self.model, "video_expert", None) is not None:
-            # Freeze the ~5B Wan video expert; get_optim_params filters on requires_grad,
-            # so its params drop out of the optimizer (and DDP skips them).
+            # 冻结约 5B 的 Wan 视频专家；get_optim_params 按 requires_grad 过滤，
+            # 因此它的参数会退出优化器（DDP 也会跳过它们）。
             self.model.video_expert.requires_grad_(False)
-            # The transformer blocks are re-parented onto the MoTLayers (single FSDP owner), so
-            # `video_expert.requires_grad_` no longer reaches them — freeze them via the layers.
+            # transformer 块被重新挂到 MoTLayers 下（单一 FSDP 持有者），因此
+            # `video_expert.requires_grad_` 不再能触达它们——通过各层来冻结。
             mot = getattr(self.model, "mot", None)
             if mot is not None and getattr(mot, "layers", None) is not None:
                 for layer in mot.layers:
@@ -92,16 +92,14 @@ class FastWAMPolicy(PreTrainedPolicy):
 
     @classmethod
     def _load_as_safetensor(cls, model, model_file: str, map_location: str, strict: bool):
-        """Shape-aware load that supports cross-embodiment fine-tuning.
+        """支持跨本体微调的形状感知加载。
 
-        `safetensors.load_model(strict=False)` ignores missing/unexpected keys but
-        still raises on a shape mismatch for a shared key. When fine-tuning from a
-        checkpoint trained on a different embodiment (e.g. the LIBERO 7-DoF / 8-dim
-        checkpoint adapted to a 6-DoF / 6-dim arm), the action encoder/head and
-        proprio encoder legitimately differ in shape. With `strict=False` we drop
-        only those shape-mismatched tensors — leaving them at their freshly
-        initialized values — and load every compatible tensor. With `strict=True`
-        the standard exact-match loader is used.
+        `safetensors.load_model(strict=False)` 会忽略缺失/多余的键，但对于共有键
+        的形状不匹配仍会报错。当从一个在不同本体上训练的 checkpoint 进行微调时
+        （例如把 LIBERO 7-DoF / 8 维的 checkpoint 适配到 6-DoF / 6 维机械臂），
+        动作编码器/头和本体感知编码器的形状合理地存在差异。在 `strict=False` 下，
+        我们只丢弃这些形状不匹配的张量——让它们保持新初始化的值——并加载所有
+        兼容的张量。在 `strict=True` 下则使用标准的精确匹配加载器。
         """
         from safetensors import safe_open
 
@@ -140,9 +138,9 @@ class FastWAMPolicy(PreTrainedPolicy):
         return model
 
     def get_optim_params(self) -> list[Tensor]:
-        # Return the trainable tensors directly (a single param group). The optimizer
-        # builder wraps these in a param group; returning a bare {"params": [...]} dict
-        # instead would make `list(...)` yield the key string "params".
+        # 直接返回可训练的张量（单个参数组）。优化器构建器会把这些张量包装进
+        # 参数组；如果改为返回裸的 {"params": [...]} 字典，`list(...)` 得到的
+        # 将是键字符串 "params"。
         params = (
             list(self.model.dit.parameters()) if hasattr(self.model, "dit") else list(self.model.parameters())
         )
@@ -155,17 +153,16 @@ class FastWAMPolicy(PreTrainedPolicy):
         self._action_queue: deque[Tensor] = deque([], maxlen=self.config.n_action_steps)
 
     def _batch_to_training_sample(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Adapt a standard LeRobot batch to the FastWAM-native sample that
-        `FastWAM.build_inputs` consumes (`video`, `action`, `context`/`context_mask`,
-        per-frame `proprio`).
+        """将标准 LeRobot batch 适配为 `FastWAM.build_inputs` 所消费的
+        FastWAM 原生样本（`video`、`action`、`context`/`context_mask`、
+        逐帧的 `proprio`）。
 
-        The LeRobot training loop passes raw `observation.images.*`, a single-step
-        `observation.state` `[B, D]`, `action`, and a language `task` string. We do
-        only the translation `build_inputs` can't: stack the camera frames into a
-        video, encode the prompt with the (frozen) text encoder (mirroring inference,
-        so language-conditioned datasets need no precomputed context), and give proprio
-        the per-frame axis `build_inputs` indexes. All shape/presence validation is
-        left to `build_inputs`, the single authority on the contract.
+        LeRobot 训练循环传入原始的 `observation.images.*`、单步的
+        `observation.state` `[B, D]`、`action` 和语言 `task` 字符串。我们只做
+        `build_inputs` 无法完成的转换：把相机帧堆叠成视频、用（冻结的）文本编码器
+        编码 prompt（与推理保持一致，因此语言条件数据集无需预计算的 context），
+        并为 proprio 添加 `build_inputs` 索引所需的逐帧轴。所有形状/存在性校验
+        都留给 `build_inputs`——该契约的唯一权威。
         """
         sample = dict(batch)
         if "video" not in sample:
@@ -181,24 +178,24 @@ class FastWAMPolicy(PreTrainedPolicy):
         if self.config.proprio_dim is not None and "proprio" not in sample:
             state = sample.get(OBS_STATE)
             if state is not None:
-                # LeRobot gives a single-step state [B, D]; build_inputs expects
-                # per-frame [B, T, D] and uses frame 0, so add a T=1 axis.
+                # LeRobot 给出单步状态 [B, D]；build_inputs 期望逐帧的
+                # [B, T, D] 并使用第 0 帧，因此添加一个 T=1 的轴。
                 sample["proprio"] = state.unsqueeze(1) if state.ndim == 2 else state
         return sample
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict[str, Any]]:
-        """Compute FastWAM training loss for a LeRobot batch.
+        """为一个 LeRobot batch 计算 FastWAM 训练损失。
 
         Args:
-            batch (dict[str, Tensor]): Batch containing FastWAM-ready keys
-                (`video`, `action`, `context`, `context_mask`) or LeRobot keys
-                that can be adapted (`observation.images.*`, `observation.state`,
-                `action`, `action_is_pad`).
+            batch (dict[str, Tensor]): 包含 FastWAM 就绪键
+                （`video`、`action`、`context`、`context_mask`）或可被适配的
+                LeRobot 键（`observation.images.*`、`observation.state`、
+                `action`、`action_is_pad`）的 batch。
 
         Returns:
-            tuple[Tensor, dict[str, Any]]: The scalar loss to backprop, and a dict of
-            logging metrics (e.g. `loss_video`, `loss_action`) — the `(loss, output_dict)`
-            contract the LeRobot training loop expects.
+            tuple[Tensor, dict[str, Any]]: 用于反向传播的标量损失，以及记录指标
+            （例如 `loss_video`、`loss_action`）的字典——即 LeRobot 训练循环
+            所期望的 `(loss, output_dict)` 契约。
         """
 
         sample = self._batch_to_training_sample(batch)
@@ -207,14 +204,14 @@ class FastWAMPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **_: Any) -> Tensor:
-        """Predict a chunk of actions from the current FastWAM observation.
+        """从当前 FastWAM 观测预测一个动作块。
 
         Args:
-            batch (dict[str, Tensor]): Inference batch with `input_image` or
-                image observation keys, plus `context/context_mask` or `prompt`.
+            batch (dict[str, Tensor]): 包含 `input_image` 或图像观测键，
+                以及 `context/context_mask` 或 `prompt` 的推理 batch。
 
         Returns:
-            Tensor: Action chunk with shape `[B, action_horizon, action_dim]`.
+            Tensor: 形状为 `[B, action_horizon, action_dim]` 的动作块。
         """
 
         self.eval()
@@ -245,15 +242,13 @@ class FastWAMPolicy(PreTrainedPolicy):
         return self._action_queue.popleft()
 
     def _build_core_model(self, config: FastWAMConfig) -> FastWAM:
-        """Build the FastWAM core for training / inference.
+        """构建用于训练/推理的 FastWAM 核心。
 
-        Only the trainable parts (the MoT DiT and the proprio encoder) are
-        materialized empty here and then filled from the policy's
-        `model.safetensors` by the base `from_pretrained`. The *frozen* Wan2.2 VAE
-        and UMT5 text encoder are loaded with their real weights from the
-        `Wan-AI/Wan2.2-TI2V-5B-Diffusers` repo (cached in the HF cache, shared
-        across checkpoints) and are intentionally excluded from `model.safetensors`
-        — see `FastWAM.__init__`. The tokenizer comes from `google/umt5-xxl`.
+        这里只实例化可训练部分（MoT DiT 和本体感知编码器）的空壳，随后由基类的
+        `from_pretrained` 从策略的 `model.safetensors` 填充权重。*冻结的* Wan2.2 VAE
+        和 UMT5 文本编码器从 `Wan-AI/Wan2.2-TI2V-5B-Diffusers` 仓库加载真实权重
+        （缓存在 HF 缓存中，跨 checkpoint 共享），并被有意排除在 `model.safetensors`
+        之外——参见 `FastWAM.__init__`。分词器来自 `google/umt5-xxl`。
         """
         dtype = _dtype_from_name(config.torch_dtype)
         device = config.device
@@ -295,7 +290,7 @@ class FastWAMPolicy(PreTrainedPolicy):
 
 
 def _scalar(value: Any) -> Any:
-    """Unwrap a 0-/1-element tensor (e.g. from DataLoader collation) to a Python scalar."""
+    """将 0 维/单元素张量（例如来自 DataLoader 的 collate）解包为 Python 标量。"""
     return value.item() if isinstance(value, Tensor) else value
 
 
@@ -381,11 +376,11 @@ def batch_device(batch: dict[str, Any]) -> torch.device:
 
 
 def _resize_frames(frames: Tensor, size: tuple[int, int]) -> Tensor:
-    """Resize a frame tensor to `size` (H, W), tolerating a leading temporal/batch stack.
+    """将帧张量 resize 到 `size` (H, W)，容忍前置的时间/批次堆叠维度。
 
-    `interpolate` only accepts a single leading batch dim (`[N, C, H, W]`), but FastWAM camera
-    tensors arrive as `[B, C, H, W]` (live eval) or `[B, T, C, H, W]` (temporal stack), so flatten
-    any leading dims into the batch, resize, then restore. A no-op when already at `size`.
+    `interpolate` 只接受单个前置批次维（`[N, C, H, W]`），但 FastWAM 的相机张量
+    以 `[B, C, H, W]`（实时评估）或 `[B, T, C, H, W]`（时间堆叠）的形式到达，因此
+    把所有前置维度展平进批次维、执行 resize，然后再还原。若已是 `size` 则不做任何操作。
     """
     if tuple(frames.shape[-2:]) == size:
         return frames
@@ -398,20 +393,20 @@ def _resize_frames(frames: Tensor, size: tuple[int, int]) -> Tensor:
 
 
 def _stack_video_from_images(batch: dict[str, Tensor], config: FastWAMConfig) -> Tensor:
-    # Exclude the `*_is_pad` companion tensors that delta-timestamp loading adds alongside
-    # each camera (shape [B, T]); they share the `observation.images.` prefix but are not frames.
+    # 排除 delta-timestamp 加载为每个相机附加的 `*_is_pad` 伴随张量（形状 [B, T]）；
+    # 它们共享 `observation.images.` 前缀，但并不是帧。
     image_keys = sorted(k for k in batch if k.startswith("observation.images.") and not k.endswith("_is_pad"))
     if not image_keys:
         raise KeyError("FastWAM batch must contain `video` or `observation.images.*` keys.")
     per_cam = (int(config.image_size[0]), int(config.image_size[1]) // len(image_keys))
     images = [_resize_frames(batch[key], per_cam) for key in image_keys]
-    # Cameras concatenate along width (last dim) in both the single-frame and temporal case.
+    # 无论是单帧还是时间序列情况，相机都沿宽度（最后一维）拼接。
     image = torch.cat(images, dim=-1) if len(images) > 1 else images[0]
     if image.ndim == 4:
-        # [B, C, H, W]: a single frame (e.g. the live eval observation) -> repeat across time.
+        # [B, C, H, W]：单帧（例如实时评估的观测）-> 沿时间维重复。
         image = image.unsqueeze(2).repeat(1, 1, config.model_video_frames, 1, 1)
     elif image.ndim == 5:
-        # [B, T, C, H, W]: temporal stack from delta-timestamp loading -> [B, C, T, H, W].
+        # [B, T, C, H, W]：来自 delta-timestamp 加载的时间堆叠 -> [B, C, T, H, W]。
         image = image.permute(0, 2, 1, 3, 4)
     else:
         raise ValueError(f"Expected image batch [B,C,H,W] or temporal [B,T,C,H,W], got {tuple(image.shape)}.")
@@ -437,8 +432,8 @@ def _prepare_infer_image(image: Tensor, config: FastWAMConfig) -> Tensor:
     if image.ndim != 4:
         raise ValueError(f"Expected image tensor [B,C,H,W] or [C,H,W], got {tuple(image.shape)}.")
 
-    # Resize to the full configured resolution (no-op when the video path already produced it, but
-    # also covers a directly-supplied `input_image`). The model owns its input resolution — see
-    # `_stack_video_from_images` — so we resize rather than assert on a mismatch.
+    # Resize 到完整配置的分辨率（如果视频路径已经生成了该尺寸则不做任何操作，但
+    # 也覆盖了直接提供的 `input_image`）。模型拥有其输入分辨率的所有权——参见
+    # `_stack_video_from_images`——因此我们在尺寸不匹配时执行 resize 而不是断言。
     target_h, target_w = int(config.image_size[0]), int(config.image_size[1])
     return _resize_frames(image, (target_h, target_w))

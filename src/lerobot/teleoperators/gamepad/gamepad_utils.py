@@ -34,68 +34,68 @@ else:
 
 
 class InputController:
-    """Base class for input controllers that generate motion deltas."""
+    """生成运动增量的输入控制器的基类。"""
 
     def __init__(self, x_step_size=1.0, y_step_size=1.0, z_step_size=1.0):
         """
-        Initialize the controller.
+        初始化控制器。
 
         Args:
-            x_step_size: Base movement step size in meters
-            y_step_size: Base movement step size in meters
-            z_step_size: Base movement step size in meters
+            x_step_size: 基础移动步长，单位为米
+            y_step_size: 基础移动步长，单位为米
+            z_step_size: 基础移动步长，单位为米
         """
         self.x_step_size = x_step_size
         self.y_step_size = y_step_size
         self.z_step_size = z_step_size
         self.running = True
-        self.episode_end_status = None  # None, "success", or "failure"
+        self.episode_end_status = None  # None、"success" 或 "failure"
         self.intervention_flag = False
         self.open_gripper_command = False
         self.close_gripper_command = False
 
     def start(self):
-        """Start the controller and initialize resources."""
+        """启动控制器并初始化资源。"""
         pass
 
     def stop(self):
-        """Stop the controller and release resources."""
+        """停止控制器并释放资源。"""
         pass
 
     def get_deltas(self):
-        """Get the current movement deltas (dx, dy, dz) in meters."""
+        """获取当前运动增量 (dx, dy, dz)，单位为米。"""
         return 0.0, 0.0, 0.0
 
     def update(self):
-        """Update controller state - call this once per frame."""
+        """更新控制器状态 - 每帧调用一次。"""
         pass
 
     def __enter__(self):
-        """Support for use in 'with' statements."""
+        """支持在 'with' 语句中使用。"""
         self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Ensure resources are released when exiting 'with' block."""
+        """确保退出 'with' 代码块时释放资源。"""
         self.stop()
 
     def get_episode_end_status(self):
         """
-        Get the current episode end status.
+        获取当前回合结束状态。
 
         Returns:
-            None if episode should continue, "success" or "failure" otherwise
+            如果回合应继续则为 None，否则为 "success" 或 "failure"
         """
         status = self.episode_end_status
-        self.episode_end_status = None  # Reset after reading
+        self.episode_end_status = None  # 读取后重置
         return status
 
     def should_intervene(self):
-        """Return True if intervention flag was set."""
+        """如果设置了干预标志则返回 True。"""
         return self.intervention_flag
 
     def gripper_command(self):
-        """Return the current gripper command."""
+        """返回当前夹爪命令。"""
         if self.open_gripper_command == self.close_gripper_command:
             return "stay"
         elif self.open_gripper_command:
@@ -105,7 +105,7 @@ class InputController:
 
 
 class KeyboardController(InputController):
-    """Generate motion deltas from keyboard input."""
+    """从键盘输入生成运动增量。"""
 
     def __init__(self, x_step_size=1.0, y_step_size=1.0, z_step_size=1.0):
         super().__init__(x_step_size, y_step_size, z_step_size)
@@ -123,7 +123,7 @@ class KeyboardController(InputController):
         self.listener = None
 
     def start(self):
-        """Start the keyboard listener."""
+        """启动键盘监听器。"""
         if not pynput_can_capture():
             logging.warning(
                 "Keyboard control is unavailable in this environment. pynput cannot capture keys "
@@ -194,12 +194,12 @@ class KeyboardController(InputController):
         print("  ESC: Exit")
 
     def stop(self):
-        """Stop the keyboard listener."""
+        """停止键盘监听器。"""
         if self.listener and self.listener.is_alive():
             self.listener.stop()
 
     def get_deltas(self):
-        """Get the current movement deltas from keyboard state."""
+        """从键盘状态获取当前运动增量。"""
         delta_x = delta_y = delta_z = 0.0
 
         if self.key_states["forward_x"]:
@@ -219,7 +219,7 @@ class KeyboardController(InputController):
 
 
 class GamepadController(InputController):
-    """Generate motion deltas from gamepad input."""
+    """从手柄输入生成运动增量。"""
 
     def __init__(self, x_step_size=1.0, y_step_size=1.0, z_step_size=1.0, deadzone=0.1):
         require_package("pygame", extra="gamepad")
@@ -229,7 +229,7 @@ class GamepadController(InputController):
         self.intervention_flag = False
 
     def start(self):
-        """Initialize pygame and the gamepad."""
+        """初始化 pygame 和手柄。"""
         pygame.init()
         pygame.joystick.init()
 
@@ -251,7 +251,7 @@ class GamepadController(InputController):
         print("  X/Square button: Rerecord episode")
 
     def stop(self):
-        """Clean up pygame resources."""
+        """清理 pygame 资源。"""
         if pygame.joystick.get_init():
             if self.joystick:
                 self.joystick.quit()
@@ -259,27 +259,27 @@ class GamepadController(InputController):
         pygame.quit()
 
     def update(self):
-        """Process pygame events to get fresh gamepad readings."""
+        """处理 pygame 事件以获取最新的手柄读数。"""
         for event in pygame.event.get():
             if event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 3:
                     self.episode_end_status = TeleopEvents.SUCCESS
-                # A button (1) for failure
+                # A 键 (1) 表示失败
                 elif event.button == 1:
                     self.episode_end_status = TeleopEvents.FAILURE
-                # X button (0) for rerecord
+                # X 键 (0) 表示重新录制
                 elif event.button == 0:
                     self.episode_end_status = TeleopEvents.RERECORD_EPISODE
 
-                # RB button (6) for closing gripper
+                # RB 键 (6) 用于闭合夹爪
                 elif event.button == 6:
                     self.close_gripper_command = True
 
-                # LT button (7) for opening gripper
+                # LT 键 (7) 用于张开夹爪
                 elif event.button == 7:
                     self.open_gripper_command = True
 
-            # Reset episode status on button release
+            # 松开按键时重置回合状态
             elif event.type == pygame.JOYBUTTONUP:
                 if event.button in [0, 2, 3]:
                     self.episode_end_status = None
@@ -290,32 +290,32 @@ class GamepadController(InputController):
                 elif event.button == 7:
                     self.open_gripper_command = False
 
-            # Check for RB button (typically button 5) for intervention flag
+            # 检查 RB 键（通常为按键 5）以设置干预标志
             if self.joystick.get_button(5):
                 self.intervention_flag = True
             else:
                 self.intervention_flag = False
 
     def get_deltas(self):
-        """Get the current movement deltas from gamepad state."""
+        """从手柄状态获取当前运动增量。"""
         try:
-            # Read joystick axes
-            # Left stick X and Y (typically axes 0 and 1)
-            y_input = self.joystick.get_axis(0)  # Up/Down (often inverted)
-            x_input = self.joystick.get_axis(1)  # Left/Right
+            # 读取摇杆轴
+            # 左摇杆 X 和 Y（通常为轴 0 和 1）
+            y_input = self.joystick.get_axis(0)  # 上/下（通常反向）
+            x_input = self.joystick.get_axis(1)  # 左/右
 
-            # Right stick Y (typically axis 3 or 4)
-            z_input = self.joystick.get_axis(3)  # Up/Down for Z
+            # 右摇杆 Y（通常为轴 3 或 4）
+            z_input = self.joystick.get_axis(3)  # Z 轴上/下
 
-            # Apply deadzone to avoid drift
+            # 应用死区以避免漂移
             x_input = 0 if abs(x_input) < self.deadzone else x_input
             y_input = 0 if abs(y_input) < self.deadzone else y_input
             z_input = 0 if abs(z_input) < self.deadzone else z_input
 
-            # Calculate deltas (note: may need to invert axes depending on controller)
-            delta_x = -x_input * self.x_step_size  # Forward/backward
-            delta_y = -y_input * self.y_step_size  # Left/right
-            delta_z = -z_input * self.z_step_size  # Up/down
+            # 计算增量（注意：可能需要根据手柄反转轴）
+            delta_x = -x_input * self.x_step_size  # 前/后
+            delta_y = -y_input * self.y_step_size  # 左/右
+            delta_z = -z_input * self.z_step_size  # 上/下
 
             return delta_x, delta_y, delta_z
 
@@ -325,7 +325,7 @@ class GamepadController(InputController):
 
 
 class GamepadControllerHID(InputController):
-    """Generate motion deltas from gamepad input using HIDAPI."""
+    """使用 HIDAPI 从手柄输入生成运动增量。"""
 
     def __init__(
         self,
@@ -335,12 +335,12 @@ class GamepadControllerHID(InputController):
         deadzone=0.1,
     ):
         """
-        Initialize the HID gamepad controller.
+        初始化 HID 手柄控制器。
 
         Args:
-            step_size: Base movement step size in meters
-            z_scale: Scaling factor for Z-axis movement
-            deadzone: Joystick deadzone to prevent drift
+            step_size: 基础移动步长，单位为米
+            z_scale: Z 轴移动的缩放系数
+            deadzone: 摇杆死区，用于防止漂移
         """
         require_package("hidapi", extra="gamepad", import_name="hid")
         super().__init__(x_step_size, y_step_size, z_step_size)
@@ -348,17 +348,17 @@ class GamepadControllerHID(InputController):
         self.device = None
         self.device_info = None
 
-        # Movement values (normalized from -1.0 to 1.0)
+        # 运动值（归一化到 -1.0 至 1.0）
         self.left_x = 0.0
         self.left_y = 0.0
         self.right_x = 0.0
         self.right_y = 0.0
 
-        # Button states
+        # 按键状态
         self.buttons = {}
 
     def find_device(self):
-        """Look for the gamepad device by vendor and product ID."""
+        """按厂商和产品 ID 查找手柄设备。"""
         devices = hid.enumerate()
         for device in devices:
             device_name = device["product_string"]
@@ -371,7 +371,7 @@ class GamepadControllerHID(InputController):
         return None
 
     def start(self):
-        """Connect to the gamepad using HIDAPI."""
+        """使用 HIDAPI 连接手柄。"""
         self.device_info = self.find_device()
         if not self.device_info:
             self.running = False
@@ -400,57 +400,57 @@ class GamepadControllerHID(InputController):
             self.running = False
 
     def stop(self):
-        """Close the HID device connection."""
+        """关闭 HID 设备连接。"""
         if self.device:
             self.device.close()
             self.device = None
 
     def update(self):
         """
-        Read and process the latest gamepad data.
-        Due to an issue with the HIDAPI, we need to read the read the device several times in order to get a stable reading
+        读取并处理最新的手柄数据。
+        由于 HIDAPI 存在问题，需要多次读取设备才能获得稳定的读数
         """
         for _ in range(10):
             self._update()
 
     def _update(self):
-        """Read and process the latest gamepad data."""
+        """读取并处理最新的手柄数据。"""
         if not self.device or not self.running:
             return
 
         try:
-            # Read data from the gamepad
+            # 从手柄读取数据
             data = self.device.read(64)
-            # Interpret gamepad data - this will vary by controller model
-            # These offsets are for the Logitech RumblePad 2
+            # 解析手柄数据 - 这会因手柄型号而异
+            # 这些偏移量适用于 Logitech RumblePad 2
             if data and len(data) >= 8:
-                # Normalize joystick values from 0-255 to -1.0-1.0
+                # 将摇杆值从 0-255 归一化到 -1.0-1.0
                 self.left_y = (data[1] - 128) / 128.0
                 self.left_x = (data[2] - 128) / 128.0
                 self.right_x = (data[3] - 128) / 128.0
                 self.right_y = (data[4] - 128) / 128.0
 
-                # Apply deadzone
+                # 应用死区
                 self.left_y = 0 if abs(self.left_y) < self.deadzone else self.left_y
                 self.left_x = 0 if abs(self.left_x) < self.deadzone else self.left_x
                 self.right_x = 0 if abs(self.right_x) < self.deadzone else self.right_x
                 self.right_y = 0 if abs(self.right_y) < self.deadzone else self.right_y
 
-                # Parse button states (byte 5 in the Logitech RumblePad 2)
+                # 解析按键状态（Logitech RumblePad 2 的第 5 字节）
                 buttons = data[5]
 
-                # Check if RB is pressed then the intervention flag should be set
+                # 检查 RB 是否被按下，若是则应设置干预标志
                 self.intervention_flag = data[6] in [2, 6, 10, 14]
 
-                # Check if RT is pressed
+                # 检查 RT 是否被按下
                 self.open_gripper_command = data[6] in [8, 10, 12]
 
-                # Check if LT is pressed
+                # 检查 LT 是否被按下
                 self.close_gripper_command = data[6] in [4, 6, 12]
 
-                # Check if Y/Triangle button (bit 7) is pressed for saving
-                # Check if X/Square button (bit 5) is pressed for failure
-                # Check if A/Cross button (bit 4) is pressed for rerecording
+                # 检查 Y/三角键（第 7 位）是否被按下以保存
+                # 检查 X/方块键（第 5 位）是否被按下以标记失败
+                # 检查 A/叉键（第 4 位）是否被按下以重新录制
                 if buttons & 1 << 7:
                     self.episode_end_status = TeleopEvents.SUCCESS
                 elif buttons & 1 << 5:
@@ -464,10 +464,10 @@ class GamepadControllerHID(InputController):
             logging.error(f"Error reading from gamepad: {e}")
 
     def get_deltas(self):
-        """Get the current movement deltas from gamepad state."""
-        # Calculate deltas - invert as needed based on controller orientation
-        delta_x = -self.left_x * self.x_step_size  # Forward/backward
-        delta_y = -self.left_y * self.y_step_size  # Left/right
-        delta_z = -self.right_y * self.z_step_size  # Up/down
+        """从手柄状态获取当前运动增量。"""
+        # 计算增量 - 根据手柄方向按需反转
+        delta_x = -self.left_x * self.x_step_size  # 前/后
+        delta_y = -self.left_y * self.y_step_size  # 左/右
+        delta_z = -self.right_y * self.z_step_size  # 上/下
 
         return delta_x, delta_y, delta_z

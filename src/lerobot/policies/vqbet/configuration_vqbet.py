@@ -25,61 +25,59 @@ from lerobot.optim import AdamConfig, VQBeTSchedulerConfig
 @PreTrainedConfig.register_subclass("vqbet")
 @dataclass
 class VQBeTConfig(PreTrainedConfig):
-    """Configuration class for VQ-BeT.
+    """VQ-BeT 的配置类。
 
-    Defaults are configured for training with PushT providing proprioceptive and single camera observations.
+    默认值是针对使用 PushT（提供本体感知和单相机观测）训练而配置的。
 
-    The parameters you will most likely need to change are the ones which depend on the environment / sensors.
-    Those are: `input_features` and `output_features`.
+    你最可能需要修改的参数是那些依赖于环境 / 传感器的参数，
+    即：`input_features` 和 `output_features`。
 
-    Notes on the inputs and outputs:
-        - "observation.state" is required as an input key.
-        - At least one key starting with "observation.image is required as an input.
-        - If there are multiple keys beginning with "observation.image" they are treated as multiple camera
-          views. Right now we only support all images having the same shape.
-        - "action" is required as an output key.
+    关于输入和输出的说明：
+        - 必须以 "observation.state" 作为输入键。
+        - 至少需要一个以 "observation.image" 开头的键作为输入。
+        - 如果有多个以 "observation.image" 开头的键，它们会被视为多个相机
+          视角。目前我们只支持所有图像具有相同形状。
+        - 必须以 "action" 作为输出键。
 
     Args:
-        n_obs_steps: Number of environment steps worth of observations to pass to the policy (takes the
-            current step and additional steps going back).
-        n_action_pred_token: Total number of current token and future tokens that VQ-BeT predicts.
-        action_chunk_size: Action chunk size of each action prediction token.
-        input_features: A dictionary defining the PolicyFeature of the input data for the policy. The key represents
-            the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        output_features: A dictionary defining the PolicyFeature of the output data for the policy. The key represents
-            the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
-        normalization_mapping: A dictionary that maps from a str value of FeatureType (e.g., "STATE", "VISUAL") to
-            a corresponding NormalizationMode (e.g., NormalizationMode.MIN_MAX)
-        vision_backbone: Name of the torchvision resnet backbone to use for encoding images.
-        crop_shape: (H, W) shape to crop images to as a preprocessing step for the vision backbone. Must fit
-            within the image size. If None, no cropping is done.
-        crop_is_random: Whether the crop should be random at training time (it's always a center crop in eval
-            mode).
-        pretrained_backbone_weights: Pretrained weights from torchvision to initialize the backbone.
-            `None` means no pretrained weights.
-        use_group_norm: Whether to replace batch normalization with group normalization in the backbone.
-            The group sizes are set to be about 16 (to be precise, feature_dim // 16).
-        spatial_softmax_num_keypoints: Number of keypoints for SpatialSoftmax.
-        n_vqvae_training_steps: Number of optimization steps for training Residual VQ.
-        vqvae_n_embed: Number of embedding vectors in the RVQ dictionary (each layer).
-        vqvae_embedding_dim: Dimension of each embedding vector in the RVQ dictionary.
-        vqvae_enc_hidden_dim: Size of hidden dimensions of Encoder / Decoder part of Residaul VQ-VAE
-        gpt_block_size: Max block size of minGPT (should be larger than the number of input tokens)
-        gpt_input_dim: Size of output input of GPT. This is also used as the dimension of observation features.
-        gpt_output_dim: Size of output dimension of GPT. This is also used as a input dimension of offset / bin prediction headers.
-        gpt_n_layer: Number of layers of GPT
-        gpt_n_head: Number of headers of GPT
-        gpt_hidden_dim: Size of hidden dimensions of GPT
-        dropout: Dropout rate for GPT
-        offset_loss_weight:  A constant that is multiplied to the offset loss
-        primary_code_loss_weight: A constant that is multiplied to the primary code prediction loss
-        secondary_code_loss_weight: A constant that is multiplied to the secondary code prediction loss
-        bet_softmax_temperature: Sampling temperature of code for rollout with VQ-BeT
-        sequentially_select: Whether select code of primary / secondary as sequentially (pick primary code,
-            and then select secodnary code), or at the same time.
+        n_obs_steps: 传给策略的观测所覆盖的环境步数（包含当前步以及向前回溯的若干步）。
+        n_action_pred_token: VQ-BeT 预测的当前 token 和未来 token 的总数。
+        action_chunk_size: 每个动作预测 token 对应的动作块大小。
+        input_features: 定义策略输入数据 PolicyFeature 的字典。键表示输入数据名称，值为
+            PolicyFeature，由 FeatureType 和 shape 属性组成。
+        output_features: 定义策略输出数据 PolicyFeature 的字典。键表示输出数据名称，值为
+            PolicyFeature，由 FeatureType 和 shape 属性组成。
+        normalization_mapping: 将 FeatureType 的 str 值（例如 "STATE"、"VISUAL"）映射到
+            相应 NormalizationMode（例如 NormalizationMode.MIN_MAX）的字典。
+        vision_backbone: 用于编码图像的 torchvision resnet 主干网络名称。
+        crop_shape: 作为视觉主干预处理步骤、将图像裁剪成的 (H, W) 形状。必须能容纳在
+            图像尺寸之内。如果为 None，则不进行裁剪。
+        crop_is_random: 训练时裁剪是否随机（评估模式下始终为中心裁剪）。
+        pretrained_backbone_weights: 用于初始化主干网络的 torchvision 预训练权重。
+            `None` 表示不使用预训练权重。
+        use_group_norm: 是否在主干网络中用 group normalization 替换 batch normalization。
+            group 大小设置为约 16（准确地说是 feature_dim // 16）。
+        spatial_softmax_num_keypoints: SpatialSoftmax 的关键点数量。
+        n_vqvae_training_steps: 训练 Residual VQ 的优化步数。
+        vqvae_n_embed: RVQ 码本中嵌入向量的数量（每一层）。
+        vqvae_embedding_dim: RVQ 码本中每个嵌入向量的维度。
+        vqvae_enc_hidden_dim: Residual VQ-VAE 编码器 / 解码器部分隐藏层维度的大小。
+        gpt_block_size: minGPT 的最大块大小（应大于输入 token 的数量）。
+        gpt_input_dim: GPT 输入维度的大小。这也用作观测特征的维度。
+        gpt_output_dim: GPT 输出维度的大小。这也用作 offset / bin 预测头的输入维度。
+        gpt_n_layer: GPT 的层数。
+        gpt_n_head: GPT 的注意力头数。
+        gpt_hidden_dim: GPT 隐藏层维度的大小。
+        dropout: GPT 的 dropout 率。
+        offset_loss_weight: 与 offset 损失相乘的常数。
+        primary_code_loss_weight: 与主码（primary code）预测损失相乘的常数。
+        secondary_code_loss_weight: 与次码（secondary code）预测损失相乘的常数。
+        bet_softmax_temperature: 使用 VQ-BeT 进行 rollout 时代码采样的温度。
+        sequentially_select: 主码 / 次码是顺序选择（先选主码，再选次码），
+            还是同时选择。
     """
 
-    # Inputs / output structure.
+    # 输入 / 输出结构。
     n_obs_steps: int = 5
     n_action_pred_token: int = 3
     action_chunk_size: int = 5
@@ -92,8 +90,8 @@ class VQBeTConfig(PreTrainedConfig):
         }
     )
 
-    # Architecture / modeling.
-    # Vision backbone.
+    # 架构 / 建模。
+    # 视觉主干网络。
     vision_backbone: str = "resnet18"
     crop_shape: tuple[int, int] | None = (84, 84)
     crop_is_random: bool = True
@@ -119,7 +117,7 @@ class VQBeTConfig(PreTrainedConfig):
     bet_softmax_temperature: float = 0.1
     sequentially_select: bool = False
 
-    # Training presets
+    # 训练预设
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple = (0.95, 0.999)
     optimizer_eps: float = 1e-8
@@ -152,7 +150,7 @@ class VQBeTConfig(PreTrainedConfig):
         )
 
     def validate_features(self) -> None:
-        # Note: this check was previously performed inside VQBeTRgbEncoder in the form of
+        # 注意：该检查以前在 VQBeTRgbEncoder 内部以下面的断言形式执行：
         # assert len(image_keys) == 1
         if not len(self.image_features) == 1:
             raise ValueError("You must provide only one image among the inputs.")
@@ -166,7 +164,7 @@ class VQBeTConfig(PreTrainedConfig):
                         f"`{key}`."
                     )
 
-        # Check that all input images have the same shape.
+        # 检查所有输入图像是否具有相同的形状。
         first_image_key, first_image_ft = next(iter(self.image_features.items()))
         for key, image_ft in self.image_features.items():
             if image_ft.shape != first_image_ft.shape:

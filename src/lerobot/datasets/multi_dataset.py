@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 
 
 class MultiLeRobotDataset(torch.utils.data.Dataset):
-    """A dataset consisting of multiple underlying `LeRobotDataset`s.
+    """由多个底层 `LeRobotDataset` 组成的数据集。
 
-    The underlying `LeRobotDataset`s are effectively concatenated, and this class adopts much of the API
-    structure of `LeRobotDataset`.
+    底层的多个 `LeRobotDataset` 实际上是被拼接在一起的，该类沿用了 `LeRobotDataset` 的大部分 API
+    结构。
     """
 
     def __init__(
@@ -55,8 +55,8 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
         self.repo_ids = repo_ids
         self.root = Path(root) if root else HF_LEROBOT_HOME
         self.tolerances_s = tolerances_s if tolerances_s else dict.fromkeys(repo_ids, 0.0001)
-        # Construct the underlying datasets passing everything but `transform` and `delta_timestamps` which
-        # are handled by this class.
+        # 构造底层数据集时传入除 `transform` 和 `delta_timestamps` 之外的所有参数，
+        # 这两项由本类处理。
         self._datasets = [
             LeRobotDataset(
                 repo_id,
@@ -72,9 +72,9 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
             for repo_id in repo_ids
         ]
 
-        # Disable any data keys that are not common across all of the datasets. Note: we may relax this
-        # restriction in future iterations of this class. For now, this is necessary at least for being able
-        # to use PyTorch's default DataLoader collate function.
+        # 禁用并非所有数据集共有的数据键。注意：我们可能会在该类的后续版本中放宽这一
+        # 限制。目前，至少为了能使用 PyTorch 默认的 DataLoader collate 函数，
+        # 这样做是必要的。
         self.disabled_features = set()
         intersection_features = set(self._datasets[0].features)
         for ds in self._datasets:
@@ -94,14 +94,14 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
                 self.disabled_features.update(extra_keys)
 
         self.delta_timestamps = delta_timestamps
-        # TODO(rcadene, aliberts): We should not perform this aggregation for datasets
-        # with multiple robots of different ranges. Instead we should have one normalization
-        # per robot.
+        # TODO(rcadene, aliberts): 对于包含多个不同取值范围的机器人的数据集，
+        # 我们不应执行这种聚合。相反，应该为每个机器人
+        # 单独做一次归一化。
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self._datasets])
         self.set_image_transforms(image_transforms)
 
     def set_image_transforms(self, image_transforms: Callable | None) -> None:
-        """Replace the transform for this dataset and its children."""
+        """替换本数据集及其子数据集的 transform。"""
         if image_transforms is not None and not callable(image_transforms):
             raise TypeError("image_transforms must be callable or None.")
         self.image_transforms = image_transforms
@@ -109,32 +109,32 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
             dataset.set_image_transforms(self.image_transforms)
 
     def clear_image_transforms(self) -> None:
-        """Remove the transform from this dataset and its children."""
+        """移除本数据集及其子数据集的 transform。"""
         self.set_image_transforms(None)
 
     @property
     def repo_id_to_index(self):
-        """Return a mapping from dataset repo_id to a dataset index automatically created by this class.
+        """返回从数据集 repo_id 到本类自动创建的数据集索引的映射。
 
-        This index is incorporated as a data key in the dictionary returned by `__getitem__`.
+        该索引会作为一个数据键并入 `__getitem__` 返回的字典中。
         """
         return {repo_id: i for i, repo_id in enumerate(self.repo_ids)}
 
     @property
     def fps(self) -> int:
-        """Frames per second used during data collection.
+        """数据采集时使用的每秒帧数。
 
-        NOTE: Fow now, this relies on a check in __init__ to make sure all sub-datasets have the same info.
+        注意：目前这依赖于 __init__ 中的检查，以确保所有子数据集具有相同的信息。
         """
         return self._datasets[0].meta.info.fps
 
     @property
     def video(self) -> bool:
-        """Returns True if this dataset loads video frames from mp4 files.
+        """如果该数据集从 mp4 文件加载视频帧，则返回 True。
 
-        Returns False if it only loads images from png files.
+        如果只从 png 文件加载图像，则返回 False。
 
-        NOTE: Fow now, this relies on a check in __init__ to make sure all sub-datasets have the same info.
+        注意：目前这依赖于 __init__ 中的检查，以确保所有子数据集具有相同的信息。
         """
         return len(self._datasets[0].meta.video_keys) > 0
 
@@ -153,7 +153,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
 
     @property
     def camera_keys(self) -> list[str]:
-        """Keys to access image and video stream from cameras."""
+        """用于访问相机图像和视频流的键。"""
         keys = []
         for key, feats in self.features.items():
             if isinstance(feats, (datasets.Image | VideoFrame)):
@@ -162,11 +162,11 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
 
     @property
     def video_frame_keys(self) -> list[str]:
-        """Keys to access video frames that requires to be decoded into images.
+        """需要解码为图像才能访问的视频帧的键。
 
-        Note: It is empty if the dataset contains images only,
-        or equal to `self.cameras` if the dataset contains videos only,
-        or can even be a subset of `self.cameras` in a case of a mixed image/video dataset.
+        注意：如果数据集只包含图像，则为空；
+        如果数据集只包含视频，则等于 `self.cameras`；
+        在图像/视频混合数据集的情况下，甚至可以是 `self.cameras` 的子集。
         """
         video_frame_keys = []
         for key, feats in self.features.items():
@@ -176,21 +176,20 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
 
     @property
     def num_frames(self) -> int:
-        """Number of samples/frames."""
+        """样本/帧的数量。"""
         return sum(d.num_frames for d in self._datasets)
 
     @property
     def num_episodes(self) -> int:
-        """Number of episodes."""
+        """episode 的数量。"""
         return sum(d.num_episodes for d in self._datasets)
 
     @property
     def tolerance_s(self) -> float:
-        """Tolerance in seconds used to discard loaded frames when their timestamps
-        are not close enough from the requested frames. It is only used when `delta_timestamps`
-        is provided or when loading video frames from mp4 files.
+        """当加载帧的时间戳与请求帧不够接近时，用于丢弃这些帧的容差（以秒为单位）。
+        仅在提供了 `delta_timestamps` 或从 mp4 文件加载视频帧时使用。
         """
-        # 1e-4 to account for possible numerical error
+        # 1e-4 用于考虑可能出现的数值误差
         return 1 / self.fps - 1e-4
 
     def __len__(self):
@@ -199,7 +198,7 @@ class MultiLeRobotDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         if idx >= len(self):
             raise IndexError(f"Index {idx} out of bounds.")
-        # Determine which dataset to get an item from based on the index.
+        # 根据索引确定要从哪个数据集获取元素。
         start_idx = 0
         dataset_idx = 0
         for dataset in self._datasets:

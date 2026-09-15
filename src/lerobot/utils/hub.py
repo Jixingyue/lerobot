@@ -25,30 +25,30 @@ from .constants import CHECKPOINTS_DIR
 T = TypeVar("T", bound="HubMixin")
 
 
-# Sharded-training resume artifacts (torch DCP shard dirs + shard files). Published model repos
-# carry safetensors only, so publishing uploads exclude these — checkpoint pushes (which exist
-# for resume, not distribution) deliberately do not.
+# 分片训练的恢复制品（torch DCP 分片目录 + 分片文件）。已发布的模型仓库
+# 只携带 safetensors，因此发布时的上传会排除这些内容——而检查点推送
+# （其存在是为了恢复，而非分发）则有意不排除。
 def find_latest_hub_checkpoint(
     repo_id: str,
     *,
     token: str | bool | None = None,
     revision: str | None = None,
 ) -> str | None:
-    """Repo-relative path of the most recent checkpoint in a training repo.
+    """训练仓库中最新检查点的、相对于仓库根目录的路径。
 
-    Training runs push checkpoints to ``checkpoints/<step>/`` (see
-    ``push_checkpoint_to_hub``). This lists those step dirs and returns
-    ``checkpoints/<highest-step>``, or ``None`` if the repo has no checkpoints.
+    训练运行会将检查点推送到 ``checkpoints/<step>/``（参见
+    ``push_checkpoint_to_hub``）。此函数列出这些步数目录并返回
+    ``checkpoints/<最高步数>``；如果仓库中没有检查点则返回 ``None``。
 
-    Args:
-        repo_id (str): The Hub model repo to inspect.
-        token (str | bool | None): Hub authentication token. Defaults to None (the token
-            cached by `huggingface-cli login`).
-        revision (str | None): Repo revision to list. Defaults to None (the default branch).
+    参数:
+        repo_id (str): 要检查的 Hub 模型仓库。
+        token (str | bool | None): Hub 认证令牌。默认为 None（即
+            `huggingface-cli login` 缓存的令牌）。
+        revision (str | None): 要列出的仓库修订版本。默认为 None（默认分支）。
 
-    Returns:
-        str | None: The repo-relative path `checkpoints/<highest-step>`, or None if the repo
-            has no checkpoints.
+    返回:
+        str | None：相对于仓库的路径 `checkpoints/<最高步数>`；如果仓库
+            没有检查点则为 None。
     """
     files = HfApi().list_repo_files(repo_id=repo_id, repo_type="model", revision=revision, token=token)
     prefix = f"{CHECKPOINTS_DIR}/"
@@ -62,12 +62,12 @@ def find_latest_hub_checkpoint(
 
 class HubMixin:
     """
-    A Mixin containing the functionality to push an object to the hub.
+    一个 Mixin，包含将对象推送到 hub 的功能。
 
-    This is similar to huggingface_hub.ModelHubMixin but is lighter and makes less assumptions about its
-    subclasses (in particular, the fact that it's not necessarily a model).
+    这类似于 huggingface_hub.ModelHubMixin，但更轻量，对其子类的假设更少
+    （尤其是，它不一定是一个模型）。
 
-    The inheriting classes must implement '_save_pretrained' and 'from_pretrained'.
+    继承类必须实现 '_save_pretrained' 和 'from_pretrained'。
     """
 
     def save_pretrained(
@@ -80,43 +80,44 @@ class HubMixin:
         **push_to_hub_kwargs,
     ) -> str | None:
         """
-        Save object in local directory.
+        将对象保存到本地目录。
 
-        Args:
-            save_directory (`str` or `Path`):
-                Path to directory in which the object will be saved.
-            push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your object to the Huggingface Hub after saving it.
-            repo_id (`str`, *optional*):
-                ID of your repository on the Hub. Used only if `push_to_hub=True`. Will default to the folder name if
-                not provided.
-            card_kwargs (`Dict[str, Any]`, *optional*):
-                Additional arguments passed to the card template to customize the card.
+        参数:
+            save_directory (`str` 或 `Path`):
+                保存该对象的目录路径。
+            push_to_hub (`bool`，*可选*，默认为 `False`):
+                是否在保存后将对象推送到 Huggingface Hub。
+            repo_id (`str`，*可选*):
+                你在 Hub 上的仓库 ID。仅在 `push_to_hub=True` 时使用。若未
+                提供，将默认使用文件夹名称。
+            card_kwargs (`Dict[str, Any]`，*可选*):
+                传递给卡片模板以自定义卡片的附加参数。
             push_to_hub_kwargs:
-                Additional key word arguments passed along to the [`~HubMixin.push_to_hub`] method.
-        Returns:
-            `str` or `None`: url of the commit on the Hub if `push_to_hub=True`, `None` otherwise.
+                传递给 [`~HubMixin.push_to_hub`] 方法的附加关键字参数。
+        返回:
+            `str` 或 `None`：当 `push_to_hub=True` 时为 Hub 上提交的 url，
+            否则为 `None`。
         """
         save_directory = Path(save_directory)
         save_directory.mkdir(parents=True, exist_ok=True)
 
-        # save object (weights, files, etc.)
+        # 保存对象（权重、文件等）
         self._save_pretrained(save_directory)
 
-        # push to the Hub if required
+        # 如有需要，推送到 Hub
         if push_to_hub:
             if repo_id is None:
-                repo_id = save_directory.name  # Defaults to `save_directory` name
+                repo_id = save_directory.name  # 默认为 `save_directory` 的名称
             return self.push_to_hub(repo_id=repo_id, card_kwargs=card_kwargs, **push_to_hub_kwargs)
         return None
 
     def _save_pretrained(self, save_directory: Path) -> None:
         """
-        Overwrite this method in subclass to define how to save your object.
+        在子类中重写此方法，以定义如何保存你的对象。
 
-        Args:
-            save_directory (`str` or `Path`):
-                Path to directory in which the object files will be saved.
+        参数:
+            save_directory (`str` 或 `Path`):
+                保存该对象文件的目录路径。
         """
         raise NotImplementedError
 
@@ -136,30 +137,30 @@ class HubMixin:
         **kwargs,
     ) -> T:
         """
-        Download the object from the Huggingface Hub and instantiate it.
+        从 Huggingface Hub 下载该对象并实例化它。
 
-        Args:
-            pretrained_name_or_path (`str`, `Path`):
-                - Either the `repo_id` (string) of the object hosted on the Hub, e.g. `lerobot/diffusion_pusht`.
-                - Or a path to a `directory` containing the object files saved using `.save_pretrained`,
-                    e.g., `../path/to/my_model_directory/`.
-            revision (`str`, *optional*):
-                Revision on the Hub. Can be a branch name, a git tag or any commit id.
-                Defaults to the latest commit on `main` branch.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether to force (re-)downloading the files from the Hub, overriding the existing cache.
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on every request.
-            token (`str` or `bool`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. By default, it will use the token
-                cached when running `huggingface-cli login`.
-            cache_dir (`str`, `Path`, *optional*):
-                Path to the folder where cached files are stored.
-            local_files_only (`bool`, *optional*, defaults to `False`):
-                If `True`, avoid downloading the file and return the path to the local cached file if it exists.
-            kwargs (`Dict`, *optional*):
-                Additional kwargs to pass to the object during initialization.
+        参数:
+            pretrained_name_or_path (`str`、`Path`):
+                - 可以是托管在 Hub 上的对象的 `repo_id`（字符串），例如 `lerobot/diffusion_pusht`。
+                - 也可以是一个 `directory` 的路径，其中包含通过 `.save_pretrained`
+                    保存的对象文件，例如 `../path/to/my_model_directory/`。
+            revision (`str`，*可选*):
+                Hub 上的修订版本。可以是分支名、git 标签或任意提交 id。
+                默认为 `main` 分支上的最新提交。
+            force_download (`bool`，*可选*，默认为 `False`):
+                是否强制从 Hub（重新）下载文件，覆盖现有缓存。
+            proxies (`Dict[str, str]`，*可选*):
+                按协议或端点使用的代理服务器字典，例如 `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`。每次请求都会使用这些代理。
+            token (`str` 或 `bool`，*可选*):
+                用作远程文件 HTTP bearer 授权的令牌。默认使用运行
+                `huggingface-cli login` 时缓存的令牌。
+            cache_dir (`str`、`Path`，*可选*):
+                缓存文件的存储文件夹路径。
+            local_files_only (`bool`，*可选*，默认为 `False`):
+                若为 `True`，则避免下载文件；如果本地缓存文件存在，则返回其路径。
+            kwargs (`Dict`，*可选*):
+                初始化对象时传递给它的附加 kwargs。
         """
         raise NotImplementedError
 
@@ -179,52 +180,52 @@ class HubMixin:
         card_kwargs: dict[str, Any] | None = None,
     ) -> str | None:
         """
-        Upload model checkpoint to the Hub.
+        将模型检查点上传到 Hub。
 
-        Use `allow_patterns` and `ignore_patterns` to precisely filter which files should be pushed to the hub. Use
-        `delete_patterns` to delete existing remote files in the same commit. See [`upload_folder`] reference for more
-        details.
+        使用 `allow_patterns` 和 `ignore_patterns` 可以精确筛选哪些文件应被推送到 hub。使用
+        `delete_patterns` 可以在同一次提交中删除已有的远程文件。更多细节请参见
+        [`upload_folder`] 参考文档。
 
-        Distributed contract: call on EVERY rank. `save_pretrained` runs on all ranks — for
-        sharded objects it can contain a collective gather (rank-gating it would deadlock) —
-        while repo creation and the upload happen on the main process only.
+        分布式约定：在每个 rank 上都调用。`save_pretrained` 在所有 rank 上
+        运行——对于分片对象，它可能包含一次集合 gather（若用 rank 门控会导致死锁）——
+        而仓库创建和上传只在主进程上进行。
 
-        Args:
+        参数:
             repo_id (`str`):
-                ID of the repository to push to (example: `"username/my-model"`).
-            commit_message (`str`, *optional*):
-                Message to commit while pushing.
-            private (`bool`, *optional*):
-                Whether the repository created should be private.
-                If `None` (default), the repo will be public unless the organization's default is private.
-            token (`str`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. By default, it will use the token
-                cached when running `huggingface-cli login`.
-            branch (`str`, *optional*):
-                The git branch on which to push the model. This defaults to `"main"`.
-            create_pr (`boolean`, *optional*):
-                Whether or not to create a Pull Request from `branch` with that commit. Defaults to `False`.
-            allow_patterns (`List[str]` or `str`, *optional*):
-                If provided, only files matching at least one pattern are pushed.
-            ignore_patterns (`List[str]` or `str`, *optional*):
-                If provided, files matching any of the patterns are not pushed.
-            delete_patterns (`List[str]` or `str`, *optional*):
-                If provided, remote files matching any of the patterns will be deleted from the repo.
-            card_kwargs (`Dict[str, Any]`, *optional*):
-                Additional arguments passed to the card template to customize the card.
+                要推送到的仓库 ID（例如：`"username/my-model"`）。
+            commit_message (`str`，*可选*):
+                推送时提交的信息。
+            private (`bool`，*可选*):
+                创建的仓库是否为私有。
+                若为 `None`（默认），仓库将是公开的，除非组织默认设为私有。
+            token (`str`，*可选*):
+                用作远程文件 HTTP bearer 授权的令牌。默认使用运行
+                `huggingface-cli login` 时缓存的令牌。
+            branch (`str`，*可选*):
+                推送模型所使用的 git 分支。默认为 `"main"`。
+            create_pr (`boolean`，*可选*):
+                是否从 `branch` 针对该提交创建 Pull Request。默认为 `False`。
+            allow_patterns (`List[str]` 或 `str`，*可选*):
+                若提供，则只推送至少匹配其中一个模式的文件。
+            ignore_patterns (`List[str]` 或 `str`，*可选*):
+                若提供，则匹配任一模式的文件不会被推送。
+            delete_patterns (`List[str]` 或 `str`，*可选*):
+                若提供，匹配任一模式的远程文件将从仓库中删除。
+            card_kwargs (`Dict[str, Any]`，*可选*):
+                传递给卡片模板以自定义卡片的附加参数。
 
-        Returns:
-            `str` or `None`: The url of the commit of your object in the given repository, or
-            `None` on non-main ranks of a distributed run (only the main process uploads).
+        返回:
+            `str` 或 `None`：你的对象在给定仓库中的提交 url；
+            在分布式运行的非主 rank 上为 `None`（只有主进程上传）。
         """
-        # Lazy import: hub code must not import the distributed package at module load
-        # (configs -> hub is on the import path of lerobot.distributed itself).
+        # 懒导入：hub 代码在模块加载时不得导入 distributed 包
+        # （configs -> hub 本身就位于 lerobot.distributed 的导入路径上）。
         from lerobot.distributed.utils import is_main_process
 
-        # Distributed contract: `save_pretrained` runs on EVERY rank — for sharded policies it
-        # contains a collective gather (rank-gating it would deadlock) and it writes into this
-        # rank's private tmpdir only on the main process. Repo creation and upload are then
-        # main-process-only.
+        # 分布式约定：`save_pretrained` 在每个 rank 上运行——对于分片策略，
+        # 它包含一次集合 gather（用 rank 门控会导致死锁），并且只有
+        # 主进程会写入该 rank 的私有临时目录。仓库创建和上传则
+        # 仅限主进程。
         if commit_message is None:
             if "Policy" in self.__class__.__name__:
                 commit_message = "Upload policy"

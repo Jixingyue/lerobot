@@ -35,23 +35,23 @@ def make_tdmpc_pre_post_processors(
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
     """
-    Constructs pre-processor and post-processor pipelines for the TDMPC policy.
+    为 TDMPC 策略构建预处理器和后处理器流水线。
 
-    The pre-processing pipeline prepares input data for the model by:
-    1. Renaming features to match pretrained configurations.
-    2. Normalizing input and output features based on dataset statistics.
-    3. Adding a batch dimension.
-    4. Moving all data to the specified device.
+    预处理流水线通过以下步骤为模型准备输入数据：
+    1. 重命名特征，以与预训练配置保持一致。
+    2. 根据数据集统计信息对输入和输出特征进行归一化。
+    3. 添加批次维度。
+    4. 将所有数据移动到指定设备。
 
-    The post-processing pipeline handles the model's output by:
-    1. Moving data to the CPU.
-    2. Unnormalizing the output features to their original scale.
+    后处理器流水线通过以下步骤处理模型输出：
+    1. 将数据移动到 CPU。
+    2. 将输出特征反归一化回原始尺度。
 
     Args:
-        config: The configuration object for the TDMPC policy.
-        dataset_stats: A dictionary of statistics for normalization.
+        config: TDMPC 策略的配置对象。
+        dataset_stats: 用于归一化的统计信息字典。
 
     Returns:
-        A tuple containing the configured pre-processor and post-processor pipelines.
+        一个元组，包含配置好的预处理器和后处理器流水线。
     """
     return make_default_pre_post_processors(config, dataset_stats)
