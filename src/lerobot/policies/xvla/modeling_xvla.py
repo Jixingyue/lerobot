@@ -444,7 +444,7 @@ class XVLAPolicy(PreTrainedPolicy):
         import safetensors.torch
 
         # 第 1 步：加载 config
-        # TODO: jadechoghari, fix this
+        # TODO: jadechoghari，修复这个问题
         if config is None:
             config = PreTrainedConfig.from_pretrained(
                 pretrained_name_or_path=pretrained_name_or_path,

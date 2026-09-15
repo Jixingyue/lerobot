@@ -247,13 +247,13 @@ class SubtaskTransformer(nn.Module):
 
     def _stage_to_dmodel(self, stage_prior: torch.Tensor) -> torch.Tensor:
         """
-        Deterministic projection of one-hot stage to d_model by pad/truncate.
+        通过对 one-hot 阶段进行填充/截断，确定性地投影到 d_model。
 
         Args:
-            stage_prior: One-hot stage embedding (B, 1, T, C)
+            stage_prior: one-hot 阶段嵌入 (B, 1, T, C)
 
         Returns:
-            Projected stage embedding (B, 1, T, d_model)
+            投影后的阶段嵌入 (B, 1, T, d_model)
         """
         B, one, T, C = stage_prior.shape  # noqa: N806
         D = self.d_model  # noqa: N806
@@ -275,18 +275,18 @@ class SubtaskTransformer(nn.Module):
         scheme: str = "sparse",  # "sparse" or "dense"
     ) -> torch.Tensor:
         """
-        Forward pass for subtask progress regression.
+        子任务进度回归的前向传播。
 
         Args:
-            img_seq: Image embeddings (B, N, T, vis_emb_dim)
-            lang_emb: Language embeddings (B, E) or (B, T, E)
-            state: State features (B, T, state_dim)
-            lengths: Valid sequence lengths (B,) for masking
-            stage_prior: One-hot stage prior (B, 1, T, num_classes)
-            scheme: "sparse" or "dense" for head selection
+            img_seq: 图像嵌入 (B, N, T, vis_emb_dim)
+            lang_emb: 语言嵌入 (B, E) 或 (B, T, E)
+            state: 状态特征 (B, T, state_dim)
+            lengths: 用于掩码的有效序列长度 (B,)
+            stage_prior: one-hot 阶段先验 (B, 1, T, num_classes)
+            scheme: 用于选择回归头的 "sparse" 或 "dense"
 
         Returns:
-            Tau predictions (B, T) in [0, 1] via sigmoid
+            通过 sigmoid 得到的 tau 预测 (B, T)，取值于 [0, 1]
         """
         assert scheme in self.heads, f"Unknown scheme '{scheme}'. Use one of {list(self.heads.keys())}."
 
@@ -294,58 +294,58 @@ class SubtaskTransformer(nn.Module):
         D = self.d_model  # noqa: N806
         device = img_seq.device
 
-        # Project inputs
+        # 投影各输入
         vis_proj = self.visual_proj(img_seq)  # (B, N, T, D)
         state_proj = self.state_proj(state).unsqueeze(1)  # (B, 1, T, D)
         lang_proj = self._prep_lang(lang_emb, B, T, D)  # (B, 1, T, D)
         stage_emb = self._stage_to_dmodel(stage_prior)  # (B, 1, T, D)
 
-        # Concatenate all streams
+        # 拼接所有流
         # cameras + lang + state + stage_emb -> (B, N+3, T, D)
         x = torch.cat([vis_proj, lang_proj, state_proj, stage_emb], dim=1)
 
-        # Add positional bias to first visual frame
+        # 为第一个视觉帧加上位置偏置
         x[:, :N, 0, :] = x[:, :N, 0, :] + self.first_pos
 
-        # Flatten to tokens
+        # 展平为 token
         x_tokens = x.view(B, (N + 3) * T, D)
         L = x_tokens.size(1)  # noqa: N806
 
-        # Create padding mask
+        # 创建 padding 掩码
         base_mask = torch.arange(T, device=device).expand(B, T) >= lengths.unsqueeze(1)
         mask = base_mask.unsqueeze(1).expand(B, N + 3, T).reshape(B, (N + 3) * T)
 
-        # Create causal mask
+        # 创建因果掩码
         causal_mask = torch.triu(torch.ones(L, L, device=device, dtype=torch.bool), diagonal=1)
 
         # 编码
         h = self.transformer(x_tokens, mask=causal_mask, src_key_padding_mask=mask, is_causal=True)
 
-        # Reshape and fuse
+        # 重塑形状并融合
         h = h.view(B, N + 3, T, D)
         h_flat = h.permute(0, 2, 1, 3).reshape(B, T, (N + 3) * D)
         fused = self.fusion_backbone(h_flat)  # (B, T, D)
 
-        # Scheme-specific regression head -> sigmoid
+        # 对应 scheme 的回归头 -> sigmoid
         r = torch.sigmoid(self.heads[scheme](fused)).squeeze(-1)  # (B, T)
         return r
 
 
 def gen_stage_emb(num_classes: int, targets: torch.Tensor) -> torch.Tensor:
     """
-    Generate one-hot stage embeddings from targets.
+    根据 targets 生成 one-hot 阶段嵌入。
 
     Args:
-        num_classes: Number of stage classes
-        targets: Target values (B, T) where integer part is stage index
+        num_classes: 阶段类别数
+        targets: 目标值 (B, T)，其整数部分为阶段索引
 
     Returns:
-        One-hot stage embedding (B, 1, T, num_classes)
+        one-hot 阶段嵌入 (B, 1, T, num_classes)
     """
-    # Integer part of float targets -> [0, C-1]
+    # 浮点 targets 的整数部分 -> [0, C-1]
     idx = targets.long().clamp(min=0, max=num_classes - 1)  # (B, T)
     C = num_classes  # noqa: N806
-    # Identity-lookup one-hot
+    # 通过单位矩阵查表得到 one-hot
     stage_onehot = torch.eye(C, device=targets.device)[idx]  # (B, T, C)
     stage_onehot = stage_onehot.unsqueeze(1)  # (B, 1, T, C)
     return stage_onehot
@@ -353,13 +353,13 @@ def gen_stage_emb(num_classes: int, targets: torch.Tensor) -> torch.Tensor:
 
 class SARMRewardModel(PreTrainedRewardModel):
     """
-    SARM Reward Model for stage-aware task completion rewards.
+    用于阶段感知任务完成奖励的 SARM 奖励模型。
 
-    Uses two separate transformer models:
-    - StageTransformer: Classifies which stage/subtask
-    - SubtaskTransformer: Predicts within-stage progress (tau)
+    使用两个独立的 transformer 模型：
+    - StageTransformer：分类当前处于哪个阶段/子任务
+    - SubtaskTransformer：预测阶段内进度（tau）
 
-    Training uses 75%/25% GT/predicted stage conditioning (teacher forcing).
+    训练采用 75%/25% 的 GT/预测阶段条件（teacher forcing）。
     """
 
     name = "sarm"
@@ -374,13 +374,13 @@ class SARMRewardModel(PreTrainedRewardModel):
             config.device if config.device else "cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        # Load temporal proportions based on annotation_mode
+        # 根据 annotation_mode 加载时间占比
         if config.annotation_mode == "single_stage":
             logging.info(f"Using single_stage mode: sparse_subtask_names={config.sparse_subtask_names}")
         elif dataset_meta is not None:
             self._load_temporal_proportions(dataset_meta)
 
-        # Create two separate models
+        # 创建两个独立的模型
         self.stage_model = StageTransformer(
             d_model=config.hidden_dim,
             vis_emb_dim=config.image_dim,
@@ -389,7 +389,7 @@ class SARMRewardModel(PreTrainedRewardModel):
             n_layers=config.num_layers,
             n_heads=config.num_heads,
             dropout=config.dropout,
-            num_cameras=1,  # Single camera for now
+            num_cameras=1,  # 暂时使用单相机
             num_classes_sparse=config.num_sparse_stages,
             num_classes_dense=config.num_dense_stages or config.num_sparse_stages,
         )
@@ -408,7 +408,7 @@ class SARMRewardModel(PreTrainedRewardModel):
         self.stage_model.to(self.device)
         self.subtask_model.to(self.device)
 
-        # GT/predicted stage ratio for teacher forcing
+        # 用于 teacher forcing 的 GT/预测阶段比例
         self.gt_stage_ratio = 0.75
 
         if config.uses_dual_heads:
@@ -422,7 +422,7 @@ class SARMRewardModel(PreTrainedRewardModel):
         logging.info(f"SARM initialized on {self.device}")
 
     def _load_proportions_from_json(self, path, annotation_type: str) -> tuple[list[str], list[float]]:
-        """Load temporal proportions from a JSON file (preserving order)."""
+        """从 JSON 文件加载时间占比（保留顺序）。"""
         if not path.exists():
             raise ValueError(
                 f"{annotation_type.capitalize()} temporal proportions not found at {path}. "
@@ -436,7 +436,7 @@ class SARMRewardModel(PreTrainedRewardModel):
         return names, [proportions_dict[name] for name in names]
 
     def _load_temporal_proportions(self, dataset_meta) -> None:
-        """Load temporal proportions based on annotation_mode."""
+        """根据 annotation_mode 加载时间占比。"""
         meta_path = dataset_meta.root / "meta"
 
         if self.config.annotation_mode == "dual":
@@ -462,7 +462,7 @@ class SARMRewardModel(PreTrainedRewardModel):
                 logging.info(f"Using auto-generated sparse 'task' stage: {self.config.sparse_subtask_names}")
 
     def to(self, device):
-        """Override to method to ensure all components move together."""
+        """重写 to 方法，确保所有组件一起迁移。"""
         super().to(device)
         self.device = device if isinstance(device, torch.device) else torch.device(device)
         self.stage_model.to(device)
@@ -470,12 +470,12 @@ class SARMRewardModel(PreTrainedRewardModel):
         return self
 
     def compute_reward(self, batch: dict[str, Tensor]) -> Tensor:
-        """Compute dense progress reward in [0, 1] from batch.
+        """从 batch 计算取值于 [0, 1] 的稠密进度奖励。
 
-        Expects batch to contain:
-        - "observation_features" or video embeddings: (B, T, 512)
-        - "language_embedding" or text embeddings: (B, 512)
-        - optionally "observation.state": (B, T, state_dim)
+        要求 batch 包含：
+        - "observation_features" 或 video 嵌入：(B, T, 512)
+        - "language_embedding" 或 text 嵌入：(B, 512)
+        - 可选的 "observation.state"：(B, T, state_dim)
         """
         text_emb = batch.get("language_embedding", batch.get("text_features"))
         video_emb = batch.get("observation_features", batch.get("video_features"))
@@ -500,25 +500,25 @@ class SARMRewardModel(PreTrainedRewardModel):
         frame_index: int | None = None,
     ) -> np.ndarray | tuple:
         """
-        Calculate rewards for given text, video, and state representations.
+        为给定的 text、video 和 state 表示计算奖励。
 
-        This is the canonical method for SARM reward computation, used for:
-        - Inference/visualization
-        - RA-BC weight computation
+        这是 SARM 奖励计算的规范方法，用于：
+        - 推理/可视化
+        - RA-BC 权重计算
 
         Args:
-            text_embeddings: Encoded text representations (batch_size, 512)
-            video_embeddings: Encoded video representations (batch_size, num_frames, 512)
-            state_features: Joint state features (batch_size, num_frames, state_dim)
-            lengths: Valid sequence lengths (batch_size,)
-            return_all_frames: If True, return rewards for all frames
-            return_stages: If True, also return stage predictions
-            return_confidence: If True, also return stage confidence
-            head_mode: Which head to use ("sparse" or "dense")
-            frame_index: Index of the target frame to extract (default: n_obs_steps).
+            text_embeddings: 编码后的 text 表示 (batch_size, 512)
+            video_embeddings: 编码后的 video 表示 (batch_size, num_frames, 512)
+            state_features: 关节状态特征 (batch_size, num_frames, state_dim)
+            lengths: 有效序列长度 (batch_size,)
+            return_all_frames: 若为 True，返回所有帧的奖励
+            return_stages: 若为 True，同时返回阶段预测
+            return_confidence: 若为 True，同时返回阶段置信度
+            head_mode: 使用哪个回归头（"sparse" 或 "dense"）
+            frame_index: 要提取的目标帧索引（默认：n_obs_steps）。
 
         Returns:
-            Rewards and optionally stage probs/confidence.
+            奖励，以及可选的阶段 probs/置信度。
         """
         if isinstance(text_embeddings, np.ndarray):
             text_embeddings = torch.tensor(text_embeddings, dtype=torch.float32)
@@ -527,7 +527,7 @@ class SARMRewardModel(PreTrainedRewardModel):
         if state_features is not None and isinstance(state_features, np.ndarray):
             state_features = torch.tensor(state_features, dtype=torch.float32)
 
-        # Handle single sample case
+        # 处理单样本情况
         if text_embeddings.dim() == 1:
             text_embeddings = text_embeddings.unsqueeze(0)
             video_embeddings = video_embeddings.unsqueeze(0)
@@ -542,14 +542,14 @@ class SARMRewardModel(PreTrainedRewardModel):
 
         scheme = head_mode
 
-        # Default lengths if not provided
+        # 若未提供则使用默认 lengths
         if lengths is None:
             lengths = torch.full((batch_size,), seq_len, dtype=torch.int32)
         elif isinstance(lengths, np.ndarray):
             lengths = torch.tensor(lengths, dtype=torch.int32)
 
-        # Reshape video to (B, N, T, D) for multi-camera format
-        # Currently single camera: (B, T, D) -> (B, 1, T, D)
+        # 将 video 重塑为 (B, N, T, D) 以适配多相机格式
+        # 当前为单相机：(B, T, D) -> (B, 1, T, D)
         img_seq = video_embeddings.unsqueeze(1).to(self.device)
         lang_emb = text_embeddings.to(self.device)
         state = (
@@ -559,29 +559,29 @@ class SARMRewardModel(PreTrainedRewardModel):
         )
         lens = lengths.to(self.device)
 
-        # Pad state to max_state_dim
+        # 将 state 填充到 max_state_dim
         state = pad_state_to_max_dim(state, self.config.max_state_dim)
 
-        # Get num_classes for this scheme
+        # 获取此 scheme 的 num_classes
         num_classes = self.config.num_sparse_stages if scheme == "sparse" else self.config.num_dense_stages
 
-        # Run stage model
+        # 运行阶段模型
         stage_logits = self.stage_model(img_seq, lang_emb, state, lens, scheme=scheme)
         stage_probs = F.softmax(stage_logits, dim=-1)  # (B, T, num_classes)
         stage_idx = stage_probs.argmax(dim=-1)  # (B, T)
         stage_conf = stage_probs.gather(-1, stage_idx.unsqueeze(-1)).squeeze(-1)  # (B, T)
 
-        # Create one-hot stage prior
+        # 创建 one-hot 阶段先验
         stage_onehot = F.one_hot(stage_idx, num_classes=num_classes).float()  # (B, T, C)
         stage_emb = stage_onehot.unsqueeze(1)  # (B, 1, T, C)
 
-        # Run subtask model
+        # 运行子任务模型
         tau_pred = self.subtask_model(img_seq, lang_emb, state, lens, stage_emb, scheme=scheme)
 
-        # Compute final reward: stage + tau
+        # 计算最终奖励：stage + tau
         raw_reward = stage_idx.float() + tau_pred  # (B, T)
 
-        # Normalize to [0, 1] using temporal proportions for proper weighting
+        # 使用时间占比归一化到 [0, 1] 以进行正确加权
         if scheme == "sparse":
             normalized_reward = normalize_stage_tau(
                 raw_reward,
@@ -597,11 +597,11 @@ class SARMRewardModel(PreTrainedRewardModel):
                 subtask_names=self.config.dense_subtask_names,
             )
 
-        # Default frame index is n_obs_steps (last observation frame)
+        # 默认帧索引为 n_obs_steps（最后一个观测帧）
         if frame_index is None:
             frame_index = self.config.n_obs_steps
 
-        # Prepare outputs (batch mode or no smoothing)
+        # 准备输出（批处理模式或不平滑）
         if return_all_frames:
             rewards = normalized_reward.cpu().numpy()
         else:
@@ -625,28 +625,28 @@ class SARMRewardModel(PreTrainedRewardModel):
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
     def train(self, mode: bool = True):
-        """Set training mode for both models."""
+        """为两个模型设置训练模式。"""
         super().train(mode)
         self.stage_model.train(mode)
         self.subtask_model.train(mode)
         return self
 
     def eval(self):
-        """Set evaluation mode for both models."""
+        """为两个模型设置评估模式。"""
         return self.train(False)
 
     def parameters(self):
-        """Override to return trainable parameters from both models."""
+        """重写以返回两个模型的可训练参数。"""
         from itertools import chain
 
         return chain(self.stage_model.parameters(), self.subtask_model.parameters())
 
     def get_optim_params(self):
-        """Override to return optimizer parameters from both models."""
+        """重写以返回两个模型的优化器参数。"""
         return self.parameters()
 
     def reset(self):
-        """SARM has no episode-level state to reset."""
+        """SARM 没有需要重置的 episode 级状态。"""
         pass
 
     def _train_step(
@@ -659,46 +659,46 @@ class SARMRewardModel(PreTrainedRewardModel):
         scheme: str,
     ) -> dict[str, torch.Tensor]:
         """
-        Single training step for one annotation scheme.
+        针对一种标注方案的单步训练。
 
-        Implements 75%/25% GT/predicted stage conditioning.
+        实现 75%/25% 的 GT/预测阶段条件。
 
         Args:
-            img_emb: Image embeddings (B, N, T, D)
-            lang_emb: Language embeddings
-            state: State features
-            lengths: Valid sequence lengths
-            targets: Target values where floor=stage, remainder=tau
-            scheme: "sparse" or "dense"
+            img_emb: 图像嵌入 (B, N, T, D)
+            lang_emb: 语言嵌入
+            state: 状态特征
+            lengths: 有效序列长度
+            targets: 目标值，其中 floor=stage，余数=tau
+            scheme: "sparse" 或 "dense"
 
         Returns:
-            Dict with stage_loss, subtask_loss, total_loss
+            包含 stage_loss、subtask_loss、total_loss 的字典
         """
         num_classes = self.config.num_sparse_stages if scheme == "sparse" else self.config.num_dense_stages
 
-        # Ground truth: stage (integer) and tau (fractional)
-        # Clamp stage indices to valid range [0, num_classes-1] to handle edge cases
-        # where targets may exceed expected range (e.g., frames between subtasks)
+        # 真值：stage（整数）与 tau（小数）
+        # 将阶段索引鈐制到有效范围 [0, num_classes-1]，以处理 targets
+        # 可能超出预期范围的边界情况（例如子任务之间的帧）
         gt_stage = torch.floor(targets).long().clamp(0, num_classes - 1)  # (B, T)
         gt_tau = torch.remainder(targets, 1.0)  # (B, T)
 
-        # Run stage model
+        # 运行阶段模型
         stage_pred = self.stage_model(img_emb, lang_emb, state, lengths, scheme=scheme)
 
-        # 75%/25% GT/predicted stage conditioning
+        # 75%/25% 的 GT/预测阶段条件
         if random.random() < self.gt_stage_ratio:
-            # Mode 1: Use ground truth stage -> one-hot
+            # 模式 1：使用真值阶段 -> one-hot
             stage_emb = gen_stage_emb(num_classes, targets)  # (B, 1, T, C)
         else:
-            # Mode 2: Use predicted stage argmax -> one-hot
+            # 模式 2：使用预测阶段的 argmax -> one-hot
             stage_idx = stage_pred.argmax(dim=-1)  # (B, T)
             stage_onehot = F.one_hot(stage_idx, num_classes=num_classes).float()  # (B, T, C)
             stage_emb = stage_onehot.unsqueeze(1)  # (B, 1, T, C)
 
-        # Run subtask model with stage prior
+        # 使用阶段先验运行子任务模型
         tau_pred = self.subtask_model(img_emb, lang_emb, state, lengths, stage_emb, scheme=scheme)
 
-        # Compute losses
+        # 计算损失
         stage_loss = F.cross_entropy(stage_pred.view(-1, num_classes), gt_stage.view(-1), reduction="mean")
         subtask_loss = F.mse_loss(tau_pred, gt_tau, reduction="mean")
 
@@ -710,29 +710,29 @@ class SARMRewardModel(PreTrainedRewardModel):
 
     def forward(self, batch):
         """
-        Forward pass for SARM reward model training.
+        SARM 奖励模型训练的前向传播。
 
-        Uses stage+tau target format where:
-        - Integer part = stage index
-        - Fractional part = within-stage progress (tau)
+        使用 stage+tau 目标格式，其中：
+        - 整数部分 = 阶段索引
+        - 小数部分 = 阶段内进度（tau）
 
-        Training uses 75%/25% GT/predicted stage conditioning.
+        训练采用 75%/25% 的 GT/预测阶段条件。
 
         Args:
-            batch: Dictionary with 'observation' containing:
-                - 'video_features': (B, T, 512) pre-encoded video features
-                - 'text_features': (B, 512) or (B, T, 512) text features
-                - 'state_features': (B, T, state_dim) joint state features
-                - 'lengths': (B,) valid sequence lengths
-                - 'sparse_targets': (B, T) sparse targets (stage.tau format)
-                - 'dense_targets': (B, T) dense targets (optional, for dual mode)
+            batch: 带有 'observation' 的字典，其中包含：
+                - 'video_features': (B, T, 512) 预编码的 video 特征
+                - 'text_features': (B, 512) 或 (B, T, 512) 的 text 特征
+                - 'state_features': (B, T, state_dim) 的关节状态特征
+                - 'lengths': (B,) 的有效序列长度
+                - 'sparse_targets': (B, T) 的稀疏目标（stage.tau 格式）
+                - 'dense_targets': (B, T) 的稠密目标（可选，用于 dual 模式）
 
         Returns:
-            Tuple of (total_loss, output_dict with loss components)
+            (total_loss, 包含各损失分量的 output_dict) 组成的元组
         """
         observation = batch.get(OBS_STR, batch)
 
-        # Extract features
+        # 提取特征
         video_features = observation["video_features"].to(self.device)
         text_features = observation["text_features"].to(self.device)
         state_features = observation.get("state_features")
@@ -742,17 +742,17 @@ class SARMRewardModel(PreTrainedRewardModel):
         batch_size = video_features.shape[0]
         seq_len = video_features.shape[1]
 
-        # Get lengths (default to full sequence)
+        # 获取 lengths（默认为完整序列）
         lengths = observation.get("lengths")
         if lengths is None:
             lengths = torch.full((batch_size,), seq_len, dtype=torch.int32, device=self.device)
         else:
             lengths = lengths.to(self.device)
 
-        # Reshape video to (B, N, T, D) - single camera
+        # 将 video 重塑为 (B, N, T, D) - 单相机
         img_emb = video_features.unsqueeze(1)
 
-        # Pad state to max_state_dim
+        # 将 state 填充到 max_state_dim
         if state_features is None:
             state_features = torch.zeros(batch_size, seq_len, self.config.max_state_dim, device=self.device)
         else:
@@ -761,10 +761,10 @@ class SARMRewardModel(PreTrainedRewardModel):
         output_dict = {}
         total_loss = torch.tensor(0.0, device=self.device)
 
-        # Sparse training (always)
+        # 稀疏训练（始终执行）
         sparse_targets = observation.get("sparse_targets")
         if sparse_targets is None:
-            # Try legacy format
+            # 尝试旧格式
             sparse_targets = observation.get("targets")
         if sparse_targets is None:
             raise ValueError("sparse_targets (or targets) is required for SARM training")
@@ -777,7 +777,7 @@ class SARMRewardModel(PreTrainedRewardModel):
         output_dict["sparse_subtask_loss"] = sparse_result["subtask_loss"].item()
         total_loss = total_loss + sparse_result["total_loss"]
 
-        # Dense training (if dual mode)
+        # 稠密训练（若为 dual 模式）
         if self.config.uses_dual_heads:
             dense_targets = observation.get("dense_targets")
             if dense_targets is not None:
@@ -794,9 +794,9 @@ class SARMRewardModel(PreTrainedRewardModel):
 
 
 def compute_stage_loss(stage_logits: torch.Tensor, target_stages: torch.Tensor) -> torch.Tensor:
-    """Compute cross-entropy loss for stage classification."""
+    """计算阶段分类的交叉熵损失。"""
     _, _, num_stages = stage_logits.shape
     stage_logits_flat = stage_logits.reshape(-1, num_stages)
-    # Clamp target stage indices to valid range [0, num_stages-1]
+    # 将目标阶段索引鈐制到有效范围 [0, num_stages-1]
     target_stages_flat = target_stages.reshape(-1).clamp(0, num_stages - 1)
     return F.cross_entropy(stage_logits_flat, target_stages_flat)

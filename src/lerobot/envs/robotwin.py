@@ -468,7 +468,7 @@ class RoboTwinEnv(gym.Env):
     def reset(self, seed: int | None = None, **kwargs) -> tuple[RobotObservation, dict]:
         self._ensure_env()
         super().reset(seed=seed)
-        assert self._env is not None  # set by _ensure_env() above
+        assert self._env is not None  # 由上方的 _ensure_env() 设置
 
         actual_seed = self.episode_index if seed is None else seed
         setup_kwargs = _load_robotwin_setup_kwargs(self.task_name)

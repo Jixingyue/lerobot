@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 
-# ------------------------------- Small utils ----------------------------------
+# ------------------------------- 小工具 ----------------------------------
 
 
 def _to_2tuple(x) -> tuple:
@@ -86,7 +86,7 @@ class Mlp(nn.Module):
         return x
 
 
-# -------------------------------- Attention ----------------------------------
+# -------------------------------- Attention（注意力） ----------------------------------
 
 
 class Attention(nn.Module):
@@ -164,7 +164,7 @@ class Attention(nn.Module):
         return x
 
 
-# ------------------------------- Utilities -----------------------------------
+# ------------------------------- 工具函数 -----------------------------------
 
 
 def basic_init(module: nn.Module) -> None:
@@ -209,7 +209,7 @@ def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 100) -> torc
     return embedding
 
 
-# ------------------------------- Core Layers ----------------------------------
+# ------------------------------- 核心层 ----------------------------------
 
 
 class DomainAwareLinear(nn.Module):
@@ -286,7 +286,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
-# --------------------------- Main Model ---------------------------------------
+# --------------------------- 主模型 ---------------------------------------
 
 
 class SoftPromptedTransformer(nn.Module):

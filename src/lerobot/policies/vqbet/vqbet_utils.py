@@ -377,7 +377,7 @@ class ResidualVQ(nn.Module):
 
         self.register_buffer("freeze_codebook", torch.tensor(False))
         self.quantize_dropout_cutoff_index = quantize_dropout_cutoff_index
-        self.quantize_dropout_multiple_of = quantize_dropout_multiple_of  # encodec paper proposes structured dropout, believe this was set to 4
+        self.quantize_dropout_multiple_of = quantize_dropout_multiple_of  # encodec 论文提出了结构化 dropout，记得该值曾设为 4
 
         if not shared_codebook:
             return
@@ -565,18 +565,18 @@ class VectorQuantize(nn.Module):
         stochastic_sample_codes=False,
         sample_codebook_temp=1.0,
         straight_through=False,
-        reinmax=False,  # using reinmax for improved straight-through, assuming straight through helps at all
+        reinmax=False,  # 使用 reinmax 以改进 straight-through，前提是 straight-through 真的有帮助
         sync_codebook=None,
         sync_affine_param=False,
         ema_update=True,
         learnable_codebook=False,
         in_place_codebook_optimizer: Callable[
             ..., Optimizer
-        ] = None,  # Optimizer used to update the codebook embedding if using learnable_codebook
+        ] = None,  # 若使用 learnable_codebook，则用此优化器更新码本嵌入
         affine_param=False,
         affine_param_batch_decay=0.99,
         affine_param_codebook_decay=0.9,
-        sync_update_v=0.0,  # the v that controls optimistic vs pessimistic update for synchronous update rule (21) https://minyoungg.github.io/vqtorch/assets/draft_050523.pdf
+        sync_update_v=0.0,  # 控制同步更新规则（21）中乐观 vs 悲观更新的 v，见 https://minyoungg.github.io/vqtorch/assets/draft_050523.pdf
     ):
         super().__init__()
         self.dim = dim
@@ -592,7 +592,7 @@ class VectorQuantize(nn.Module):
 
         self.eps = eps
         self.commitment_weight = commitment_weight
-        self.commitment_use_cross_entropy_loss = commitment_use_cross_entropy_loss  # whether to use cross entropy loss to codebook as commitment loss
+        self.commitment_use_cross_entropy_loss = commitment_use_cross_entropy_loss  # 是否使用交叉熵损失作用于码本作为 commitment loss
 
         self.learnable_codebook = learnable_codebook
 
@@ -721,7 +721,7 @@ class VectorQuantize(nn.Module):
         need_transpose = not self.channel_last and not self.accept_image_fmap
         should_inplace_optimize = self.in_place_codebook_optimizer is not None
 
-        # rearrange inputs
+        # 重排输入
 
         if self.accept_image_fmap:
             height, width = x.shape[-2:]
@@ -730,21 +730,21 @@ class VectorQuantize(nn.Module):
         if need_transpose:
             x = rearrange(x, "b d n -> b n d")
 
-        # project input
+        # 投影输入
 
         x = self.project_in(x)
 
-        # handle multi-headed separate codebooks
+        # 处理多头独立码本
 
         if is_multiheaded:
             ein_rhs_eq = "h b n d" if self.separate_codebook_per_head else "1 (b h) n d"
             x = rearrange(x, f"b n (h d) -> {ein_rhs_eq}", h=heads)
 
-        # l2norm for cosine sim, otherwise identity
+        # 为余弦相似度做 l2norm，否则使用恒等变换
 
         x = self._codebook.transform_input(x)
 
-        # codebook forward kwargs
+        # 码本 forward 的关键字参数
 
         codebook_forward_kwargs = {
             "sample_codebook_temp": sample_codebook_temp,
@@ -752,11 +752,11 @@ class VectorQuantize(nn.Module):
             "freeze_codebook": freeze_codebook,
         }
 
-        # quantize
+        # 量化
 
         quantize, embed_ind, distances = self._codebook(x, **codebook_forward_kwargs)
 
-        # one step in-place update
+        # 一步原地更新
 
         if should_inplace_optimize and self.training and not freeze_codebook:
             if mask is not None:
@@ -780,26 +780,26 @@ class VectorQuantize(nn.Module):
             self.in_place_codebook_optimizer.step()
             self.in_place_codebook_optimizer.zero_grad()
 
-            # quantize again
+            # 再次量化
 
             quantize, embed_ind, distances = self._codebook(x, **codebook_forward_kwargs)
 
         if self.training:
-            # determine code to use for commitment loss
+            # 确定用于 commitment loss 的码
             maybe_detach = torch.detach if not self.learnable_codebook or freeze_codebook else identity
 
             commit_quantize = maybe_detach(quantize)
 
-            # straight through
+            # 直通（straight through）
 
             quantize = x + (quantize - x).detach()
 
             if self.sync_update_v > 0.0:
-                # (21) in https://minyoungg.github.io/vqtorch/assets/draft_050523.pdf
+                # 见 https://minyoungg.github.io/vqtorch/assets/draft_050523.pdf 中的式 (21)
                 quantize = quantize + self.sync_update_v * (quantize - quantize.detach())
 
-        # function for calculating cross entropy loss to distance matrix
-        # used for (1) naturalspeech2 training residual vq latents to be close to the correct codes and (2) cross-entropy based commitment loss
+        # 用于计算针对距离矩阵的交叉熵损失的函数
+        # 用于 (1) naturalspeech2 训练残差 vq 潜变量以接近正确的码，以及 (2) 基于交叉熵的 commitment loss
 
         def calculate_ce_loss(codes):
             if not is_multiheaded:
@@ -815,12 +815,12 @@ class VectorQuantize(nn.Module):
 
             return ce_loss
 
-        # if returning cross entropy loss on codes that were passed in
+        # 若返回针对传入码的交叉熵损失
 
         if return_loss:
             return quantize, calculate_ce_loss(indices)
 
-        # transform embedding indices
+        # 变换嵌入索引
 
         if is_multiheaded:
             if self.separate_codebook_per_head:
@@ -834,7 +834,7 @@ class VectorQuantize(nn.Module):
         if only_one:
             embed_ind = rearrange(embed_ind, "b 1 -> b")
 
-        # aggregate loss
+        # 聚合损失
 
         loss = torch.tensor([0.0], device=device, requires_grad=self.training)
 
@@ -851,7 +851,7 @@ class VectorQuantize(nn.Module):
                     commit_loss = calculate_ce_loss(embed_ind)
                 else:
                     if mask is not None:
-                        # with variable lengthed sequences
+                        # 处理变长序列
                         commit_loss = F.mse_loss(commit_quantize, x, reduction="none")
 
                         loss_mask = mask
@@ -872,7 +872,7 @@ class VectorQuantize(nn.Module):
             if self.has_codebook_orthogonal_loss:
                 codebook = self._codebook.embed
 
-                # only calculate orthogonal loss for the activated codes for this batch
+                # 仅针对该批次被激活的码计算正交损失
 
                 if self.orthogonal_reg_active_codes_only:
                     assert not (is_multiheaded and self.separate_codebook_per_head), (
@@ -890,7 +890,7 @@ class VectorQuantize(nn.Module):
                 orthogonal_reg_loss = orthogonal_loss_fn(codebook)
                 loss = loss + orthogonal_reg_loss * self.orthogonal_reg_weight
 
-        # handle multi-headed quantized embeddings
+        # 处理多头的量化嵌入
 
         if is_multiheaded:
             if self.separate_codebook_per_head:
@@ -898,11 +898,11 @@ class VectorQuantize(nn.Module):
             else:
                 quantize = rearrange(quantize, "1 (b h) n d -> b n (h d)", h=heads)
 
-        # project out
+        # 投影回输出维度
 
         quantize = self.project_out(quantize)
 
-        # rearrange quantized embeddings
+        # 重排量化后的嵌入
 
         if need_transpose:
             quantize = rearrange(quantize, "b n d -> b d n")
@@ -913,7 +913,7 @@ class VectorQuantize(nn.Module):
         if only_one:
             quantize = rearrange(quantize, "b 1 d -> b d")
 
-        # if masking, only return quantized for where mask has True
+        # 若有掩码，仅返回 mask 为 True 处的量化结果
 
         if mask is not None:
             quantize = torch.where(rearrange(mask, "... -> ... 1"), quantize, orig_input)
@@ -994,8 +994,8 @@ def gumbel_sample(
     if not straight_through or temperature <= 0.0 or not training:
         return ind, one_hot
 
-    # use reinmax for better second-order accuracy - https://huggingface.co/papers/2304.08612
-    # algorithm 2
+    # 使用 reinmax 以获得更好的二阶精度 - https://huggingface.co/papers/2304.08612
+    # 算法 2
 
     if reinmax:
         π0 = logits.softmax(dim=dim)
@@ -1144,7 +1144,7 @@ def batched_embedding(indices, embeds):
 
 
 def orthogonal_loss_fn(t):
-    # eq (2) from https://huggingface.co/papers/2112.00384
+    # 公式 (2)，来自 https://huggingface.co/papers/2112.00384
     h, n = t.shape[:2]
     normed_codes = F.normalize(t, p=2, dim=-1)
     cosine_sim = einsum("h i d, h j d -> h i j", normed_codes, normed_codes)
@@ -1215,7 +1215,7 @@ class EuclideanCodebook(nn.Module):
         else:
             self.register_buffer("embed", embed)
 
-        # affine related params
+        # 仿射相关参数
 
         self.affine_param = affine_param
         self.sync_affine_param = sync_affine_param
@@ -1281,7 +1281,7 @@ class EuclideanCodebook(nn.Module):
 
         var_fn = partial(torch.var, unbiased=False)
 
-        # calculate codebook mean and variance
+        # 计算码本均值与方差
 
         embed = rearrange(embed, "h ... d -> h (...) d")
 
@@ -1297,7 +1297,7 @@ class EuclideanCodebook(nn.Module):
                 self.affine_param_codebook_decay,
             )
 
-        # prepare batch data, which depends on whether it has masking
+        # 准备批次数据，具体取决于是否带有掩码
 
         data = rearrange(data, "h ... d -> h (...) d")
 
@@ -1305,7 +1305,7 @@ class EuclideanCodebook(nn.Module):
             c = data.shape[0]
             data = rearrange(data[mask], "(c n) d -> c n d", c=c)
 
-        # calculate batch mean and variance
+        # 计算批次均值与方差
 
         if not self.sync_affine_param:
             self.update_with_decay(
@@ -1322,12 +1322,12 @@ class EuclideanCodebook(nn.Module):
 
         num_vectors, device, dtype = data.shape[-2], data.device, data.dtype
 
-        # number of vectors, for denominator
+        # 向量数量，用于分母
 
         num_vectors = torch.tensor([num_vectors], device=device, dtype=dtype)
         distributed.all_reduce(num_vectors)
 
-        # calculate distributed mean
+        # 计算分布式均值
 
         batch_sum = reduce(data, "h n d -> h 1 d", "sum")
         distributed.all_reduce(batch_sum)
@@ -1335,7 +1335,7 @@ class EuclideanCodebook(nn.Module):
 
         self.update_with_decay("batch_mean", batch_mean, self.affine_param_batch_decay)
 
-        # calculate distributed variance
+        # 计算分布式方差
 
         variance_number = reduce((data - batch_mean) ** 2, "h n d -> h 1 d", "sum")
         distributed.all_reduce(variance_number)

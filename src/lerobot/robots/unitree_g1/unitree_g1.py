@@ -247,7 +247,7 @@ class UnitreeG1(Robot):
         kp: np.ndarray | list[float] | None = None,
         kd: np.ndarray | list[float] | None = None,
         tau: np.ndarray | list[float] | None = None,
-    ) -> None:  # writes robot command whenever requested
+    ) -> None:  # 在每次请求时写入机器人指令
         with self._lowcmd_lock:
             for motor in G1_29_JointIndex:
                 key = f"{motor.name}.q"
@@ -278,33 +278,33 @@ class UnitreeG1(Robot):
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
-        # A controller advertising its own proprio state (SONIC's 64-D token echo) replaces the
-        # raw joint positions rather than extending them, the way action_features hands the
-        # action space over to the controller.
+        # 声明自身本体感知状态的控制器（SONIC 的 64-D token 回显）会替换
+        # 原始关节位置而非在其基础上扩展，就像 action_features 将动作空间
+        # 交给控制器那样。
         controller_ft = getattr(self.controller, "observation_ft", None)
         proprio_ft = self._motors_ft if controller_ft is None else dict(controller_ft)
         return {**proprio_ft, **self._cameras_ft}
 
     @cached_property
     def action_features(self) -> dict[str, type]:
-        # No controller configured at all: raw 29-DoF joint teleop.
+        # 完全未配置控制器：原始 29-DoF 关节遥操作。
         if self.controller is None:
             return {f"{G1_29_JointIndex(motor).name}.q": float for motor in G1_29_JointIndex}
 
-        # Whole-body controllers (SONIC): 64-D latent token.
+        # 全身控制器（SONIC）：64-D 潜在 token。
         controller_ft = getattr(self.controller, "action_ft", None)
         if controller_ft is not None:
             return dict(controller_ft)
 
-        # Locomotion controllers (GR00T / Holosoma): arm joint targets + joystick axes.
-        # TODO: have GR00T/Holosoma advertise their own action_features too, so every
-        # controller declares its action space and this fallthrough can be dropped.
+        # 运动控制器（GR00T / Holosoma）：手臂关节目标 + 摇杆轴。
+        # TODO：让 GR00T/Holosoma 也声明各自的 action_features，这样每个
+        # 控制器都声明自己的动作空间，这个兵底分支就可以去掉。
         arm_features = {f"{G1_29_JointArmIndex(motor).name}.q": float for motor in G1_29_JointArmIndex}
         remote_features = dict.fromkeys(REMOTE_AXES, float)
         return {**arm_features, **remote_features}
 
     def _controller_loop(self):
-        """Background thread that runs controller at policy's control_dt."""
+        """以后台线程形式按策略的 control_dt 运行控制器。"""
         control_dt = self.controller.control_dt
         logger.info(f"Controller loop starting with control_dt={control_dt} ({1.0 / control_dt:.1f}Hz)")
 
@@ -319,23 +319,23 @@ class UnitreeG1(Robot):
 
             if lowstate is not None and self.controller is not None:
                 loop_count += 1
-                if time.time() - last_log_time >= 5.0:  # Log every 5 seconds
+                if time.time() - last_log_time >= 5.0:  # 每 5 秒记录一次
                     actual_hz = loop_count / (time.time() - last_log_time)
                     logger.info(
                         f"Controller actual rate: {actual_hz:.1f}Hz (target: {1.0 / control_dt:.1f}Hz)"
                     )
                     loop_count = 0
                     last_log_time = time.time()
-                # Read controller input snapshot
+                # 读取控制器输入快照
                 with self._controller_action_lock:
                     controller_input = dict(self.controller_input)
 
-                # Run controller step and publish it as one turn of control, so a reset sweep
-                # cannot interleave its own targets with this tick's.
+                # 运行一步控制器并将其作为一个控制周期发布，这样复位扫描
+                # 就不会把自己的目标与本 tick 的目标交错在一起。
                 with self._control_lock:
                     controller_action = self.controller.run_step(controller_input, lowstate)
 
-                    # Write controller output snapshot
+                    # 写入控制器输出快照
                     with self._controller_action_lock:
                         self.controller_output = dict(controller_action)
 
@@ -348,47 +348,47 @@ class UnitreeG1(Robot):
             time.sleep(sleep_time)
 
     def calibrate(self) -> None:
-        # TODO: implement g1_29 calibration
+        # TODO: 实现 g1_29 标定
         pass
 
     def configure(self) -> None:
         pass
 
-    def connect(self, calibrate: bool = True) -> None:  # connect to DDS
-        # Initialize DDS channel and simulation environment
+    def connect(self, calibrate: bool = True) -> None:  # 连接到 DDS
+        # 初始化 DDS 通道和仿真环境
         if self.config.is_simulation:
             from lerobot.envs import make_env
 
             self._ChannelFactoryInitialize(0, "lo")
             self._env_wrapper = make_env("lerobot/unitree-g1-mujoco", trust_remote_code=True)
-            # Extract the actual gym env from the dict structure
+            # 从字典结构中提取实际的 gym 环境
             self.sim_env = self._env_wrapper["hub_env"][0].envs[0]
         else:
             self._ChannelFactoryInitialize(0, config=self.config)
 
-        # Initialize direct motor control interface
+        # 初始化直接电机控制接口
         self.lowcmd_publisher = self._ChannelPublisher(kTopicLowCommand_Debug, hg_LowCmd)
         self.lowcmd_publisher.Init()
         self.lowstate_subscriber = self._ChannelSubscriber(kTopicLowState, hg_LowState)
         self.lowstate_subscriber.Init()
 
-        # Start subscribe thread to read robot state
+        # 启动订阅线程以读取机器人状态
         self.subscribe_thread = threading.Thread(target=self._subscribe_lowstate)
         self.subscribe_thread.start()
 
-        # Connect cameras
+        # 连接相机
         for cam in self._cameras.values():
             if not cam.is_connected:
                 cam.connect()
 
         logger.info(f"Connected {len(self._cameras)} camera(s).")
 
-        # Initialize lowcmd message
+        # 初始化 lowcmd 消息
         self.crc = CRC()
         self.msg = unitree_hg_msg_dds__LowCmd_()
         self.msg.mode_pr = 0
 
-        # Wait for first state message to arrive
+        # 等待第一条状态消息到达
         lowstate = None
         deadline = time.time() + 10.0
         while lowstate is None:
@@ -402,8 +402,8 @@ class UnitreeG1(Robot):
         logger.info("[UnitreeG1] Connected to robot.")
         self.msg.mode_machine = lowstate.mode_machine
 
-        # Prefer the active controller's gains (e.g. SONIC loads kp/kd from its ONNX);
-        # otherwise fall back to the config defaults.
+        # 优先使用当前控制器的增益（例如 SONIC 从其 ONNX 加载 kp/kd）；
+        # 否则回退到配置默认值。
         if self.controller is not None and hasattr(self.controller, "kp"):
             self.kp = np.array(self.controller.kp, dtype=np.float32)
             self.kd = np.array(self.controller.kd, dtype=np.float32)
@@ -417,12 +417,12 @@ class UnitreeG1(Robot):
             self.msg.motor_cmd[joint].kd = self.kd[joint.value]
             self.msg.motor_cmd[joint].q = lowstate.motor_state[joint.value].q
 
-        # Ease into the controller's home pose before it takes over, so the first commands
-        # don't snap from the connect-time pose. reset() picks that pose up on its own.
+        # 在控制器接管前平滑过渡到它的 home 姿态，以免第一条指令
+        # 从连接时的姿态突然跳变。reset() 会自行选取那个姿态。
         if self.controller is not None and hasattr(self.controller, "default_angles"):
             self.reset()
 
-        # Start controller thread if enabled
+        # 若已启用则启动控制器线程
         if self.controller is not None:
             self._controller_thread = threading.Thread(target=self._controller_loop, daemon=True)
             self._controller_thread.start()
@@ -430,7 +430,7 @@ class UnitreeG1(Robot):
             logger.info(f"Controller thread started ({fps}Hz)")
 
     def _send_zero_torque(self) -> None:
-        """Send a zero-gain command to make joints passive before shutting down."""
+        """在关闭前发送一个零增益指令，使关节变为无源。"""
         try:
             with self._lowstate_lock:
                 lowstate = self._lowstate
@@ -444,31 +444,31 @@ class UnitreeG1(Robot):
             logger.warning(f"Failed to send zero-torque on disconnect: {e}")
 
     def disconnect(self):
-        # Signal threads to stop and unblock any waits
+        # 向线程发出停止信号并解除任何等待
         self._shutdown_event.set()
 
-        # Wait for controller thread to finish. It has to be stopped before going passive,
-        # otherwise a tick already in flight re-stiffens the joints and zero torque is not the
-        # robot's last command.
+        # 等待控制器线程结束。它必须在变为无源之前停止，
+        # 否则一个已在途的 tick 会重新加强关节刚度，而零力矩就不是
+        # 机器人的最后一条指令。
         if self._controller_thread is not None:
             self._controller_thread.join(timeout=2.0)
             if self._controller_thread.is_alive():
                 logger.warning("Controller thread did not stop cleanly")
 
-        # Put robot in passive mode
+        # 将机器人置于无源模式
         if not self.config.is_simulation:
             self._send_zero_torque()
 
-        # Wait for subscribe thread to finish
+        # 等待订阅线程结束
         if self.subscribe_thread is not None:
             self.subscribe_thread.join(timeout=2.0)
             if self.subscribe_thread.is_alive():
                 logger.warning("Subscribe thread did not stop cleanly")
 
-        # Close simulation environment
+        # 关闭仿真环境
         if self.config.is_simulation and self.sim_env is not None:
             try:
-                # Force-kill the image publish subprocess first to avoid long waits
+                # 先强制终止图像发布子进程，以避免长时间等待
                 if hasattr(self.sim_env, "simulator") and hasattr(self.sim_env.simulator, "sim_env"):
                     sim_env_inner = self.sim_env.simulator.sim_env
                     if hasattr(sim_env_inner, "image_publish_process"):
@@ -486,7 +486,7 @@ class UnitreeG1(Robot):
             self.sim_env = None
             self._env_wrapper = None
 
-        # Disconnect cameras
+        # 断开相机连接
         for cam in self._cameras.values():
             cam.disconnect()
 
@@ -498,7 +498,7 @@ class UnitreeG1(Robot):
 
         obs = {}
 
-        # Motors - q, dq, tau for all joints
+        # 电机 - 所有关节的 q、dq、tau
         for motor in G1_29_JointIndex:
             name = motor.name
             idx = motor.value
@@ -506,41 +506,41 @@ class UnitreeG1(Robot):
             obs[f"{name}.dq"] = lowstate.motor_state[idx].dq
             obs[f"{name}.tau"] = lowstate.motor_state[idx].tau_est
 
-        # IMU - gyroscope
+        # IMU - 陀螺仪
         if lowstate.imu_state.gyroscope:
             obs["imu.gyro.x"] = lowstate.imu_state.gyroscope[0]
             obs["imu.gyro.y"] = lowstate.imu_state.gyroscope[1]
             obs["imu.gyro.z"] = lowstate.imu_state.gyroscope[2]
 
-        # IMU - accelerometer
+        # IMU - 加速度计
         if lowstate.imu_state.accelerometer:
             obs["imu.accel.x"] = lowstate.imu_state.accelerometer[0]
             obs["imu.accel.y"] = lowstate.imu_state.accelerometer[1]
             obs["imu.accel.z"] = lowstate.imu_state.accelerometer[2]
 
-        # IMU - quaternion
+        # IMU - 四元数
         if lowstate.imu_state.quaternion:
             obs["imu.quat.w"] = lowstate.imu_state.quaternion[0]
             obs["imu.quat.x"] = lowstate.imu_state.quaternion[1]
             obs["imu.quat.y"] = lowstate.imu_state.quaternion[2]
             obs["imu.quat.z"] = lowstate.imu_state.quaternion[3]
 
-        # IMU - rpy
+        # IMU - rpy（滚转/俯仰/偏航）
         if lowstate.imu_state.rpy:
             obs["imu.rpy.roll"] = lowstate.imu_state.rpy[0]
             obs["imu.rpy.pitch"] = lowstate.imu_state.rpy[1]
             obs["imu.rpy.yaw"] = lowstate.imu_state.rpy[2]
 
-        # Wireless remote (raw bytes for teleoperator)
+        # 无线遥控器（供遥操作器使用的原始字节）
         if lowstate.wireless_remote:
             obs["wireless_remote"] = lowstate.wireless_remote
 
-        # Controller-contributed observation (e.g. SONIC echoes its last decoded token as
-        # observation.state so a token-output VLA closes the loop on its own previous token).
+        # 控制器贡献的观测（例如 SONIC 将其上一个解码出的 token 作为
+        # observation.state 回显，从而使输出 token 的 VLA 能针对自己先前的 token 闭环）。
         if self.controller is not None and hasattr(self.controller, "observation_state"):
             obs.update(self.controller.observation_state())
 
-        # Cameras - read images from ZMQ cameras
+        # 相机 - 从 ZMQ 相机读取图像
         for cam_name, cam in self._cameras.items():
             if getattr(cam, "use_rgb", True):
                 obs[cam_name] = cam.read_latest()
@@ -552,8 +552,8 @@ class UnitreeG1(Robot):
     def send_action(self, action: RobotAction) -> RobotAction:
         action_to_publish = action
         if self.controller is not None:
-            # Controller thread owns legs/waist. Here we only update joystick inputs
-            # and publish arm targets from the teleoperator.
+            # 控制器线程拥有腿部/腰部的所有权。这里我们只更新摇杆输入，
+            # 并发布来自遥操作器的手臂目标。
             self._update_controller_action(action)
             arm_prefixes = tuple(j.name for j in G1_29_JointArmIndex)
             action_to_publish = {
@@ -562,9 +562,9 @@ class UnitreeG1(Robot):
                 if key.endswith(".q") and key.startswith(arm_prefixes)
             }
             if not action_to_publish:
-                # Nothing here for the arms, so publishing would only re-send the controller
-                # thread's own last command with a fresh CRC, at the caller's rate on top of the
-                # controller's. Token-only actions (a SONIC policy) hit this on every step.
+                # 这里没有手臂相关的项，因此发布只会以调用方的速率、在控制器
+                # 之上重新发送控制器线程自己的上一条指令并附带新的 CRC。
+                # 仅含 token 的动作（SONIC 策略）每一步都会走到这里。
                 return action
 
         tau = None
@@ -587,8 +587,8 @@ class UnitreeG1(Robot):
         return action
 
     def _update_controller_action(self, action: RobotAction) -> None:
-        """Forward incoming teleop action values into ``controller_input``; each controller
-        reads only the keys it understands."""
+        """将传入的遥操作动作值转发进 ``controller_input``；每个控制器
+        只读取它所能理解的键。"""
         with self._controller_action_lock:
             for key, value in action.items():
                 if isinstance(key, str) and value is not None:
@@ -605,7 +605,7 @@ class UnitreeG1(Robot):
 
     @property
     def _motors_ft(self) -> dict[str, type]:
-        """Joint positions for all 29 joints."""
+        """所有 29 个关节的关节位置。"""
         return {f"{G1_29_JointIndex(motor).name}.q": float for motor in G1_29_JointIndex}
 
     @property
@@ -616,19 +616,19 @@ class UnitreeG1(Robot):
         self,
         control_dt: float | None = None,
         default_positions: list[float] | None = None,
-    ) -> None:  # move robot to default position
+    ) -> None:  # 将机器人移动到默认位置
         if control_dt is None:
             control_dt = self.config.control_dt
         if default_positions is None:
-            # Home to the controller's own pose when it has one: that is what its policy was
-            # trained around (SONIC reads it from the ONNX metadata), whereas the config default
-            # is a generic fallback for raw joint teleop.
+            # 当控制器拥有自己的 home 姿态时归位到它：策略正是围绕该姿态
+            # 训练的（SONIC 从 ONNX 元数据中读取它），而配置中的默认值
+            # 只是供原始关节遥操作使用的通用回退选项。
             controller_home = getattr(self.controller, "default_angles", None)
             source = self.config.default_positions if controller_home is None else controller_home
             default_positions = np.array(source, dtype=np.float32)
 
-        # Hold control authority for the whole sweep. Otherwise the controller thread keeps
-        # publishing its own targets throughout, and the robot is driven by two writers at once.
+        # 在整个扫描过程中保持控制权限。否则控制器线程会持续发布它自己的
+        # 目标，机器人就会同时被两个写入者驱动。
         with self._control_lock:
             if self.config.is_simulation and self.sim_env is not None:
                 self.sim_env.reset()
@@ -639,15 +639,15 @@ class UnitreeG1(Robot):
                 total_time = 3.0
                 num_steps = int(total_time / control_dt)
 
-                # get current state
+                # 获取当前状态
                 obs = self.get_observation()
 
-                # record current positions
+                # 记录当前位置
                 init_dof_pos = np.zeros(NUM_MOTORS, dtype=np.float32)
                 for motor in G1_29_JointIndex:
                     init_dof_pos[motor.value] = obs[f"{motor.name}.q"]
 
-                # Interpolate to default position
+                # 插值到默认位置
                 for step in range(num_steps):
                     start_time = time.time()
 
@@ -660,13 +660,13 @@ class UnitreeG1(Robot):
 
                     self.publish_lowcmd(action_dict)
 
-                    # Maintain constant control rate
+                    # 保持恒定的控制速率
                     elapsed = time.time() - start_time
                     sleep_time = max(0, control_dt - elapsed)
                     time.sleep(sleep_time)
 
-            # Reset controller internal state (gait phase, obs history, etc.) while the thread
-            # is still held off, so it cannot half-refill the buffers we are clearing.
+            # 在线程仍被拦止期间重置控制器内部状态（步态相位、观测历史等），
+            # 使其无法在我们清理缓冲区的同时半途重新填充。
             if self.controller is not None and hasattr(self.controller, "reset"):
                 self.controller.reset()
 

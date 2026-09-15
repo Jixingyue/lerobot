@@ -1695,7 +1695,7 @@ class MolmoAct2VisionTransformer(nn.Module):
 
     def forward(self, x: torch.Tensor, patch_num: int = None) -> list[torch.Tensor]:
         """
-        : param x: (batch_size, num_patch, n_pixels)
+        : 参数 x: (batch_size, num_patch, n_pixels)
         """
         if patch_num is None:
             patch_num = self.config.image_num_patch
@@ -1776,7 +1776,7 @@ class MolmoAct2VisionBackbone(nn.Module):
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
         """
-        : param images: (batch_size, num_crops, num_patch, n_pixels)
+        : 参数 images: (batch_size, num_crops, num_patch, n_pixels)
         """
         batch_size, num_crops, num_patches, patch_dim = images.shape
         images = images.view(batch_size * num_crops, num_patches, patch_dim)
@@ -1919,7 +1919,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class MolmoAct2RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+    inv_freq: torch.Tensor  # 为 `register_buffer` 修复 lint 告警
 
     def __init__(
         self,
@@ -2044,7 +2044,7 @@ class MolmoAct2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    @dynamic_rope_update  # 高级用法：用于高级 RoPE 类型（例如动态 rope）
     def forward(self, x, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         seq_len = self._target_cache_seq_len(x, position_ids)
         if not self._rope_cache_ready(x.device, seq_len):
@@ -2126,7 +2126,7 @@ def eager_attention_forward(
 
 
 class MolmoAct2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """来自《Attention Is All You Need》论文的多头注意力"""
 
     def __init__(self, config: MolmoAct2TextConfig, layer_idx: int) -> None:
         super().__init__()
@@ -2194,7 +2194,7 @@ class MolmoAct2Attention(nn.Module):
         query_states, key_states, value_states = qkv.split(self.fused_dims, dim=-1)
         value_states = value_states.view(hidden_shape)
 
-        # Optionally apply layer norm to keys and queries.
+        # 可选地对 keys 和 queries 应用层归一化。
         if self.q_norm is not None and self.k_norm is not None and self.qk_norm_type != "qwen3":
             query_states = self.q_norm(query_states)
             key_states = self.k_norm(key_states)
@@ -2212,7 +2212,7 @@ class MolmoAct2Attention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            # sin 和 cos 是 RoPE 模型特有的；静态缓存需要 cache_position
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_values.update(
                 key_states, value_states, self.layer_idx, cache_kwargs
@@ -2227,9 +2227,9 @@ class MolmoAct2Attention(nn.Module):
         ):
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
-            # Keep Q/K/V in the autocast activation dtype so BF16 Flash/cuDNN
-            # SDPA remains available. Fused SDPA performs its sensitive
-            # reductions internally without materializing an fp32 QKV copy.
+            # 让 Q/K/V 保持为 autocast 激活的数据类型，从而 BF16 Flash/cuDNN
+            # SDPA 仍可用。融合 SDPA 会在内部完成其敏感的
+            # 归约运算，而不会实例化一份 fp32 的 QKV 副本。
             attn_output = F.scaled_dot_product_attention(
                 query_states,
                 key_states,
@@ -2503,7 +2503,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
             self.rotary_emb = MolmoAct2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
-        # Initialize weights and apply final processing
+        # 初始化权重并应用最终处理
         self.post_init()
 
     @torch.no_grad()
@@ -2564,12 +2564,12 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
         if inputs_embeds is None:
             input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
             inputs_embeds = self.wte(input_ids)
-        # Embedding lookup is not autocast eligible. Without this boundary, an
-        # fp32-stored embedding keeps the whole residual stream in fp32 even
-        # under the official bf16 AMP profile.
+        # 嵌入查找不属于 autocast 的适用范围。若没有这层边界，
+        # 以 fp32 存储的嵌入即使在使用官方 bf16 AMP 配置时，
+        # 也会让整个残差流保持在 fp32。
         inputs_embeds = _cast_to_autocast_dtype(inputs_embeds)
 
-        # torch.jit.trace() doesn't support cache objects in the output
+        # torch.jit.trace() 不支持在输出中包含缓存对象
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
             past_key_values = DynamicCache(config=self.config)
 
@@ -2587,17 +2587,17 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
                     torch.cumsum(attention_mask.to(torch.long), dim=-1) - 1,
                     min=0,
                 )
-                # During cached generation the attention mask covers the full
-                # prefix while inputs_embeds contains only the uncached suffix.
+                # 在带缓存的生成过程中，注意力掩码覆盖完整的前缀，
+                # 而 inputs_embeds 只包含未缓存的后缀。
                 position_ids = position_ids[:, -inputs_embeds.shape[1] :]
             else:
                 position_ids = cache_position.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
+        # 它可能已由例如 `generate` 预先准备好
         if torch.is_tensor(attention_mask) and attention_mask.ndim == 4:
             causal_mask_mapping = attention_mask
         elif not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
+            # 准备掩码参数
             mask_kwargs = {
                 "config": self.config,
                 "input_embeds": inputs_embeds,
@@ -2607,12 +2607,12 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
                 "position_ids": position_ids,
             }
 
-            # Create the mask
+            # 创建掩码
             causal_mask_mapping = create_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 
-        # create position embeddings to be shared across the decoder layers
+        # 创建在各解码器层之间共享的位置嵌入
         if self.config.rope_scaling_layers is not None:
             position_embeddings_mapping = {
                 "default": self.rotary_embs["default"](hidden_states, position_ids),
@@ -2621,7 +2621,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
         else:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
+        # 解码器层
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         collected_kv_states = [] if collect_layer_kv_states else None
@@ -2663,7 +2663,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
 
         hidden_states = self.ln_f(hidden_states)
 
-        # add hidden states from the last decoder layer
+        # 添加来自最后一个解码器层的隐藏状态
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
@@ -2680,24 +2680,24 @@ def token_type_ids_mask_function(
     token_type_ids: torch.Tensor | None = None,
 ) -> Callable | None:
     """
-    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
-    not start and end indices.
+    由于 torch API 只能接受长度而非起止索引，本函数为 `q_idx` 和 `kv_idx`
+    添加正确的偏移量。
     """
-    # Do not return an additional mask in this case
+    # 在这种情况下不返回额外的掩码
     if token_type_ids is None:
         return None
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        # If it's 1 for both query and key/value, we are in an image block
-        # NOTE: static cache shape goes beyond input seq length, while token_type_ids.shape[1] == input seq length
-        # Since vmap doesn't support `if statement` we workaround it with `torch.where`
+        # 若 query 和 key/value 处都为 1，则我们处于一个图像块中
+        # 注意：静态缓存的形状会超出输入序列长度，而 token_type_ids.shape[1] == 输入序列长度
+        # 由于 vmap 不支持 `if statement`，我们用 `torch.where` 来绕过它
         safe_idx = torch.where(kv_idx < token_type_ids.shape[1], kv_idx, 0)
         token_type_ids_at_kv_idx = token_type_ids[batch_idx, safe_idx]
         token_type_ids_at_kv_idx = torch.where(kv_idx < token_type_ids.shape[1], token_type_ids_at_kv_idx, 0)
 
         is_image_block = (token_type_ids[batch_idx, q_idx] == 1) & (token_type_ids_at_kv_idx == 1)
 
-        # This is bidirectional attention whenever we are dealing with image tokens
+        # 每当处理图像 token 时，这都是双向注意力
         return is_image_block & is_image_block
 
     return inner_mask
@@ -2739,7 +2739,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         self._depth_gate_token_ids = self._resolve_depth_gate_token_ids()
         self.action_cuda_graph_manager: ActionCudaGraphManager | None = None
 
-        # Initialize weights and apply final processing
+        # 初始化权重并应用最终处理
         self.post_init()
 
     def get_input_embeddings(self) -> torch.nn.Module:
@@ -3107,11 +3107,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
                 use_cache=True,
             )
             encoder_kv_states = self._extract_kv_states(outputs.past_key_values)
-            # A policy wrapper may supply the action-mode mask recorded by a
-            # fine-tuned checkpoint.  The released base can retain
-            # ``action_mode='both'`` even when the outer LeRobot checkpoint was
-            # trained continuous-only, so do not overwrite an explicit mask
-            # after the VLM prefill.
+            # 策略包装器可能会提供由微调后的检查点记录的 action-mode 掩码。
+            # 已发布的基座即便在外层 LeRobot 检查点是仅连续（continuous-only）
+            # 训练的情况下，仍可能保留 ``action_mode='both'``，因此在 VLM 预填充
+            # 之后不要覆盖一个显式设置的掩码。
             if encoder_attention_mask is None:
                 encoder_attention_mask = self._get_encoder_attention_mask(input_ids, attention_mask)
         elif encoder_attention_mask is None:
@@ -3187,7 +3186,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         image_grids: torch.Tensor,
         image_num_crops: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # 1) Count the number of images in each example
+        # 1) 统计每个样本中的图像数量
         raw_counts = (input_ids == self.config.image_end_token_id).sum(1)  # [N]
         total_images = int(image_grids.size(0))
         total_end_tokens = int(raw_counts.sum().item())
@@ -3205,10 +3204,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         N = counts.size(0)
         device = input_ids.device
 
-        # Total number of images in the batch
+        # 批次中图像的总数
         num_images = total_images
 
-        # Sanity check
+        # 合理性检查
         assert image_grids.size(0) == num_images, (
             f"Expected {num_images} image grids, but got {image_grids.size(0)}"
         )
@@ -3216,7 +3215,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             f"Expected {num_images} image num crops, but got {image_num_crops.size(0)}"
         )
 
-        # 1-1) Compute per-image pooled patch count from image grids
+        # 1-1) 从 image grids 计算每张图像池化后的 patch 数量
         with torch.no_grad():
             first_prod = image_grids[:, :2].prod(dim=1)  # [num_images]
             second_prod = image_grids[:, 2:].prod(dim=1)  # [num_images]
@@ -3227,30 +3226,30 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         # pixel_values: [n_crops, n_patches, pixels_per_patch]
         n_crops, n_patches, pixels_per_patch = pixel_values.shape
 
-        # 2) Map each image index → example index
-        # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
+        # 2) 将每个图像索引 → 样本索引
+        # 例如：若 counts = [2, 1, 3]，则它变为 [0,0,1,2,2,2]
         example_ids_for_image = torch.arange(N, device=device).repeat_interleave(counts)  # [num_images]
         assert example_ids_for_image.numel() == num_images
 
-        # 2-1) Compute crops_per_example by summing per-image crop counts
+        # 2-1) 通过累加每张图像的 crop 数来计算 crops_per_example
         crops_per_example = torch.zeros(N, dtype=image_num_crops.dtype, device=image_num_crops.device)
         crops_per_example.index_add_(0, example_ids_for_image, image_num_crops)  # [N]
 
-        # 2-2) Per-image number of patches = (crops per image) * n_patches
+        # 2-2) 每张图像的 patch 数 = (每张图像的 crops) * n_patches
         patches_per_image = image_num_crops * n_patches  # [num_images]
 
-        # 2-3) Compute per-example per-image patch offsets
+        # 2-3) 计算每个样本内逐图像的 patch 偏移量
         counts_list = counts.tolist()
         index_offset_per_example_list = []
         offset_img = 0
         for c in counts_list:
             per_img_patches = patches_per_image[offset_img : offset_img + c]  # [c]
-            # Offsets: [0, img0_total_patches, img0+img1_total_patches, ...]
+            # 偏移量：[0, img0_total_patches, img0+img1_total_patches, ...]
             index_offset = [0] + per_img_patches.cumsum(0).tolist()[:-1]
             index_offset_per_example_list.append(index_offset)
             offset_img += c
 
-        # 2-4) Compute num_pooled_patches_per_example
+        # 2-4) 计算 num_pooled_patches_per_example
         num_pooled_patches_per_example = torch.zeros(
             N,
             dtype=num_pooled_patches_per_image.dtype,
@@ -3258,7 +3257,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         )
         num_pooled_patches_per_example.index_add_(0, example_ids_for_image, num_pooled_patches_per_image)
 
-        # Sanity checks
+        # 合理性检查（多条）
         total_crops = int(crops_per_example.sum().item())
         assert total_crops == n_crops, f"Expected {total_crops} crops, but got {n_crops}"
 
@@ -3267,7 +3266,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             f"Expected {total_num_pooled_patches} pooled patches, but got {image_token_pooling.size(0)}"
         )
 
-        # 3) Build images tensor filled with -1
+        # 3) 构建用 -1 填充的 images 张量
         M = int(crops_per_example.max().item())
         images = torch.full(
             (N, M, n_patches, pixels_per_patch),
@@ -3276,7 +3275,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             device=pixel_values.device,
         )
 
-        # 4) Fill images with per-example slices from pixel_values
+        # 4) 用来自 pixel_values 的逐样本切片填充 images
         offset_crop = 0
         for i in range(N):
             num = int(crops_per_example[i].item())
@@ -3284,10 +3283,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             images[i, :num] = cur
             offset_crop += num
 
-        # Sanity check
+        # 合理性检查
         assert offset_crop == n_crops
 
-        # 5) Build new_token_pooling tensor filled with -1
+        # 5) 构建用 -1 填充的 new_token_pooling 张量
         P = int(num_pooled_patches_per_example.max().item())
         _, dim = image_token_pooling.shape
         new_token_pooling = torch.full(
@@ -3297,14 +3296,14 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             device=image_token_pooling.device,
         )
 
-        # 6) Fill token_pooling with per-example slices, adding per-image patch offsets
+        # 6) 用逐样本切片填充 token_pooling，并加上逐图像的 patch 偏移量
         patch_offset = 0
         img_offset = 0
 
         for i, c in enumerate(counts_list):
             num_patches = int(num_pooled_patches_per_example[i].item())
 
-            # Subsequence of pooled tokens belonging to this example
+            # 属于本样本的池化 token 子序列
             cur = image_token_pooling[patch_offset : patch_offset + num_patches].clone()  # [num_patches, dim]
 
             index_offset_per_example = index_offset_per_example_list[i]  # length = c
@@ -3312,14 +3311,14 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
             assert len(index_offset_per_example) == per_img_pooled.numel()
 
-            # Apply per-image offsets to the (ragged) subsequence
+            # 对（不规则的）子序列应用逐图像偏移量
             offset = 0
             for j in range(c):
                 index_offset = int(index_offset_per_example[j])
                 n = int(per_img_pooled[j].item())
                 cur_slice = cur[offset : offset + n]
 
-                # Apply offset across all columns
+                # 跨所有列应用偏移量
                 cur[offset : offset + n] = torch.where(
                     cur_slice >= 0,
                     cur_slice + index_offset,
@@ -3332,7 +3331,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             patch_offset += num_patches
             img_offset += c
 
-        # Final sanity checks
+        # 最终合理性检查
         assert patch_offset == total_num_pooled_patches
         assert img_offset == num_images
 
@@ -3345,7 +3344,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # 1) Count the number of videos in each example
+        # 1) 统计每个样本中的视频数量
         if self.config.use_frame_special_tokens:
             end_token_id = self.config.frame_end_token_id
         else:
@@ -3354,10 +3353,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         N = counts.size(0)
         device = input_ids.device
 
-        # Total number of videos in the batch
+        # 批次中视频的总数
         num_videos = int(counts.sum().item())
 
-        # Sanity check
+        # 合理性检查
         assert video_grids.size(0) == num_videos, (
             f"Expected {num_videos} videos, but got {video_grids.size(0)}"
         )
@@ -3368,12 +3367,12 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         # pixel_values_videos: [n_frames, n_patches, pixels_per_patch]
         n_frames, n_patches, pixels_per_patch = pixel_values_videos.shape
 
-        # 2) Map each video index -> example index
-        # Example: if counts = [2, 1, 3], then this becomes [0,0,1,2,2,2]
+        # 2) 将每个视频索引 -> 样本索引
+        # 例如：若 counts = [2, 1, 3]，则它变为 [0,0,1,2,2,2]
         example_ids_for_video = torch.arange(N, device=device).repeat_interleave(counts)  # [num_videos]
         assert example_ids_for_video.numel() == num_videos
 
-        # 2-1) Compute frames_per_example by summing per-video frame counts
+        # 2-1) 通过累加每个视频的帧数来计算 frames_per_example
         frames_per_example = torch.zeros(
             N,
             dtype=video_num_frames.dtype,
@@ -3381,7 +3380,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         )
         frames_per_example.index_add_(0, example_ids_for_video, video_num_frames)  # [N]
 
-        # 2-2) Compute num_pooled_patches_per_example
+        # 2-2) 计算 num_pooled_patches_per_example
         num_pooled_patches_per_example = torch.zeros(
             N,
             dtype=num_pooled_patches_per_video.dtype,
@@ -3393,7 +3392,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             num_pooled_patches_per_video,
         )
 
-        # Sanity checks
+        # 合理性检查（多条）
         total_frames = int(frames_per_example.sum().item())
         assert total_frames == n_frames, f"Expected {total_frames} frames, but got {n_frames}"
 
@@ -3402,7 +3401,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             f"Expected {total_num_pooled_patches} pooled patches, but got {video_token_pooling.size(0)}"
         )
 
-        # 3) Build videos tensor filled with -1
+        # 3) 构建用 -1 填充的 videos 张量
         M = int(frames_per_example.max().item())
         videos = torch.full(
             (N, M, n_patches, pixels_per_patch),
@@ -3411,7 +3410,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             device=device,
         )
 
-        # 4) Fill videos with per-examples slices from pixel_values_videos
+        # 4) 用来自 pixel_values_videos 的逐样本切片填充 videos
         offset_frame = 0
         for i in range(N):
             num = int(frames_per_example[i].item())
@@ -3419,10 +3418,10 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             videos[i, :num] = cur
             offset_frame += num
 
-        # Sanity check
+        # 合理性检查
         assert offset_frame == n_frames
 
-        # 5) Build new token_pooling tensor filled with -1
+        # 5) 构建用 -1 填充的 new token_pooling 张量
         P = int(num_pooled_patches_per_example.max().item())
         _, dim = video_token_pooling.shape
         new_token_pooling = torch.full(
@@ -3432,7 +3431,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             device=video_token_pooling.device,
         )
 
-        # 6) Fill new token_pooling with per-examples slices from video_token_pooling
+        # 6) 用来自 video_token_pooling 的逐样本切片填充 new token_pooling
         patch_offset = 0
         for i in range(N):
             num_patches = int(num_pooled_patches_per_example[i].item())
@@ -3440,7 +3439,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             new_token_pooling[i, :num_patches] = cur
             patch_offset += num_patches
 
-        # Final sanity checks
+        # 最终合理性检查
         assert patch_offset == total_num_pooled_patches
 
         return videos, new_token_pooling
@@ -3485,15 +3484,15 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
         images: torch.FloatTensor | None = None,  # image inputs
         token_pooling: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # Get embeddings of input.
-        # shape: (batch_size, seq_len, d_model)
+        # 获取输入的嵌入。
+        # 形状：(batch_size, seq_len, d_model)
         input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
         x = _cast_to_autocast_dtype(self.transformer.wte(input_ids))
 
         image_features: torch.FloatTensor | None = None
         if images is not None:
-            # Normalize the modality boundary to the text activation dtype;
-            # parameter storage and autocast can otherwise make them differ.
+            # 将模态边界归一化到文本激活的数据类型；
+            # 否则参数存储与 autocast 可能使两者不一致。
             image_features = self.vision_backbone(images, token_pooling).to(device=x.device, dtype=x.dtype)
             is_image_patch = input_ids.reshape(-1) == self.config.image_patch_id
             if is_image_patch.sum() != len(image_features):
@@ -3504,7 +3503,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
             flat_x[is_image_patch] = flat_x[is_image_patch] + image_features
             x = flat_x.reshape_as(x)
 
-        # shape: (batch_size, seq_len, d_model)
+        # 形状：(batch_size, seq_len, d_model)
         x = self.transformer.emb_drop(x)  # type: ignore
 
         return x, image_features
@@ -3662,7 +3661,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 
 class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = []  # Weights are not tied
+    _tied_weights_keys = []  # 权重未绑定
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: MolmoAct2Config
@@ -3675,7 +3674,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         self.vocab_size = config.vocab_size
         self.model.action_cuda_graph_manager = ActionCudaGraphManager(self.model)
         self.depth_decode_cuda_graph_manager = DepthDecodeCudaGraphManager(self)
-        # Initialize weights and apply final processing
+        # 初始化权重并应用最终处理
         self.post_init()
 
     def get_input_embeddings(self) -> torch.nn.Module:
@@ -3690,7 +3689,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model.get_decoder()
 
-    # Make modules available through conditional class for BC
+    # 通过条件类暴露这些模块以保持向后兼容（BC）
     @property
     def language_model(self) -> torch.nn.Module:
         return self.model.transformer
@@ -3905,8 +3904,8 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         return attention_bias
 
     def _embed_base_tokens(self, input_ids: torch.Tensor) -> torch.Tensor:
-        # Skips MolmoAct2Embedding's per-call cat([base, new]); safe only for IDs
-        # below text_config.vocab_size. This includes released depth/action tokens.
+        # 跳过 MolmoAct2Embedding 每次调用的 cat([base, new])；仅对低于
+        # text_config.vocab_size 的 ID 安全。这包括已发布的 depth/action token。
         wte = self.model.transformer.wte
         base_embedding = getattr(wte, "embedding", None)
         if base_embedding is None:
@@ -4612,7 +4611,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # 只计算必要的 logits，并且当我们不计算 loss 时不要将它们上转为 float
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -4684,7 +4683,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
         token_type_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> dict:
-        # Prepare mask arguments
+        # 准备掩码参数
         mask_kwargs = {
             "config": config.get_text_config(),
             "input_embeds": input_embeds,
@@ -4693,9 +4692,9 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
             "past_key_values": past_key_values,
             "position_ids": position_ids,
         }
-        # Add the token type ids mask for generate as well
+        # 同时为 generate 添加 token type ids 掩码
         if token_type_ids is not None and input_embeds.shape[1] != 1:
-            # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
+            # 我们需要传入一个额外的掩码函数来处理 token type ids，并且它必须是一个 `or`
             mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
                 token_type_ids.to(cache_position.device)
             )

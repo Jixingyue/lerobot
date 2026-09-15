@@ -783,7 +783,7 @@ def save_annotations_to_dataset(
         episodes_df.at[ep_idx, cols[3]] = start_frames
         episodes_df.at[ep_idx, cols[4]] = end_frames
 
-    # Group by file and write
+    # 按文件分组并写入
     for ep_idx in episodes_df.index:
         key = (
             episodes_df.loc[ep_idx, "meta/episodes/chunk_index"],
@@ -808,7 +808,7 @@ def save_annotations_to_dataset(
             if ep_idx in annotations:
                 for col in cols:
                     file_df.at[ep_idx, col] = episodes_df.loc[ep_idx, col]
-                if prefix == "sparse":  # Legacy columns
+                if prefix == "sparse":  # 旧版列
                     for i, legacy in enumerate(
                         [
                             "subtask_names",
@@ -825,7 +825,7 @@ def save_annotations_to_dataset(
 def generate_auto_sparse_annotations(
     dataset: LeRobotDataset, episode_indices: list[int], video_key: str
 ) -> dict[int, SubtaskAnnotation]:
-    """Auto-generate single 'task' stage annotations for all episodes."""
+    """为所有 episode 自动生成单个 'task' 阶段标注。"""
     annotations = {}
     for ep_idx in episode_indices:
         start = float(dataset.meta.episodes[f"videos/{video_key}/from_timestamp"][ep_idx])
@@ -839,7 +839,7 @@ def generate_auto_sparse_annotations(
 
 
 def load_annotations_from_dataset(dataset_path: Path, prefix: str = "sparse") -> dict[int, SubtaskAnnotation]:
-    """Load annotations from LeRobot dataset parquet files."""
+    """从 LeRobot 数据集的 parquet 文件加载标注。"""
     from lerobot.datasets import load_episodes
 
     episodes_dataset = load_episodes(dataset_path)
@@ -850,7 +850,7 @@ def load_annotations_from_dataset(dataset_path: Path, prefix: str = "sparse") ->
     col_start = f"{prefix}_subtask_start_times"
     col_end = f"{prefix}_subtask_end_times"
 
-    # Fall back to legacy columns for sparse
+    # 对 sparse 回退到旧版列
     if col_names not in episodes_dataset.column_names:
         if prefix == "sparse" and "subtask_names" in episodes_dataset.column_names:
             col_names, col_start, col_end = "subtask_names", "subtask_start_times", "subtask_end_times"
@@ -887,7 +887,7 @@ def process_single_episode(
     fps: int,
     annotator: VideoAnnotator,
 ) -> tuple[int, SubtaskAnnotation | None, str | None]:
-    """Process a single episode annotation."""
+    """处理单个 episode 的标注。"""
     try:
         video_path = dataset_root / dataset_meta.get_video_file_path(ep_idx, video_key)
         if not video_path.exists():
@@ -911,7 +911,7 @@ def worker_process_episodes(
     model_name: str,
     torch_dtype: torch.dtype,
 ) -> tuple[dict, dict | None]:
-    """Worker for parallel processing across GPUs."""
+    """跨 GPU 并行处理的工作进程。"""
     device = f"cuda:{gpu_id}"
     dataset = LeRobotDataset(repo_id, download_videos=False)
 
@@ -970,7 +970,7 @@ def main():
     parser.add_argument("--dtype", type=str, default="bfloat16", choices=["bfloat16", "float16", "float32"])
     parser.add_argument("--num-workers", type=int, default=1, help="Parallel workers for multi-GPU")
     parser.add_argument("--gpu-ids", type=int, nargs="+", default=None, help="GPU IDs to use")
-    # Visualization options
+    # 可视化选项
     parser.add_argument(
         "--visualize-only",
         action="store_true",
@@ -998,7 +998,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Load dataset first (needed for both annotation and visualization)
+    # 先加载数据集（标注和可视化都需要）
     print(f"Loading dataset: {args.repo_id}")
     dataset = LeRobotDataset(args.repo_id, download_videos=True)
     fps = dataset.fps
@@ -1011,7 +1011,7 @@ def main():
     )
     print(f"Using camera: {video_key}, FPS: {fps}")
 
-    # Handle visualization-only mode
+    # 处理仅可视化模式
     if args.visualize_only:
         print("Visualization-only mode")
         sparse_annotations = load_annotations_from_dataset(dataset.root, prefix="sparse")
@@ -1034,7 +1034,7 @@ def main():
         )
         return
 
-    # Validate arguments for annotation mode
+    # 校验标注模式的参数
     if args.dense_only and not args.dense_subtasks:
         return print("Error: --dense-only requires --dense-subtasks")
     if args.dense_subtasks and not args.sparse_subtasks and not args.dense_only:
@@ -1048,7 +1048,7 @@ def main():
     dense_mode = dense_subtask_list is not None
     torch_dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[args.dtype]
 
-    # Determine episodes
+    # 确定要处理的 episode
     resolved_episodes = resolve_episode_indices(args.episodes, dataset.meta.total_episodes)
     episode_indices = (
         resolved_episodes if resolved_episodes is not None else list(range(dataset.meta.total_episodes))
@@ -1062,7 +1062,7 @@ def main():
         return print("All episodes already annotated!")
     print(f"Annotating {len(episode_indices)} episodes")
 
-    # GPU setup
+    # GPU 设置
     gpu_ids = args.gpu_ids or list(
         range(min(args.num_workers, torch.cuda.device_count() if torch.cuda.is_available() else 1))
     )
@@ -1071,18 +1071,18 @@ def main():
     sparse_annotations = existing_annotations.copy()
     dense_annotations = {} if dense_mode else None
 
-    # Auto-sparse mode
+    # 自动 sparse 模式
     if auto_sparse:
         sparse_annotations.update(generate_auto_sparse_annotations(dataset, episode_indices, video_key))
         save_annotations_to_dataset(dataset.root, sparse_annotations, fps, prefix="sparse")
         print(f"Auto-generated {len(episode_indices)} sparse 'task' annotations")
 
-    # VLM annotation (for sparse if not auto, and for dense)
+    # VLM 标注（若非 auto 则用于 sparse，以及用于 dense）
     need_vlm = (not auto_sparse) or dense_mode
 
     if need_vlm:
         if args.num_workers > 1 and not auto_sparse:
-            # Parallel processing
+            # 并行处理
             print(f"Parallel processing with {args.num_workers} workers")
             episodes_per_worker = [[] for _ in range(args.num_workers)]
             for i, ep_idx in enumerate(episode_indices):
@@ -1120,7 +1120,7 @@ def main():
                     except Exception as e:
                         raise RuntimeError(f"Worker failed: {e}") from e
         else:
-            # Sequential processing
+            # 顺序处理
             sparse_annotator = (
                 VideoAnnotator(sparse_subtask_list, args.model, args.device, torch_dtype)
                 if not auto_sparse and sparse_subtask_list
@@ -1162,7 +1162,7 @@ def main():
                     elif err:
                         print(f"Dense failed: {err}")
 
-    # Save temporal proportions
+    # 保存时间占比
     def save_proportions(annotations, prefix, subtask_list=None, is_auto=False):
         props: dict[str, float] = (
             {"task": 1.0} if is_auto else compute_temporal_proportions(annotations, fps, subtask_list)
@@ -1179,7 +1179,7 @@ def main():
 
     print(f"\nComplete! {len(sparse_annotations)} sparse, {len(dense_annotations or {})} dense annotations")
 
-    # Visualize annotations after generation
+    # 生成后进行标注可视化
     if args.num_visualizations > 0:
         print(f"\nGenerating {args.num_visualizations} visualizations...")
         visualize_type = "both" if dense_mode else "sparse"

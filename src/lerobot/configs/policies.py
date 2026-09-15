@@ -38,7 +38,7 @@ logger = getLogger(__name__)
 
 
 @dataclass
-class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: ignore[misc,name-defined] #TODO: draccus issue
+class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: ignore[misc,name-defined] #TODO: draccus 问题
     """
     策略模型的基础配置类。
 
@@ -67,7 +67,7 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
     # 策略训练时是否使用了 PEFT。
     use_peft: bool = False
 
-    push_to_hub: bool = True  # type: ignore[assignment] # TODO: use a different name to avoid override
+    push_to_hub: bool = True  # type: ignore[assignment] # TODO: 使用不同的名字以避免覆盖
     repo_id: str | None = None
 
     # 上传到 Hugging Face hub 上的私有仓库。
@@ -104,17 +104,17 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
 
     @property
     @abc.abstractmethod
-    def observation_delta_indices(self) -> list | None:  # type: ignore[type-arg] #TODO: No implementation
+    def observation_delta_indices(self) -> list | None:  # type: ignore[type-arg] #TODO: 暂无实现
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def action_delta_indices(self) -> list | None:  # type: ignore[type-arg]    #TODO: No implementation
+    def action_delta_indices(self) -> list | None:  # type: ignore[type-arg]    #TODO: 暂无实现
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def reward_delta_indices(self) -> list | None:  # type: ignore[type-arg]    #TODO: No implementation
+    def reward_delta_indices(self) -> list | None:  # type: ignore[type-arg]    #TODO: 暂无实现
         raise NotImplementedError
 
     @abc.abstractmethod

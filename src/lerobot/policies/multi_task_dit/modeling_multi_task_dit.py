@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Multi-Task Diffusion Transformer (DiT) Policy
+"""多任务扩散 Transformer（DiT）策略
 
-Transformer-based diffusion policy for multi-task robot learning with text and vision conditioning.
-Supports both diffusion and flow matching objectives for action generation.
+基于 Transformer 的扩散策略，用于结合文本与视觉条件进行多任务机器人学习。
+同时支持扩散与 flow matching 两种动作生成目标。
 
 References:
 - https://arxiv.org/abs/2507.05331
@@ -40,7 +40,7 @@ from lerobot.utils.import_utils import _diffusers_available, _transformers_avail
 
 from .configuration_multi_task_dit import MultiTaskDiTConfig
 
-# Conditional import for type checking and lazy loading
+# 用于类型检查与懒加载的条件导入
 if TYPE_CHECKING or _transformers_available:
     from transformers import CLIPTextModel, CLIPVisionModel
 else:
@@ -106,7 +106,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
         self.reset()
 
     def get_optim_params(self) -> list:
-        """Returns parameter groups with different learning rates for vision vs non-vision parameters"""
+        """返回为视觉与非视觉参数设置不同学习率的参数组"""
         non_vision_params = []
         vision_encoder_params = []
 
@@ -140,7 +140,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
         return actions
 
     def reset(self):
-        """Clear observation and action queues. Should be called on `env.reset()`"""
+        """清空观测与动作队列。应在 `env.reset()` 时调用"""
         self._queues = {
             OBS_STATE: deque(maxlen=self.config.n_obs_steps),
             ACTION: deque(maxlen=self.config.n_action_steps),
@@ -151,7 +151,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor]) -> Tensor:
-        """Predict a chunk of actions given environment observations"""
+        """根据环境观测预测一段动作块"""
         self.eval()
 
         for k in batch:
@@ -162,18 +162,18 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
         return actions
 
     def _prepare_batch(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
-        """Prepare batch by stacking image features if needed."""
+        """如需要则通过堆叠图像特征来准备 batch。"""
         if self.config.image_features:
-            batch = dict(batch)  # shallow copy to avoid modifying original
+            batch = dict(batch)  # 浅拷贝以避免修改原对象
             batch[OBS_IMAGES] = torch.stack([batch[key] for key in self.config.image_features], dim=-4)
 
         return batch
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
-        """Select a single action given environment observations"""
+        """根据环境观测选择单个动作"""
         if ACTION in batch:
-            batch = dict(batch)  # shallow copy to avoid modifying original
+            batch = dict(batch)  # 浅拷贝以避免修改原对象
             batch.pop(ACTION)
 
         batch = self._prepare_batch(batch)
@@ -188,7 +188,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
         return action
 
     def forward(self, batch: dict[str, Tensor]) -> tuple[Tensor, dict | None]:
-        """Run the batch through the model and compute the loss for training"""
+        """将 batch 送入模型并计算训练损失"""
         batch = self._prepare_batch(batch)
 
         conditioning_vec = self.observation_encoder.encode(batch)
@@ -200,7 +200,7 @@ class MultiTaskDiTPolicy(PreTrainedPolicy):
 #  -- 观测编码器 --
 
 class CLIPVisionEncoder(nn.Module):
-    """CLIP vision encoder using the CLS token for global image representation."""
+    """使用 CLS token 进行全局图像表示的 CLIP 视觉编码器。"""
 
     def __init__(self, model_name: str):
         super().__init__()
@@ -210,7 +210,7 @@ class CLIPVisionEncoder(nn.Module):
         self.embed_dim = self.model.config.hidden_size
 
     def forward(self, x: Tensor) -> Tensor:
-        """Encode RGB image to CLS token."""
+        """将 RGB 图像编码为 CLS token。"""
         outputs = self.model(pixel_values=x, output_hidden_states=False)
         cls_token = outputs.last_hidden_state[:, 0]
         b, embed_dim = cls_token.shape
@@ -221,10 +221,10 @@ class CLIPVisionEncoder(nn.Module):
 
 
 class CLIPTextEncoder(nn.Module):
-    """CLIP text encoder with frozen weights and a learnable projection layer.
+    """权重冻结并带有可学习投影层的 CLIP 文本编码器。
 
-    Accepts pre-tokenized inputs (input_ids and attention_mask) from the processor pipeline. See the processor
-    pipeline to see how the tokenization is handled.
+    接受来自处理器流水线的预分词输入（input_ids 和 attention_mask）。参见处理器
+    流水线以了解分词是如何处理的。
     """
 
     def __init__(self, model_name: str = "openai/clip-vit-base-patch16", projection_dim: int = 512):
@@ -240,8 +240,8 @@ class CLIPTextEncoder(nn.Module):
         self.projection = nn.Linear(self.text_embed_dim, projection_dim)
 
     def forward(self, input_ids: Tensor, attention_mask: Tensor) -> Tensor:
-        """Encode pre-tokenized text to feature vectors."""
-        # Ensure inputs are on the same device as the model
+        """将预分词文本编码为特征向量。"""
+        # 确保输入与模型处于同一设备
         device = next(self.parameters()).device
         input_ids = input_ids.to(device)
         attention_mask = attention_mask.to(device)
@@ -254,7 +254,7 @@ class CLIPTextEncoder(nn.Module):
 
 
 class ObservationEncoder(nn.Module):
-    """Handles all observation processing for the conditioning vector."""
+    """负责条件向量所需的全部观测处理。"""
 
     def __init__(self, config):
         super().__init__()
@@ -333,7 +333,7 @@ class ObservationEncoder(nn.Module):
         self.conditioning_dim = total_dim * self.config.n_obs_steps
 
     def encode(self, batch: dict) -> Tensor:
-        """Encode observations to vector format."""
+        """将观测编码为向量格式。"""
         batch_size, n_obs_steps = batch[OBS_STATE].shape[:2]
         conditioning_feats = []
 
@@ -384,12 +384,12 @@ class ObservationEncoder(nn.Module):
 #  -- Transformer 组件 --
 
 def modulate(x: Tensor, shift: Tensor, scale: Tensor) -> Tensor:
-    """Modulate input with shift and scale for AdaLN-Zero."""
+    """为 AdaLN-Zero 使用 shift 和 scale 调制输入。"""
     return x * (1 + scale) + shift
 
 
 class SinusoidalPosEmb(nn.Module):
-    """Sinusoidal positional embeddings for timesteps."""
+    """用于时间步的正弦位置嵌入。"""
 
     def __init__(self, dim: int):
         super().__init__()
@@ -406,7 +406,7 @@ class SinusoidalPosEmb(nn.Module):
 
 
 class RotaryPositionalEmbedding(nn.Module):
-    """Rotary Position Embedding (RoPE) for transformers."""
+    """用于 transformer 的旋转位置嵌入（RoPE）。"""
 
     def __init__(self, head_dim: int, max_seq_len: int = 512, base: float = 10000.0):
         super().__init__()
@@ -446,7 +446,7 @@ class RotaryPositionalEmbedding(nn.Module):
 
 
 class RoPEAttention(nn.Module):
-    """Multi-head self-attention with Rotary Position Embedding (RoPE)."""
+    """带旋转位置嵌入（RoPE）的多头自注意力。"""
 
     def __init__(
         self,
@@ -491,7 +491,7 @@ class RoPEAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    """DiT-style transformer block with AdaLN-Zero."""
+    """带 AdaLN-Zero 的 DiT 风格 transformer 块。"""
 
     def __init__(
         self,
@@ -552,7 +552,7 @@ class TransformerBlock(nn.Module):
 
 
 class DiffusionTransformer(nn.Module):
-    """Transformer-based diffusion noise prediction model."""
+    """基于 Transformer 的扩散噪声预测模型。"""
 
     def __init__(self, config, conditioning_dim: int):
         super().__init__()
@@ -629,7 +629,7 @@ class DiffusionTransformer(nn.Module):
 #  -- 目标 --
 
 class DiffusionObjective(nn.Module):
-    """Standard diffusion (DDPM/DDIM) objective implementation."""
+    """标准扩散（DDPM/DDIM）目标实现。"""
 
     def __init__(self, config, action_dim: int, horizon: int, do_mask_loss_for_padding: bool = False):
         super().__init__()
@@ -713,7 +713,7 @@ class DiffusionObjective(nn.Module):
 
 
 class FlowMatchingObjective(nn.Module):
-    """Flow matching objective: trains a model to predict velocity fields."""
+    """Flow matching 目标：训练模型预测速度场。"""
 
     def __init__(self, config, action_dim: int, horizon: int, do_mask_loss_for_padding: bool = False):
         super().__init__()

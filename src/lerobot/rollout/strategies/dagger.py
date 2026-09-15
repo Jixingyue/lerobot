@@ -12,34 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""DAgger rollout strategy: Human-in-the-Loop data collection.
+"""DAgger rollout 策略：人在回路（Human-in-the-Loop）数据采集。
 
-Implements the RaC paradigm (Recovery and Correction) for interactive
-imitation learning.  Alternates between autonomous policy execution and
-human intervention via teleoperator.
+为交互式模仿学习实现 RaC 范式（Recovery and Correction，恢复与纠正）。
+在自主策略执行与通过遥操作器进行的人工干预之间交替。
 
-Input is controlled via either a keyboard or foot pedal, selected by
-the ``input_device`` config field.  Each device exposes three actions:
+输入通过键盘或脚踏板控制，由 ``input_device`` 配置字段选择。
+每种设备提供三个动作：
 
-    1. **pause_resume** — Toggle policy execution (AUTONOMOUS <-> PAUSED).
-    2. **correction**   — Toggle correction recording (PAUSED <-> CORRECTING).
-    3. **upload**        — Push dataset to hub on demand (corrections-only mode).
-    ESC (keyboard only) — Stop session.
+    1. **pause_resume** — 切换策略执行（AUTONOMOUS <-> PAUSED）。
+    2. **correction**   — 切换纠正录制（PAUSED <-> CORRECTING）。
+    3. **upload**        — 按需将数据集推送到 hub（仅纠正模式）。
+    ESC（仅键盘） — 停止会话。
 
-Recording modes:
-    ``record_autonomous=True``:  Sentry-like continuous recording with
-        time-based episode rotation.  Both autonomous and correction
-        frames are recorded; corrections tagged ``intervention=True``.
-    ``record_autonomous=False``: Only correction windows are recorded.
-        Each correction (start to stop) becomes one episode.
+录制模式：
+    ``record_autonomous=True``：  类似哨兵的连续录制，按时间轮转 episode。
+        自主帧和纠正帧都会被录制；纠正帧标记 ``intervention=True``。
+    ``record_autonomous=False``： 只录制纠正窗口。
+        每次纠正（从开始到停止）成为一个 episode。
 
-Teleoperator handover:
-    On AUTONOMOUS → PAUSED, actuated teleops (those with non-empty
-    ``feedback_features``, e.g. SO-101, OpenArmMini) are smoothly driven to
-    the follower's last position via ``send_feedback`` so the operator takes
-    over without a jerk.  Non-actuated teleops cannot be driven,
-    so on PAUSED → CORRECTING the follower is instead slid to the teleop's
-    current pose before the correction begins.
+遥操作器交接：
+    在 AUTONOMOUS → PAUSED 时，对于可驱动的遥操作器（那些 ``feedback_features``
+    非空的，例如 SO-101、OpenArmMini），会通过 ``send_feedback`` 平滑地驱动到
+    从端的最后一个位置，使操作者接管时不会有突兀的抖动。不可驱动的遥操作器
+    无法被驱动，因此在 PAUSED → CORRECTING 时，改为在纠正开始前将从端滑动到
+    遥操作器当前的姿态。
 """
 
 from __future__ import annotations
@@ -81,19 +78,19 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# DAgger state machine
+# DAgger 状态机
 # ---------------------------------------------------------------------------
 
 
 class DAggerPhase(enum.Enum):
-    """Observable phases of a DAgger episode."""
+    """DAgger episode 的可观测阶段。"""
 
-    AUTONOMOUS = "autonomous"  # Policy driving
-    PAUSED = "paused"  # Engine paused, teleop aligned, awaiting input
-    CORRECTING = "correcting"  # Human driving via teleop, recording interventions
+    AUTONOMOUS = "autonomous"  # 策略驱动
+    PAUSED = "paused"  # 引擎已暂停，遥操作已对齐，等待输入
+    CORRECTING = "correcting"  # 人工通过遥操作驱动，记录干预
 
 
-# Valid (current_phase, event) -> next_phase
+# 合法的 (current_phase, event) -> next_phase
 _DAGGER_TRANSITIONS: dict[tuple[DAggerPhase, str], DAggerPhase] = {
     (DAggerPhase.AUTONOMOUS, "pause_resume"): DAggerPhase.PAUSED,
     (DAggerPhase.PAUSED, "pause_resume"): DAggerPhase.AUTONOMOUS,
@@ -103,10 +100,9 @@ _DAGGER_TRANSITIONS: dict[tuple[DAggerPhase, str], DAggerPhase] = {
 
 
 class DAggerEvents:
-    """Thread-safe container for DAgger input device events.
+    """DAgger 输入设备事件的线程安全容器。
 
-    The keyboard/pedal threads write transition requests; the main loop
-    consumes them.
+    键盘/脚踏板线程写入转换请求；主循环消费它们。
     """
 
     def __init__(self) -> None:
@@ -114,14 +110,14 @@ class DAggerEvents:
         self._phase = DAggerPhase.AUTONOMOUS
         self._pending_transition: str | None = None
 
-        # Session-level flags
+        # 会话级标志
         self.stop_recording = Event()
         self.upload_requested = Event()
 
     #  -- 线程安全阶段访问 ------------------------------------------
     @property
     def phase(self) -> DAggerPhase:
-        """Current phase of the DAgger state machine."""
+        """DAgger 状态机的当前阶段。"""
         with self._lock:
             return self._phase
 
@@ -131,17 +127,17 @@ class DAggerEvents:
             self._phase = value
 
     def request_transition(self, event: str) -> None:
-        """Request a phase transition (called from keyboard/pedal threads).
+        """请求一次阶段转换（从键盘/脚踏板线程调用）。
 
-        Only enqueues the request if it corresponds to a valid transition
-        from the current phase, preventing impossible state changes.
+        仅当该请求对应从当前阶段出发的一个合法转换时才入队，
+        从而防止不可能的状态变更。
         """
         with self._lock:
             if (self._phase, event) in _DAGGER_TRANSITIONS:
                 self._pending_transition = event
 
     def consume_transition(self) -> tuple[DAggerPhase, DAggerPhase] | None:
-        """Consume a pending transition (called from main loop)."""
+        """消费一个待处理的转换（从主循环调用）。"""
         with self._lock:
             if self._pending_transition is None:
                 return None
@@ -155,7 +151,7 @@ class DAggerEvents:
             return old_phase, new_phase
 
     def reset(self) -> None:
-        """Reset all transient state for a fresh session."""
+        """为新的会话重置所有瞬态状态。"""
         with self._lock:
             self._phase = DAggerPhase.AUTONOMOUS
             self._pending_transition = None
@@ -163,25 +159,25 @@ class DAggerEvents:
 
 
 # ---------------------------------------------------------------------------
-# Input device handlers
+# 输入设备处理器
 # ---------------------------------------------------------------------------
 
 
 def _init_dagger_keyboard(events: DAggerEvents, cfg: DAggerKeyboardConfig):
-    """Initialise a keyboard listener for DAgger's 3 controls.
+    """为 DAgger 的 3 个控制初始化一个键盘监听器。
 
-    Backend selection (pynput on X11 / trusted-macOS / Windows, a terminal reader on
-    Wayland / headless TTY) is delegated to :func:`create_key_listener`. Returns the
-    listener (exposing ``stop()``) or ``None`` when no keyboard backend is usable.
+    后端选择（在 X11 / 受信 macOS / Windows 上用 pynput，在 Wayland /
+    无头 TTY 上用终端读取器）委托给 :func:`create_key_listener`。返回该
+    监听器（暴露 ``stop()``），当没有可用的键盘后端时返回 ``None``。
     """
-    # Map config key names to DAgger event names.
+    # 将配置中的按键名映射到 DAgger 事件名。
     key_to_event = {
         cfg.pause_resume: "pause_resume",
         cfg.correction: "correction",
     }
 
     def dispatch(name: str) -> None:
-        """Apply a resolved key name to the DAgger events."""
+        """将解析出的按键名应用到 DAgger 事件上。"""
         if name == "esc":
             logger.info("Stop recording...")
             events.stop_recording.set()
@@ -201,9 +197,9 @@ def _init_dagger_keyboard(events: DAggerEvents, cfg: DAggerKeyboardConfig):
 
 
 def _init_dagger_pedal(events: DAggerEvents, cfg: DAggerPedalConfig):
-    """Initialise foot pedal listener with DAgger 3-pedal controls.
+    """使用 DAgger 的 3 踏板控制初始化脚踏板监听器。
 
-    Returns the pedal listener thread (or ``None`` if evdev is unavailable).
+    返回踏板监听线程（若 evdev 不可用则返回 ``None``）。
     """
     code_to_event = {
         cfg.pause_resume: "pause_resume",
@@ -221,23 +217,23 @@ def _init_dagger_pedal(events: DAggerEvents, cfg: DAggerPedalConfig):
 
 
 # ---------------------------------------------------------------------------
-# DAgger Strategy
+# DAgger 策略
 # ---------------------------------------------------------------------------
 
 
 class DAggerStrategy(RolloutStrategy):
-    """Human-in-the-Loop data collection with intervention tagging.
+    """带有干预标记的人在回路（Human-in-the-Loop）数据采集。
 
-    State machine::
+    状态机::
 
         AUTONOMOUS --(key1)--> PAUSED --(key2)--> CORRECTING --(key2)--> PAUSED
                                --(key1)--> AUTONOMOUS
 
-    Recording modes:
-        ``record_autonomous=True``: Sentry-like continuous recording with
-            time-based episode rotation.  Intervention frames tagged True.
-        ``record_autonomous=False``: Only correction windows recorded.
-            Each correction = one episode.  Upload on demand via key3.
+    录制模式：
+        ``record_autonomous=True``：类似哨兵的连续录制，按时间轮转 episode。
+            干预帧标记为 True。
+        ``record_autonomous=False``：只录制纠正窗口。
+            每次纠正 = 一个 episode。通过 key3 按需上传。
     """
 
     config: DAggerStrategyConfig
@@ -253,9 +249,9 @@ class DAggerStrategy(RolloutStrategy):
         self._episode_lock = Lock()
 
     def setup(self, ctx: RolloutContext) -> None:
-        """Initialise the inference engine and input device listener."""
+        """初始化推理引擎和输入设备监听器。"""
         self._init_engine(ctx)
-        dataset_cfg = ctx.runtime.cfg.dataset  # never None: dataset_mode="required"
+        dataset_cfg = ctx.runtime.cfg.dataset  # 永不为 None：dataset_mode="required"
         if self.config.num_episodes is None:
             self.config.num_episodes = dataset_cfg.num_episodes
             logger.info(
@@ -288,14 +284,14 @@ class DAggerStrategy(RolloutStrategy):
         )
 
     def run(self, ctx: RolloutContext) -> None:
-        """Run DAgger episodes with human-in-the-loop intervention."""
+        """运行带人在回路干预的 DAgger episode。"""
         if self.config.record_autonomous:
             self._run_continuous(ctx)
         else:
             self._run_corrections_only(ctx)
 
     def teardown(self, ctx: RolloutContext) -> None:
-        """Stop listeners, finalise the dataset, and disconnect hardware."""
+        """停止监听器、最终化数据集并断开硬件。"""
         play_sounds = ctx.runtime.cfg.play_sounds
         logger.info("Stopping DAgger recording")
         log_say("Stopping DAgger recording", play_sounds)
@@ -304,7 +300,7 @@ class DAggerStrategy(RolloutStrategy):
             logger.info("Stopping keyboard listener")
             self._listener.stop()
 
-        # Flush any queued/running push cleanly
+        # 干净地刷完任何已排队/正在运行的推送
         if self._push_executor is not None:
             logger.info("Shutting down push executor (waiting for pending pushes)...")
             self._push_executor.shutdown(wait=True)
@@ -330,16 +326,15 @@ class DAggerStrategy(RolloutStrategy):
         logger.info("DAgger strategy teardown complete")
 
     # ------------------------------------------------------------------
-    # Continuous recording mode (record_autonomous=True)
+    # 连续录制模式（record_autonomous=True）
     # ------------------------------------------------------------------
 
     def _run_continuous(self, ctx: RolloutContext) -> None:
-        """Sentry-like continuous recording with intervention tagging.
+        """带有干预标记的类哨兵连续录制。
 
-        Episodes are auto-rotated every ``episode_time_s`` seconds and
-        uploaded in the background every ``upload_every_n_episodes`` episodes.
-        Both autonomous and correction frames are recorded; corrections are
-        tagged with ``intervention=True``.
+        每 ``episode_time_s`` 秒自动轮转一次 episode，并每
+        ``upload_every_n_episodes`` 个 episode 在后台上传一次。
+        自主帧和纠正帧都会被录制；纠正帧标记为 ``intervention=True``。
         """
         engine = self._engine
         cfg = ctx.runtime.cfg
@@ -377,7 +372,7 @@ class DAggerStrategy(RolloutStrategy):
                         logger.info("Duration limit reached (%.0fs)", cfg.duration)
                         break
 
-                    # Process transitions
+                    # 处理转换
                     transition = events.consume_transition()
                     if transition is not None:
                         old_phase, new_phase = transition
@@ -393,22 +388,20 @@ class DAggerStrategy(RolloutStrategy):
                         if new_phase == DAggerPhase.AUTONOMOUS:
                             last_action = None
                         elif new_phase == DAggerPhase.CORRECTING:
-                            # Corrections carry their own recording phase: each
-                            # intervention opens with a recorded frame and then
-                            # records every ``multiplier``-th tick.  Autonomous
-                            # frames are gated by the interpolator instead, so
-                            # the two cadences never share a counter whose parity
-                            # one could shift under the other.
+                            # 纠正带有自己的录制阶段：每次干预都以一个
+                            # 被录制的帧开始，然后每第 ``multiplier`` 个 tick
+                            # 录制一次。自主帧则改由插值器门控，因此
+                            # 两种节奏永不共享一个其奇偶性可能被对方改变的计数器。
                             correction_tick = 0
 
                     phase = events.phase
                     with timer.section("observe"):
                         obs = robot.get_observation()
 
-                    # --- CORRECTING: human teleop control ---
-                    # TODO(Steven): teleop runs at the same FPS as the policy. To
-                    # decouple the two, sample teleop at its native rate and
-                    # interpolate to the control loop's tick rate.
+                    # --- CORRECTING：人工遥操作控制 ---
+                    # TODO(Steven)：teleop 以与策略相同的 FPS 运行。为了
+                    # 解耦两者，请按其原生速率采样 teleop，并
+                    # 插值到控制循环的 tick 速率。
                     if phase == DAggerPhase.CORRECTING:
                         with timer.section("process_obs"):
                             obs_processed = ctx.processors.robot_observation_processor(obs)
@@ -436,13 +429,13 @@ class DAggerStrategy(RolloutStrategy):
                                 dataset.add_frame(frame)
                         correction_tick += 1
 
-                    # --- PAUSED: hold position ---
+                    # --- PAUSED：保持位置 ---
                     elif phase == DAggerPhase.PAUSED:
                         if last_action:
                             with timer.section("send"):
                                 robot.send_action(last_action)
 
-                    # --- AUTONOMOUS: policy control ---
+                    # --- AUTONOMOUS：策略控制 ---
                     else:
                         with timer.section("process_obs"):
                             obs_processed = self._process_observation_and_notify(ctx.processors, obs)
@@ -467,9 +460,9 @@ class DAggerStrategy(RolloutStrategy):
                                     }
                                     dataset.add_frame(frame)
 
-                    # Episode rotation derived from the video file-size target.
-                    # Saving is deferred while a correction is ongoing so the
-                    # episode boundary lands on a clean autonomous frame.
+                    # episode 轮转由视频文件大小目标推导而来。
+                    # 当纠正正在进行时会推迟保存，以便
+                    # episode 边界落在一个干净的自主帧上。
                     elapsed = time.perf_counter() - episode_start
                     if elapsed >= episode_duration_s and phase != DAggerPhase.CORRECTING:
                         with self._episode_lock:
@@ -482,9 +475,9 @@ class DAggerStrategy(RolloutStrategy):
                             elapsed,
                         )
                         log_say(f"Episode {dataset.num_episodes} saved", play_sounds)
-                        # ``save_episode`` blocks inside the timed loop body: report
-                        # the episode, then drop the partial group and the gap it
-                        # opened, which are finalisation rather than cadence.
+                        # ``save_episode`` 在计时的循环体内阻塞：先报告
+                        # 该 episode，然后丢弃那个不完整分组及其造成的
+                        # 间隙，它们属于收尾而非节奏。
                         timer.log_episode_summary(f"episode {dataset.num_episodes}")
                         timer.restart()
 
@@ -507,16 +500,15 @@ class DAggerStrategy(RolloutStrategy):
                     logger.info("Final in-progress episode saved")
 
     # ------------------------------------------------------------------
-    # Corrections-only mode (record_autonomous=False)
+    # 仅纠正模式（record_autonomous=False）
     # ------------------------------------------------------------------
 
     def _run_corrections_only(self, ctx: RolloutContext) -> None:
-        """Record only human correction windows.  Each correction = one episode.
+        """只录制人工纠正窗口。每次纠正 = 一个 episode。
 
-        The policy runs autonomously without recording.  When the user
-        pauses and starts a correction, frames are recorded with
-        ``intervention=True``.  Stopping the correction saves the episode.
-        The dataset can be uploaded on demand via the upload key/pedal.
+        策略以自主方式运行而不录制。当用户暂停并开始纠正时，
+        帧会以 ``intervention=True`` 被录制。停止纠正即保存该 episode。
+        数据集可通过上传按键/踏板按需上传。
         """
         engine = self._engine
         cfg = ctx.runtime.cfg
@@ -558,7 +550,7 @@ class DAggerStrategy(RolloutStrategy):
                         logger.info("Duration limit reached (%.0fs)", cfg.duration)
                         break
 
-                    # Process transitions
+                    # 处理转换
                     transition = events.consume_transition()
                     if transition is not None:
                         old_phase, new_phase = transition
@@ -574,13 +566,13 @@ class DAggerStrategy(RolloutStrategy):
                         if new_phase == DAggerPhase.AUTONOMOUS:
                             last_action = None
                         elif new_phase == DAggerPhase.CORRECTING:
-                            # Every intervention opens with a recorded frame and
-                            # then records every ``multiplier``-th tick, so each
-                            # correction episode holds ``fps`` frames per second
-                            # whatever the phase the autonomous run left behind.
+                            # 每次干预都以一个被录制的帧开始，然后每第
+                            # ``multiplier`` 个 tick 录制一次，因此无论自主运行
+                            # 留下的是哪种阶段，每个纠正 episode 都保持
+                            # 每秒 ``fps`` 帧。
                             correction_tick = 0
 
-                        # Correction ended -> save episode (blocking if not streaming)
+                        # 纠正结束 -> 保存 episode（若非流式则阻塞）
                         if old_phase == DAggerPhase.CORRECTING and new_phase == DAggerPhase.PAUSED:
                             with self._episode_lock:
                                 dataset.save_episode()
@@ -592,13 +584,13 @@ class DAggerStrategy(RolloutStrategy):
                                 self.config.num_episodes,
                             )
                             log_say(f"Correction {recorded} saved", play_sounds)
-                            # ``save_episode`` blocks inside the timed loop body: report
-                            # the correction, then drop the partial group and the gap it
-                            # opened, which are finalisation rather than cadence.
+                            # ``save_episode`` 在计时的循环体内阻塞：先报告
+                            # 该纠正，然后丢弃那个不完整分组及其造成的
+                            # 间隙，它们属于收尾而非节奏。
                             timer.log_episode_summary(f"correction {recorded}")
                             timer.restart()
 
-                    # On-demand upload
+                    # 按需上传
                     if events.upload_requested.is_set():
                         events.upload_requested.clear()
                         logger.info("Upload requested by user")
@@ -608,10 +600,10 @@ class DAggerStrategy(RolloutStrategy):
                     with timer.section("observe"):
                         obs = robot.get_observation()
 
-                    # --- CORRECTING: human teleop control + recording ---
-                    # TODO(Steven): teleop runs at the same FPS as the policy. To
-                    # decouple the two, sample teleop at its native rate and
-                    # interpolate to the control loop's tick rate.
+                    # --- CORRECTING：人工遥操作控制 + 录制 ---
+                    # TODO(Steven)：teleop 以与策略相同的 FPS 运行。为了
+                    # 解耦两者，请按其原生速率采样 teleop，并
+                    # 插值到控制循环的 tick 速率。
                     if phase == DAggerPhase.CORRECTING:
                         with timer.section("process_obs"):
                             obs_processed = ctx.processors.robot_observation_processor(obs)
@@ -641,13 +633,13 @@ class DAggerStrategy(RolloutStrategy):
                                 )
                         correction_tick += 1
 
-                    # --- PAUSED: hold position ---
+                    # --- PAUSED：保持位置 ---
                     elif phase == DAggerPhase.PAUSED:
                         if last_action:
                             with timer.section("send"):
                                 robot.send_action(last_action)
 
-                    # --- AUTONOMOUS: policy control (no recording) ---
+                    # --- AUTONOMOUS：策略控制（不录制） ---
                     else:
                         with timer.section("process_obs"):
                             obs_processed = self._process_observation_and_notify(ctx.processors, obs)
@@ -674,7 +666,7 @@ class DAggerStrategy(RolloutStrategy):
                     logger.info("Final in-progress episode saved")
 
     # ------------------------------------------------------------------
-    # State-machine transition side-effects
+    # 状态机转换的副作用
     # ------------------------------------------------------------------
 
     def _apply_transition(
@@ -687,26 +679,25 @@ class DAggerStrategy(RolloutStrategy):
         prev_action: dict | None,
         timer: CycleTimer | None = None,
     ) -> None:
-        """Execute side-effects for a validated phase transition, including smooth handovers.
+        """为一个已校验的阶段转换执行副作用，包括平滑交接。
 
-        The smooth handovers below can be disabled with
-        ``--strategy.smooth_handover=false`` (useful for clutch-style teleops
-        that re-reference at the current robot pose on engage).
+        下面的平滑交接可以通过 ``--strategy.smooth_handover=false`` 禁用
+        （适用于在接合时以机器人当前姿态重新对齐的离合器式遥操作器）。
 
-        AUTONOMOUS -> PAUSED (actuated teleop):
-            Pause the engine, then drive the leader arm to the follower's last
-            commanded position so the operator takes over without a jerk.
+        AUTONOMOUS -> PAUSED（可驱动的遥操作器）：
+            暂停引擎，然后驱动主臂到达从端最后指令的位置，
+            使操作者接管时不会有突兀的抖动。
 
-        PAUSED -> CORRECTING (non-actuated teleop):
-            Slide the follower to the teleop's current pose so the robot meets
-            the operator's hand rather than jumping to it on the first frame.
+        PAUSED -> CORRECTING（不可驱动的遥操作器）：
+            将从端滑动到遥操作器当前的姿态，使机器人迎向操作者的手，
+            而不是在第一个帧上跳向它。
 
-        CORRECTING -> PAUSED (actuated teleop):
-            Re-enable torque to hold position after correction.
-            This will be potentially useful if cancelling the correction recording
+        CORRECTING -> PAUSED（可驱动的遥操作器）：
+            在纠正之后重新启用力矩以保持位置。
+            如果取消纠正录制，这可能会很有用
 
-        PAUSED -> AUTONOMOUS:
-            Reset and resume the inference engine.
+        PAUSED -> AUTONOMOUS：
+            重置并恢复推理引擎。
         """
         teleop = ctx.hardware.teleop
         robot = ctx.hardware.robot_wrapper
@@ -717,11 +708,11 @@ class DAggerStrategy(RolloutStrategy):
             engine.pause()
 
             if self.config.smooth_handover and teleop_supports_feedback(teleop) and prev_action is not None:
-                # TODO(Maxime): prev_action is in robot action key space (output of robot_action_processor).
-                # send_feedback expects teleop feedback key space. For homogeneous setups (e.g. SO-101
-                # leader + SO-101 follower) the keys are identical so this works. If the processor pipeline
-                # does non-trivial key renaming (e.g. a rename_map on action keys), the interpolation in
-                # teleop_smooth_move_to silently no-ops and the arm doesn't move.
+                # TODO(Maxime)：prev_action 处于机器人动作键空间（robot_action_processor 的输出）。
+                # send_feedback 期望遥操作反馈键空间。对于同构配置（例如 SO-101
+                # 主端 + SO-101 从端），键是相同的，所以这样可行。如果处理器流水线
+                # 进行了非平凡的键重命名（例如对动作键使用 rename_map），那么
+                # teleop_smooth_move_to 中的插值会静默地空操作，手臂不会移动。
                 logger.info("Smooth handover: moving leader arm to follower position")
                 teleop_smooth_move_to(teleop, prev_action)
 
@@ -739,7 +730,7 @@ class DAggerStrategy(RolloutStrategy):
                 target = ctx.processors.robot_action_processor((processed, obs))
                 follower_smooth_move_to(robot, prev_action, target)
 
-            # unlock the teleop for human control
+            # 为人工控制解锁遥操作器
             if teleop_supports_feedback(teleop):
                 teleop.disable_torque()
 
@@ -753,32 +744,30 @@ class DAggerStrategy(RolloutStrategy):
             engine.reset()
             engine.resume()
 
-            # release teleop before resuming the policy
+            # 在恢复策略之前释放遥操作器
             if teleop_supports_feedback(teleop):
                 teleop.disable_torque()
 
-        # Transitions are one-off operator events that run inside the control
-        # loop's timed body, and the smooth-handover ramps above block for a
-        # good fraction of a second.  Left in the timer's accumulator they would
-        # blow the group's budget and report a healthy loop as slow, so drop the
-        # partial group that contains the transition.  This also re-arms the
-        # start-up exemption, which returning to AUTONOMOUS needs anyway: the
-        # reset interpolator re-primes over two ticks, exactly like loop
-        # start-up, so the group spanning them legitimately runs over.
+        # 转换是一次性的操作者事件，运行在控制循环的计时体内，
+        # 而上面的平滑交接斜坡会阻塞约零点几秒。若把它们留在
+        # 计时器的累加器中，会超出该分组的预算并把一个健康的循环报告为缓慢，
+        # 因此丢弃包含该转换的那个不完整分组。这也会重新布防
+        # 启动豁免，而回到 AUTONOMOUS 本来就需要它：重置后的插值器
+        # 会在两个 tick 上重新预热，正如循环启动那样，
+        # 因此跨越这两个 tick 的分组合理地会有超时。
         if timer is not None:
             timer.restart()
 
     # ------------------------------------------------------------------
-    # Background push (shared by both modes)
+    # 后台推送（两种模式共用）
     # ------------------------------------------------------------------
 
     def _background_push(self, dataset, cfg) -> None:
-        """Queue a Hub push on the single-worker executor.
+        """在单工作线程的执行器上排入一次 Hub 推送。
 
-        The executor's max_workers=1 guarantees at most one push runs at
-        a time; submitted tasks are queued rather than dropped.  Pushes
-        are blocked while the operator is mid-correction to avoid
-        uploading a partially-recorded episode.
+        执行器的 max_workers=1 保证一次最多运行一个推送；
+        提交的任务会被排队而非丢弃。当操作者正处于纠正过程中时
+        推送会被阻塞，以避免上传一个只录制了一部分的 episode。
         """
         if self._push_executor is None:
             return
