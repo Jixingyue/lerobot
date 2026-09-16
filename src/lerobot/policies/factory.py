@@ -295,11 +295,11 @@ def make_policy(
 
     # 注意：目前，如果你尝试在 mps 后端上运行 vqbet，会得到这个错误。
     # TODO(aliberts, rcadene): 在策略中实现 check_backend_compatibility？
-    # NotImplementedError: The operator 'aten::unique_dim' is not currently implemented for the MPS device. If
-    # you want this op to be added in priority during the prototype phase of this feature, please comment on
-    # https://github.com/pytorch/pytorch/issues/77764. As a temporary fix, you can set the environment
-    # variable `PYTORCH_ENABLE_MPS_FALLBACK=1` to use the CPU as a fallback for this op. WARNING: this will be
-    # slower than running natively on MPS.
+    # NotImplementedError: 算子 'aten::unique_dim' 目前尚未在 MPS 设备上实现。如果你希望
+    # 在该功能的原型阶段优先添加此算子，请在
+    # https://github.com/pytorch/pytorch/issues/77764 上留言。作为临时修复，你可以设置环境
+    # 变量 `PYTORCH_ENABLE_MPS_FALLBACK=1`，让 CPU 作为该算子的回退。警告：这会比在 MPS
+    # 上原生运行更慢。
     if cfg.type == "vqbet" and cfg.device == "mps":
         raise NotImplementedError(
             "Current implementation of VQBeT does not support `mps` backend. "

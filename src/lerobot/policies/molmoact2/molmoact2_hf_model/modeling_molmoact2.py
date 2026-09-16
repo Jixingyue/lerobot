@@ -2150,7 +2150,7 @@ class MolmoAct2Attention(nn.Module):
             bias=config.qkv_bias,
         )
 
-        # Layer norms.
+        # 层归一化。
         self.k_norm: MolmoAct2RMSNorm | None = None
         self.q_norm: MolmoAct2RMSNorm | None = None
         self.qk_norm_type: str | None = None
@@ -2322,7 +2322,7 @@ class MolmoAct2DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
 
-        # Self Attention
+        # 自注意力
         attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -2340,7 +2340,7 @@ class MolmoAct2DecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Fully Connected
+        # 全连接层
         residual = hidden_states
         hidden_states = self.ff_norm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -2374,7 +2374,7 @@ class MolmoAct2PostNormDecoderLayer(MolmoAct2DecoderLayer):
 
         residual = hidden_states
 
-        # Self Attention
+        # 自注意力
         attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -2393,7 +2393,7 @@ class MolmoAct2PostNormDecoderLayer(MolmoAct2DecoderLayer):
 
         hidden_states = residual + self.dropout(hidden_states)
 
-        # Fully Connected
+        # 全连接层
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.ff_norm(hidden_states)
@@ -2675,7 +2675,7 @@ class MolmoAct2TextModel(MolmoAct2PreTrainedModel):
         )
 
 
-# Adapted from transformers.models.gemma3.modeling_gemma3
+# 改编自 transformers.models.gemma3.modeling_gemma3
 def token_type_ids_mask_function(
     token_type_ids: torch.Tensor | None = None,
 ) -> Callable | None:
@@ -2706,7 +2706,7 @@ def token_type_ids_mask_function(
 class MolmoAct2Model(MolmoAct2PreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = {}
-    # Reference: fix gemma3 grad acc #37208
+    # 参考：修复 gemma3 梯度累积 #37208
     accepts_loss_kwargs = False
     config: MolmoAct2Config
 
@@ -3481,7 +3481,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
     def build_input_embeddings(
         self,
         input_ids: torch.LongTensor,
-        images: torch.FloatTensor | None = None,  # image inputs
+        images: torch.FloatTensor | None = None,  # 图像输入
         token_pooling: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # 获取输入的嵌入。
@@ -3662,7 +3662,7 @@ class MolmoAct2Model(MolmoAct2PreTrainedModel):
 class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
     _tied_weights_keys = []  # 权重未绑定
-    # Reference: fix gemma3 grad acc #37208
+    # 参考：修复 gemma3 梯度累积 #37208
     accepts_loss_kwargs = False
     config: MolmoAct2Config
 
@@ -4584,7 +4584,8 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
 
         >>> inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True)
 
-        >>> #  生成        >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
+        >>> #  生成
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=15)
         >>> generated_tokens = generated_ids[:, inputs['input_ids'].size(1):]
         >>> processor.post_process_image_text_to_text(generated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "The image shows a bustling street scene in what appears to be a Chinatown area. There's ..."
@@ -4671,7 +4672,7 @@ class MolmoAct2ForConditionalGeneration(MolmoAct2PreTrainedModel, GenerationMixi
 
         return model_inputs
 
-    # Adapted from transformers.models.gemma3.modeling_gemma3
+    # 改编自 transformers.models.gemma3.modeling_gemma3
     @staticmethod
     def create_masks_for_generate(
         config: PretrainedConfig,

@@ -66,7 +66,7 @@ local$ lerobot-dataset-viz \
     --episode-index 0 \
     --display-mode foxglove
 
-# then open the Foxglove app and connect to ws://127.0.0.1:8765
+# 然后打开 Foxglove 应用并连接到 ws://127.0.0.1:8765
 ```
 这会启动一个 Foxglove WebSocket 服务器，根据需要从磁盘上的数据集中提供该 episode 的数据，
 因此你可以使用 Foxglove 的播放控件在 episode 中的任意位置播放/暂停和拖动浏览。

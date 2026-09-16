@@ -683,18 +683,18 @@ class DataProcessorPipeline[TInput, TOutput](HubMixin):
 
         **加载示例**：
         ```python
-        # Directory loading
+        # 目录加载
         pipeline = DataProcessorPipeline.from_pretrained("/models/my_model", config_filename="processor.json")
 
-        # Single file loading
+        # 单个文件加载
         pipeline = DataProcessorPipeline.from_pretrained(
             "/models/my_model/processor.json", config_filename="processor.json"
         )
 
-        # Hub loading
+        # Hub 加载
         pipeline = DataProcessorPipeline.from_pretrained("user/repo", config_filename="processor.json")
 
-        # Multiple configs (preprocessor/postprocessor)
+        # 多个配置（预处理器/后处理器）
         preprocessor = DataProcessorPipeline.from_pretrained(
             "model", config_filename="policy_preprocessor.json"
         )

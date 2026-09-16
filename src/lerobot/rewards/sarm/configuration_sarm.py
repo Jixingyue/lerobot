@@ -14,8 +14,8 @@
 # limitations under the License.
 
 """
-SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation.
-Paper: https://arxiv.org/abs/2509.25358
+SARM：面向长时域机器人操作的阶段感知奖励建模（Stage-Aware Reward Modeling）。
+论文：https://arxiv.org/abs/2509.25358
 """
 
 from dataclasses import dataclass, field

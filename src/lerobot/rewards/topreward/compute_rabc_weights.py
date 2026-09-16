@@ -22,13 +22,13 @@
 
 该 parquet 使用与 SARM 的 :mod:`lerobot.rewards.sarm.compute_rabc_weights` 相同的模式（schema）。
 
-Usage:
-    # Sparse-dense mode (15 anchors per episode, matches upstream)
+用法：
+    # 稀疏-稠密模式（每个 episode 15 个锚点，与上游一致）
     python -m lerobot.rewards.topreward.compute_rabc_weights \\
         --dataset-repo-id lerobot/libero_10_image \\
         --num-samples 15
 
-    # Use a different VLM backbone
+    # 使用不同的 VLM 骨干
     python -m lerobot.rewards.topreward.compute_rabc_weights \\
         --dataset-repo-id lerobot/libero_10_image \\
         --vlm-name Qwen/Qwen3-VL-4B-Instruct

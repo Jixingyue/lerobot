@@ -120,10 +120,10 @@ class StageTransformer(nn.Module):
     def forward(
         self,
         img_seq: torch.Tensor,  # (B, N, T, vis_emb_dim)
-        lang_emb: torch.Tensor,  # (B, E) or (B, T, E)
+        lang_emb: torch.Tensor,  # (B, E) 或 (B, T, E)
         state: torch.Tensor,  # (B, T, state_dim)
-        lengths: torch.Tensor,  # (B,) - valid sequence lengths
-        scheme: str = "sparse",  # "sparse" or "dense"
+        lengths: torch.Tensor,  # (B,) - 有效序列长度
+        scheme: str = "sparse",  # "sparse" 或 "dense"
     ) -> torch.Tensor:
         """
         阶段分类的前向传播。
@@ -268,11 +268,11 @@ class SubtaskTransformer(nn.Module):
     def forward(
         self,
         img_seq: torch.Tensor,  # (B, N, T, vis_emb_dim)
-        lang_emb: torch.Tensor,  # (B, E) or (B, T, E)
+        lang_emb: torch.Tensor,  # (B, E) 或 (B, T, E)
         state: torch.Tensor,  # (B, T, state_dim)
-        lengths: torch.Tensor,  # (B,) - valid sequence lengths
-        stage_prior: torch.Tensor,  # (B, 1, T, C) one-hot from gen_stage_emb
-        scheme: str = "sparse",  # "sparse" or "dense"
+        lengths: torch.Tensor,  # (B,) - 有效序列长度
+        stage_prior: torch.Tensor,  # (B, 1, T, C) 来自 gen_stage_emb 的 one-hot
+        scheme: str = "sparse",  # "sparse" 或 "dense"
     ) -> torch.Tensor:
         """
         子任务进度回归的前向传播。
@@ -301,7 +301,7 @@ class SubtaskTransformer(nn.Module):
         stage_emb = self._stage_to_dmodel(stage_prior)  # (B, 1, T, D)
 
         # 拼接所有流
-        # cameras + lang + state + stage_emb -> (B, N+3, T, D)
+        # 摄像头 + 语言 + 状态 + stage_emb -> (B, N+3, T, D)
         x = torch.cat([vis_proj, lang_proj, state_proj, stage_emb], dim=1)
 
         # 为第一个视觉帧加上位置偏置
@@ -652,10 +652,10 @@ class SARMRewardModel(PreTrainedRewardModel):
     def _train_step(
         self,
         img_emb: torch.Tensor,  # (B, N, T, D)
-        lang_emb: torch.Tensor,  # (B, E) or (B, T, E)
+        lang_emb: torch.Tensor,  # (B, E) 或 (B, T, E)
         state: torch.Tensor,  # (B, T, state_dim)
         lengths: torch.Tensor,  # (B,)
-        targets: torch.Tensor,  # (B, T) - format: stage.tau
+        targets: torch.Tensor,  # (B, T) - 格式：stage.tau
         scheme: str,
     ) -> dict[str, torch.Tensor]:
         """

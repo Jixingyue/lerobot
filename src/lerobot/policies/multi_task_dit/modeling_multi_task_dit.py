@@ -19,7 +19,7 @@
 基于 Transformer 的扩散策略，用于结合文本与视觉条件进行多任务机器人学习。
 同时支持扩散与 flow matching 两种动作生成目标。
 
-References:
+参考文献：
 - https://arxiv.org/abs/2507.05331
 - https://bostondynamics.com/blog/large-behavior-models-atlas-find-new-footing/
 - https://brysonkjones.substack.com/p/dissecting-and-open-sourcing-multitask-diffusion-transformer-policy

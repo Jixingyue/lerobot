@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ROBOMETER: Scaling General-Purpose Robotic Reward Models via Trajectory Comparisons.
+"""ROBOMETER：通过轨迹比较扩展通用机器人奖励模型。
 
-Paper:         https://arxiv.org/abs/2603.02115
-Project:       https://robometer.github.io
-Original code: https://github.com/aliang8/robometer
-Model:         https://huggingface.co/robometer/Robometer-4B
+论文：         https://arxiv.org/abs/2603.02115
+项目：         https://robometer.github.io
+原始代码：     https://github.com/aliang8/robometer
+模型：         https://huggingface.co/robometer/Robometer-4B
 
 Robometer 是一个通用的、以视频-语言为输入的奖励模型，构建在
 ``Qwen/Qwen3-VL-4B-Instruct`` 之上。它采用双重奖励预测目标进行训练：
